@@ -10,3 +10,5 @@ They were generated with FFmpeg (not required to run the application or tests):
 ffmpeg -f lavfi -i sine=frequency=440:duration=2 -c:a pcm_s16le original-tone.wav
 ffmpeg -f lavfi -i color=c=0x193c35:s=320x180:d=2:r=24 -f lavfi -i sine=frequency=440:duration=2 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest -movflags +faststart original-clip.mp4
 ```
+
+Question-import fixtures under `question-import/` retain the two CSVs supplied for this feature. `ai-basics-20.xlsx` is an independently generated Excel workbook containing the same question rows, with an Instructions sheet before Questions. These are authored test inputs, not learner state or account data.

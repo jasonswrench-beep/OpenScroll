@@ -1,3 +1,4 @@
+import { questionImportDialog } from './question-import.js';
 import { saveReusable,chooseReusable,chooseLayout,browseAssets } from './reusable-content.js';
 import { groupPacket,insertGroup,assertProjectBudget } from '../shared/reuse.js';
 import { extendedSettings } from './extended-settings.js';
@@ -30,7 +31,18 @@ export class BlockEditor {
     this.redo=this.button('Redo',()=>this.travel('redo'));this.redo.setAttribute('aria-label','Redo lesson edit');
     const open=this.button('Block library',()=>this.openLibrary(this.blocks().length,open));
     const layout=this.button('Learning layouts',()=>this.reuse(layout,'layout')),groups=this.button('Saved groups',()=>this.reuse(groups,'group')),assets=this.button('Asset library',()=>this.reuse(assets,'asset')),saveGroup=this.button('Save selected blocks',()=>{const project=this.host.project();if(!project||this.busy)return;const ids=this.blocks().filter(b=>this.groupSelection.has(b.id)).map(b=>b.id);if(!ids.length){this.announce('Select one or more blocks before saving a group.');return;}saveReusable('group',groupPacket(project,ids),saveGroup,'Reusable block group');});
-    bar.append(label,this.navigator,this.undo,this.redo,open,layout,groups,assets,saveGroup);
+    const importQuestions=this.button('Import questions',()=>{
+      const scope=this.scope,lessonId=this.lessonId;
+      if(!lessonId||this.busy)return;
+      questionImportDialog(importQuestions,()=>this.scope===scope&&this.lessonId===lessonId&&!this.busy,blocks=>{
+        if(this.blocks().length+blocks.length>2000)throw new Error('This lesson would exceed 2,000 blocks. Import into another lesson.');
+        const current=this.host.project();if(!current)throw new Error('Open a course before importing questions.');
+        const candidate={document:structuredClone(current.document),files:current.files};candidate.document.course.sections.flatMap(s=>s.lessons).find(l=>l.id===lessonId)!.blocks.push(...blocks);assertProjectBudget(candidate);
+        if(!this.mutate((items,project)=>{items.push(...blocks);assertProjectBudget(project);}))throw new Error('Questions could not be added. Resolve the current draft or save issue first.');
+        this.selected=blocks[0]?.id;this.render();this.focusBlock(this.selected);this.announce(`${blocks.length} assessment questions imported. Undo removes this batch.`);
+      });
+    });
+    bar.append(label,this.navigator,this.undo,this.redo,open,importQuestions,layout,groups,assets,saveGroup);
     this.status=document.createElement('p');this.status.className='block-editor-status';this.status.setAttribute('role','status');
     this.layout=document.createElement('div');this.layout.className='lesson-editor-layout';
     this.library=document.createElement('aside');this.library.className='block-library';this.library.hidden=true;this.library.setAttribute('aria-label','Block library');

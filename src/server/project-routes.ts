@@ -1,3 +1,4 @@
+import {readQuestionFile,questionCsvTemplate,questionXlsxTemplate,QUESTION_FILE_LIMIT} from '../project/question-spreadsheet.js';
 import { exportPdf } from '../project/pdf-export.js';
 import { z } from 'zod';
 import { exportScorm } from '../project/scorm-export.js';
@@ -9,6 +10,7 @@ import { sampleProject } from '../project/sample.js';
 import { ProjectError } from '../shared/course.js';
 
 export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:string}) {
+  app.addContentTypeParser('application/octet-stream',{parseAs:'buffer',bodyLimit:QUESTION_FILE_LIMIT},(_request,body,done)=>done(null,body));
   app.addContentTypeParser('application/x-openscroll-project', { parseAs: 'buffer', bodyLimit: LIMITS.archive }, (_request,body,done) => done(null,body));
   app.decorateRequest('projectProcessing', false);
   // One request owns the slot through body parsing and archive work.
@@ -32,6 +34,13 @@ export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:st
     if (code === 413) return reply.code(413).send({ error: 'The project upload exceeds the size limit.' });
     if (code === 400 || code === 415) return reply.code(code).send({ error: 'The project request has an invalid body or content type.' });
     return reply.code(500).send({ error: 'The project file could not be processed.' });
+  });
+  app.get('/questions/template.csv',async(_request,reply)=>reply.type('text/csv; charset=utf-8').header('Content-Disposition','attachment; filename="openscroll-question-template.csv"').send(questionCsvTemplate()));
+  app.get('/questions/template.xlsx',async(request,reply)=>reply.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet').header('Content-Disposition','attachment; filename="openscroll-question-template.xlsx"').send(await processFile(request,questionXlsxTemplate)));
+  app.post('/questions/import',{bodyLimit:QUESTION_FILE_LIMIT},async request=>{
+    const query=z.strictObject({format:z.enum(['csv','xlsx'])}).safeParse(request.query);
+    if(!query.success||!Buffer.isBuffer(request.body))throw new ProjectError('Upload a CSV or .xlsx file and specify its format.');
+    return processFile(request,()=>readQuestionFile(request.body as Buffer,query.data.format));
   });
   app.get('/sample', async (request,reply) => reply.type('application/x-openscroll-project').header('Content-Disposition','attachment; filename="welcome.openscroll"').send(await processFile(request, () => exportProject(sampleProject()))));
   app.post('/import', { bodyLimit: LIMITS.archive }, async request => {
