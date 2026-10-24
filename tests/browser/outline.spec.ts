@@ -1,3 +1,4 @@
+import { seedSampleCourse } from '../helpers/library-fixture.js';
 import { test,expect,type APIRequestContext,type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -19,7 +20,7 @@ test.beforeAll(async({playwright})=>{
 });
 test.beforeEach(async({context})=>{
   await context.addCookies(storage.cookies);
-  const created=await client.post('/api/library/courses/import',{headers:{'x-csrf-token':csrf},data:sampleProject()});expect(created.ok()).toBe(true);id=(await created.json()).id;
+  id=await seedSampleCourse(owner);
 });
 test.afterEach(async()=>{
   const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM courses WHERE owner_id=$1',[owner]);}finally{await pool.end();}

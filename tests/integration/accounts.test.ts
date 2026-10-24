@@ -90,6 +90,15 @@ test('accounts and private library against isolated PostgreSQL schema',async t =
       await pool.query("UPDATE account_tokens SET expires_at=now()-interval '1 second' WHERE token_hash=$1",[tokenHash(expired)]);
       assert.equal((await request('POST','/api/account/reset',{token:expired,password})).statusCode,400);
     });
+    await t.test('course imports retain the ten-per-minute limit and rejected requests create no records',async()=>{
+      const before=Number((await pool.query('SELECT count(*) AS n FROM courses WHERE owner_id=$1',[alice.id])).rows[0].n);
+      for(let n=0;n<11;n++){
+        const response=await app.inject({method:'POST',url:'/api/library/courses/import',remoteAddress:'127.0.9.88',headers:{'x-openscroll-request':'1',origin:config.origin,cookie:alice.cookie,'x-csrf-token':alice.csrf},payload:sampleProject()});
+        assert.equal(response.statusCode,n<10?200:429);
+      }
+      const after=Number((await pool.query('SELECT count(*) AS n FROM courses WHERE owner_id=$1',[alice.id])).rows[0].n);
+      assert.equal(after,before+10);
+    });
     await t.test('logout revokes the current session and expiry invalidates old cookies',async () => {
       assert.equal((await request('POST','/api/account/logout',undefined,alice)).statusCode,200);
       assert.equal((await request('GET','/api/library/courses',undefined,alice)).statusCode,401);

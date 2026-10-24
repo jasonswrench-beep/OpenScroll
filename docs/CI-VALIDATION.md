@@ -15,3 +15,9 @@ All 81 unit tests pass with native Poppler 25.03.0 after this change. The origin
 ## Publication
 
 The published alpha tag and its source/deployment ZIP are preserved. A later release that includes this CI/test correction needs a new commit/tag and a freshly checksummed package. Do not move the existing alpha tag or silently replace its archive. Hosted validation of the follow-up commit must be read from its own CI run, not inferred from local results.
+
+## Browser fixture rate budget
+
+The [follow-up run 40049816499](https://github.com/jasonswrench-beep/OpenScroll/actions/runs/40049816499) passed unit tests, migrations and database integration, then finished with 41 browser cases passing and one template case failing. Its template course title stayed empty. The same symptom was reproduced locally by consuming ten real imports, then creating a template through the UI: the next import returned HTTP 429 and the dialog displayed the rate-limit error.
+
+Block and outline editor tests previously imported a starter through the public API for every fixture. Together with real import flows elsewhere, this consumed the shared per-IP budget on a faster CI run before template creation. Their setup now transactionally seeds only their own synthetic course and asset rows, consistent with the other editor/media suites; actual authoring operations still use the real application. Template creation explicitly asserts a successful real import response. Production rate limits are unchanged, and a PostgreSQL regression case checks ten accepted imports followed by an eleventh rejected import with no extra record. No wait or weakened limit is used to hide the problem.

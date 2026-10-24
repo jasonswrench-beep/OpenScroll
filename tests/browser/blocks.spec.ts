@@ -1,3 +1,4 @@
+import { seedSampleCourse } from '../helpers/library-fixture.js';
 import { test,expect,type APIRequestContext,type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -18,7 +19,7 @@ test.beforeAll(async({playwright})=>{
   }finally{await pool.end();}
   client=await playwright.request.newContext({baseURL:'http://127.0.0.1:3000',extraHTTPHeaders:{cookie:`openscroll_session=${token}`,'x-openscroll-request':'1','x-csrf-token':csrf,origin:'http://127.0.0.1:3000'}});
 });
-test.beforeEach(async({context})=>{await context.addCookies([cookie]);const result=await client.post('/api/library/courses/import',{data:sampleProject()});expect(result.ok()).toBe(true);id=(await result.json()).id;});
+test.beforeEach(async({context})=>{await context.addCookies([cookie]);id=await seedSampleCourse(owner);});
 test.afterEach(async()=>{const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM courses WHERE owner_id=$1',[owner]);}finally{await pool.end();}});
 test.afterAll(async()=>{const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM authors WHERE id=$1',[owner]);}finally{await pool.end();}await client?.dispose();});
 async function open(page:Page){await page.goto('/');await page.getByRole('button',{name:'Open: Welcome to OpenScroll',exact:true}).click();await page.getByRole('button',{name:'Open lesson',exact:true}).first().click();await expect(page.getByRole('region',{name:'Lesson canvas',exact:true})).toBeVisible();}
