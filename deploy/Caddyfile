@@ -1,0 +1,12 @@
+{
+ email {$ACME_EMAIL}
+ admin off
+}
+{$OPENSCROLL_HOST} {
+ encode zstd gzip
+ header Strict-Transport-Security "max-age=31536000"
+ request_body {
+  max_size 90MiB
+ }
+ reverse_proxy app:3000
+}

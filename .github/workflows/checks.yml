@@ -1,0 +1,38 @@
+name: Project checks
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd
+        env:
+          POSTGRES_USER: openscroll
+          POSTGRES_PASSWORD: openscroll_dev
+          POSTGRES_DB: openscroll
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U openscroll -d openscroll" --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgresql://openscroll:openscroll_dev@127.0.0.1:5432/openscroll
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Install PDF inspection tools and fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils fonts-noto-core fonts-noto-cjk
+          python3 -m venv .local/pdf-checks
+          .local/pdf-checks/bin/pip install pypdf==6.10.0
+          echo "$PWD/.local/pdf-checks/bin" >> "$GITHUB_PATH"
+          node --input-type=module -e 'import fs from "node:fs"; import {chromium} from "playwright-core"; fs.appendFileSync(process.env.GITHUB_ENV, "PDF_CHROMIUM_EXECUTABLE_PATH="+chromium.executablePath()+"\n")'
+      - run: npm run licenses
+      - run: npm run schema:check
+      - run: npm run build
+      - run: npm test
+      - run: npm run db:migrate
+      - run: npm run test:integration
+      - run: npm run test:browser

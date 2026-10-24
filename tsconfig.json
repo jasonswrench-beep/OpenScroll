@@ -1,0 +1,1 @@
+{"compilerOptions":{"target":"ES2023","module":"NodeNext","moduleResolution":"NodeNext","strict":true,"noUncheckedIndexedAccess":true,"esModuleInterop":true,"skipLibCheck":true,"lib":["ES2023","DOM"],"types":["node"],"noEmit":true},"include":["src","tools","tests","vite.config.ts"]}

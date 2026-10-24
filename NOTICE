@@ -1,0 +1,19 @@
+OpenScroll
+Copyright 2026 OpenScroll contributors
+
+OpenScroll uses Fastify, @fastify/static, @fastify/cookie, @fastify/rate-limit,
+Nodemailer, node-postgres (pg), Vite,
+TypeScript, tsx, Playwright, Zod, yauzl, yazl, Node.js type declarations,
+pg type declarations, ZIP library type declarations,
+and their transitive dependencies. Their authors retain their copyrights.
+Licenses and notices are supplied in the installed dependency packages.
+
+Development tooling includes unmodified axe-core, @axe-core/playwright,
+and Lightning CSS under MPL-2.0. These are not production runtime dependencies.
+
+PostgreSQL runs as a separate service under the PostgreSQL License.
+The Node.js container runtime includes its own license and third-party notices.
+See docs/DEPENDENCIES.md and package-lock.json for the dependency inventory.
+
+Bundled starter illustrations, starter text, and synthetic tone/video test fixtures
+are original OpenScroll material. No proprietary reference-product assets are included.

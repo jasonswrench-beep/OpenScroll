@@ -1,0 +1,83 @@
+name: openscroll-production
+x-app: &app
+  image: ${OPENSCROLL_IMAGE:-openscroll:production}
+  environment: &environment
+    TRUST_PROXY: "1"
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: "3000"
+    DATABASE_URL: postgresql://openscroll:${POSTGRES_PASSWORD:?Generate deploy/.env.production first}@db:5432/openscroll
+    APP_ORIGIN: ${APP_ORIGIN:?Set the public HTTPS origin}
+    REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
+    REQUIRE_EMAIL_VERIFICATION: "true"
+    AUTHOR_ASSET_LIMIT_MIB: ${AUTHOR_ASSET_LIMIT_MIB:-1024}
+    MAIL_MODE: smtp
+    MAIL_FROM: ${MAIL_FROM:?Set the sender}
+    SMTP_HOST: ${SMTP_HOST:?Set the SMTP host}
+    SMTP_PORT: ${SMTP_PORT:-465}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+services:
+  db:
+    image: postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openscroll
+      POSTGRES_DB: openscroll
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate deploy/.env.production first}
+    volumes: ["database:/var/lib/postgresql/data"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U openscroll -d openscroll"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+    logging: *logging
+  migrate:
+    <<: *app
+    command: [node, dist/server/src/server/migrate.js]
+    depends_on:
+      db: {condition: service_healthy}
+  app:
+    <<: *app
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,nosuid,size=256m,mode=1777"]
+    shm_size: 256m
+    mem_limit: 2g
+    pids_limit: 256
+    ports: ["127.0.0.1:${APP_PORT:-3100}:3000"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      db: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    stop_grace_period: 45s
+  edge:
+    image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    profiles: [edge]
+    restart: unless-stopped
+    environment:
+      NO_PROXY: "${NO_PROXY:-localhost,127.0.0.1,::1},app,db"
+      OPENSCROLL_HOST: ${OPENSCROLL_HOST:?Set the hostname}
+      ACME_EMAIL: ${ACME_EMAIL:?Set certificate contact email}
+    ports: ["${HTTPS_BIND:-0.0.0.0}:80:80", "${HTTPS_BIND:-0.0.0.0}:443:443"]
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "certificates:/data", "caddy_config:/config"]
+    depends_on:
+      app: {condition: service_healthy}
+    logging: *logging
+volumes:
+  database:
+  certificates:
+  caddy_config:

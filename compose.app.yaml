@@ -1,0 +1,37 @@
+# Local container workflow. Replace local credentials/settings before deployment.
+services:
+  migrate:
+    image: openscroll:foundation
+    build: .
+    command: ["node", "dist/server/src/server/migrate.js"]
+    environment:
+      DATABASE_URL: postgresql://openscroll:openscroll_dev@db:5432/openscroll
+    depends_on:
+      db:
+        condition: service_healthy
+  app:
+    image: openscroll:foundation
+    build: .
+    environment:
+      DATABASE_URL: postgresql://openscroll:openscroll_dev@db:5432/openscroll
+      APP_ORIGIN: http://127.0.0.1:3000
+      ALLOW_INSECURE_LOCAL_HTTP: "true"
+      MAIL_MODE: outbox
+      MAIL_OUTBOX_DIR: /app/local-mail
+      REQUIRE_EMAIL_VERIFICATION: "false"
+    volumes:
+      - local_mail:/app/local-mail
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+volumes:
+  local_mail:
