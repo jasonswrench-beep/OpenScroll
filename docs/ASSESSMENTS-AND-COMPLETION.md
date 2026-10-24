@@ -85,3 +85,7 @@ Matching uses each choice once. Selecting a match already assigned elsewhere swa
 The completion footer names remaining required questions/interactions/reviews, with links that focus the relevant content. Exhausting attempts on a submitted-only question explicitly says the response is recorded and other questions may still need submission. A required-correct exhausted question still blocks completion; this rule has not been relaxed.
 
 A terminal Continue and lesson completion are one action. For intermediate lessons that action also opens the next lesson; for the final lesson it completes the course. Interior gates and all authored requirements are preserved. The test course therefore needs one action to advance after exploration, and one bulk submission plus one completion action after filling in the five responses.
+
+## Spreadsheet authoring
+
+Use **Import questions** inside a lesson to download Excel/CSV templates and preview a batch before insertion. OpenStage question-board CSVs are compatible; actual assessment weights are controlled by Points or the import default, not the board Value. See [spreadsheet import](QUESTION-IMPORT.md) for supported types, mapping and limits. Imported questions are normal editable blocks and retain the grading, persistence, preview and export behavior above.

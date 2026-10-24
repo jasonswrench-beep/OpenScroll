@@ -134,3 +134,7 @@ Step 12 adds [themes, templates, reusable assets and snapshots](THEMES-AND-REUSE
 ## Production preparation
 
 Step 13 adds the independent `deploy/compose.yaml` stack and [self-hosting guide](SELF-HOSTING.md). Apply migration **4** to the development database before restarting the current server. No new npm package or cloud configuration review is required. `AUTHOR_ASSET_LIMIT_MIB` defaults to 1024; local development keeps proxy trust disabled. Production deliberately trusts one private reverse-proxy hop. Operator commands compile into the runtime image; deployment smoke tests create only isolated disposable projects. See [validation evidence](STEP-13-VALIDATION.md).
+
+## Question spreadsheet import
+
+See [author guide and validation](QUESTION-IMPORT.md). Exact `fast-xml-parser` is a new server-only MIT dependency; run `npm ci` after updating. Existing yauzl/yazl implement bounded XLSX ZIP reading/template writing. No new service, secret, schema migration or cloud configuration review is required. Unit cases use the supplied CSVs and a genuine independent XLSX fixture; browser cases seed only their own synthetic library account/course and retain all real import/assessment behaviors. No new release or deployment is implied by this feature.
