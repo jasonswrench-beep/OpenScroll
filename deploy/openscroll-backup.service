@@ -1,0 +1,10 @@
+[Unit]
+Description=OpenScroll database backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/openscroll
+ExecStart=/opt/openscroll/deploy/ops.sh backup
+UMask=0077

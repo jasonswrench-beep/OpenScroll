@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="1024" height="1024" viewBox="0 0 1024 1024" version="1.1" role="img" aria-labelledby="title description">
+  <title id="title">OpenScroll — Open Frame icon</title>
+  <desc id="description">An unfurling scroll with a curled upper edge and two content lines. Editable vector artwork. Transparent outside the navy rounded tile.</desc>
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="768" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#102037"/>
+      <stop offset="1" stop-color="#0B172A"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="180" y1="160" x2="844" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#20D6D0"/>
+      <stop offset="1" stop-color="#0FC4CA"/>
+    </linearGradient>
+  </defs>
+  <g id="Tile" inkscape:label="Navy tile">
+    <rect id="navy-tile" x="0" y="0" width="1024" height="1024" rx="164" fill="url(#navy)"/>
+  </g>
+  <g id="Symbol" inkscape:label="OpenScroll symbol" fill="none" stroke="url(#accent)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round">
+      <path id="scroll-top" d="M298 192 H692 C755 192 800 236 800 300"/>
+      <path id="scroll-curl" d="M298 192 C180 192 178 350 298 350"/>
+      <path id="scroll-body" d="M298 192 C340 192 378 240 378 285 V800 C510 710 650 900 800 840 V406"/>
+      <path id="content-line-1" d="M496 434 H674"/>
+      <path id="content-line-2" d="M496 558 H674"/>
+  </g>
+</svg>
