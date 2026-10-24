@@ -32,7 +32,13 @@ jobs:
       - run: npm run licenses
       - run: npm run schema:check
       - run: npm run build
-      - run: npm test
+      - name: Run unit tests with CI reports
+        run: |
+          mkdir -p .local/test-results
+          node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=.local/test-results/unit.xml tests/*.test.ts
+      - name: Publish unit test summary
+        if: always()
+        run: python3 tools/report-unit-results.py .local/test-results/unit.xml
       - run: npm run db:migrate
       - run: npm run test:integration
       - run: npm run test:browser
