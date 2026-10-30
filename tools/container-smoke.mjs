@@ -24,7 +24,7 @@ for (const key of ['DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VE
 function command(file, args, { input, timeout = 120000, env = process.env } = {}) {
   return new Promise((accept, reject) => {
     const child = execFile(file, args, { env, timeout, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) reject(new Error(`${file} ${args[0]} failed: ${stderr.replaceAll(password, '[test-password]').slice(-2400) || error.message}`));
+      if (error) reject(new Error(`${file} ${args[0]} failed: ${(stderr || error.message).replaceAll(password, '[test-password]').slice(-2400)}`));
       else accept(stdout);
     });
     child.stdin.on('error', () => {});
@@ -95,7 +95,14 @@ try {
       method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({project,options:{paper:'A4',includeAnswers:false}}),signal:AbortSignal.timeout(60000)
     });
-    assert.equal(response.status,200,'Actual PDF export: '+(response.ok?'':await response.text()));
+    if (!response.ok) {
+      const message=await response.text();
+      // The public API intentionally hides browser launch details; diagnose this disposable fixture only.
+      const {chromium}=await import('/app/node_modules/playwright-core/index.mjs');
+      const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,timeout:15000,args:['--disable-dev-shm-usage']});
+      await browser.close();
+      assert.fail('Actual PDF export: '+response.status+' '+message);
+    }
     assert.ok(response.headers.get('content-type')?.includes('application/pdf'));
     const bytes=Buffer.from(await response.arrayBuffer());
     assert.equal(bytes.subarray(0,5).toString(),'%PDF-'); assert.ok(bytes.length>1000);
