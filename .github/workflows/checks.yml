@@ -32,9 +32,10 @@ jobs:
           python3 -m venv .local/pdf-checks
           .local/pdf-checks/bin/pip install pypdf==6.10.0
           echo "$PWD/.local/pdf-checks/bin" >> "$GITHUB_PATH"
-      - name: Build and start credential-free renderer for source tests
+      - name: Evaluate source with the opt-in Chrome renderer
         run: |
-          docker build --pull --target renderer --tag openscroll:renderer-tests .
+          docker build --pull --target renderer-chrome --build-arg OS_SECURITY_REFRESH="$(date -u +%Y%m%dT%H%M%SZ)" --build-arg ACCEPT_GOOGLE_CHROME_TERMS=true --tag openscroll:renderer-tests .
+          echo "Chrome evaluation only: Debian Chromium below 156.0.8078.79 remains blocked; no browser image or cache is published." >> "$GITHUB_STEP_SUMMARY"
           node tools/renderer-test-service.mjs start openscroll:renderer-tests
       - run: npm run licenses
       - run: npm run schema:check
@@ -68,11 +69,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y poppler-utils
-      - name: Build final application and renderer images
+      - name: Build final app and opt-in Chrome evaluation images
         id: image
         run: |
-          docker build --pull --target runtime --tag openscroll:ci .
-          docker build --pull --target renderer --tag openscroll:renderer-ci .
+          refresh="$(date -u +%Y%m%dT%H%M%SZ)"
+          docker build --pull --target runtime --build-arg OS_SECURITY_REFRESH="$refresh" --tag openscroll:ci .
+          docker build --pull --target renderer-chrome --build-arg OS_SECURITY_REFRESH="$refresh" --build-arg ACCEPT_GOOGLE_CHROME_TERMS=true --tag openscroll:renderer-ci .
+          echo "Chrome evaluation only: Debian Chromium below 156.0.8078.79 remains blocked; no browser image or cache is published." >> "$GITHUB_STEP_SUMMARY"
       - name: Test final image with an isolated database and Chromium
         run: node tools/container-smoke.mjs openscroll:ci openscroll:renderer-ci
       - name: Verify renderer process, credential, network and deadline boundaries
