@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { z } from 'zod';
 function boolean(env: NodeJS.ProcessEnv, key: string, fallback: boolean) {
   const value=env[key];
   if (value === undefined) return fallback;
@@ -23,10 +24,15 @@ export function accountConfig(env: NodeJS.ProcessEnv = process.env) {
   if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASSWORD)) throw new Error('SMTP_USER and SMTP_PASSWORD must be configured together.');
   const assetMiB=Number(env.AUTHOR_ASSET_LIMIT_MIB ?? 1024);
   if(!Number.isInteger(assetMiB)||assetMiB<1||assetMiB>65536)throw new Error('AUTHOR_ASSET_LIMIT_MIB must be an integer between 1 and 65536.');
+  const requireVerification=boolean(env,'REQUIRE_EMAIL_VERIFICATION',production);
+  if(production&&!requireVerification)throw new Error('Production requires email verification.');
+  const notify=env.ACCESS_REQUEST_NOTIFY_EMAIL?.trim().toLowerCase()||undefined;
+  if(notify!==undefined&&!z.email().max(254).safeParse(notify).success)throw new Error('ACCESS_REQUEST_NOTIFY_EMAIL must be one valid email address.');
   return {
     assetLimitBytes:assetMiB*1024*1024,
     origin:origin.origin, secureCookie:origin.protocol === 'https:', registration:boolean(env,'REGISTRATION_ENABLED',true),
-    requireVerification:boolean(env,'REQUIRE_EMAIL_VERIFICATION',production && !local),
+    requireVerification,
+    accessRequestNotifyEmail:notify,
     mailMode:mailMode as 'smtp'|'outbox', outbox:resolve(env.MAIL_OUTBOX_DIR ?? '.local/mail'), from,
     smtp:{host:env.SMTP_HOST,port:smtpPort,secure:smtpPort === 465,requireTLS:smtpPort !== 465,auth:env.SMTP_USER ? {user:env.SMTP_USER,pass:env.SMTP_PASSWORD!} : undefined},
   };

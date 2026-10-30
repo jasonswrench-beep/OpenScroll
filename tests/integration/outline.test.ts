@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { approveFixtureAuthor } from '../helpers/accounts.js';
 import assert from 'node:assert/strict';
 import { randomUUID,createHash } from 'node:crypto';
 import pg from 'pg';
@@ -24,6 +25,7 @@ test('outline persistence and concurrency against isolated PostgreSQL',async t=>
   const base={'x-openscroll-request':'1',origin:config.origin};
   const register=async(email:string)=>{
     await app.inject({method:'POST',url:'/api/account/register',headers:base,payload:{email,name:'Outline author',password}});
+    await approveFixtureAuthor(pool,email);
     const login=await app.inject({method:'POST',url:'/api/account/login',headers:base,payload:{email,password}});
     assert.equal(login.statusCode,200);return {...base,cookie:`openscroll_session=${login.cookies[0]!.value}`,'x-csrf-token':login.json().csrf};
   };

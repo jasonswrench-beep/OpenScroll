@@ -45,6 +45,20 @@ CREATE INDEX snapshots_course_owner ON course_snapshots(course_id,owner_id,creat
 `},{version:4,sql:`
 ALTER TABLE authors ADD COLUMN disabled_at timestamptz;
 CREATE TABLE admin_events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, operation text NOT NULL, author_id uuid REFERENCES authors(id) ON DELETE SET NULL, created_at timestamptz NOT NULL DEFAULT now());
+`},{version:5,sql:`
+ALTER TABLE authors ADD COLUMN approval_status text NOT NULL DEFAULT 'pending' CHECK (approval_status IN ('pending','approved','revoked'));
+ALTER TABLE authors ADD COLUMN role text NOT NULL DEFAULT 'author' CHECK (role IN ('owner','author'));
+ALTER TABLE authors ADD COLUMN access_notified_at timestamptz;
+ALTER TABLE admin_events ADD COLUMN actor_author_id uuid REFERENCES authors(id) ON DELETE SET NULL;
+ALTER TABLE admin_events ADD COLUMN actor_kind text NOT NULL DEFAULT 'operator' CHECK (actor_kind IN ('operator','owner'));
+CREATE TABLE access_request_notifications (
+ author_id uuid PRIMARY KEY REFERENCES authors(id) ON DELETE CASCADE,
+ status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sending','sent','failed')),
+ attempts integer NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 3),
+ available_at timestamptz NOT NULL DEFAULT now(), claimed_at timestamptz, sent_at timestamptz
+);
+DELETE FROM author_sessions;
+DELETE FROM account_tokens;
 `}];
 export async function migrate(pool:pg.Pool) {
   const client=await pool.connect();

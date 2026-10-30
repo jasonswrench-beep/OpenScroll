@@ -1,3 +1,4 @@
+import {authorizedFetch} from './account-api.js';
 import type { PortableProject } from '../shared/course.js';
 import './publishing.css';
 let dialog:HTMLDialogElement|undefined;
@@ -20,7 +21,7 @@ window.addEventListener('openscroll:signed-out',()=>dialog?.close());
 export async function publishHtml(project:PortableProject,status:HTMLElement,button:HTMLButtonElement,format='html'){
   button.disabled=true;status.textContent=format==='html'?'Validating course and building the standalone HTML ZIP…':'Validating course and building the SCORM ZIP…';
   try{
-    const response=await fetch('/api/projects/'+format,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(30000)});
+    const response=await authorizedFetch('/api/projects/'+format,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(30000)});
     if(!response.ok){const data=await response.json();throw new Error(data.error ?? 'HTML export failed.');}
     const link=document.createElement('a'),url=URL.createObjectURL(await response.blob());link.href=url;link.download=`course-${format}.zip`;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
     status.textContent=format==='html'?'HTML ZIP prepared. Extract it and serve its folder from a static web server. Keep your editable project separately.':'SCORM ZIP prepared. Import the complete ZIP into your LMS. Test launch, score and resume there before distribution. SCORM 1.2 resume capacity is limited to 4096 characters.';
@@ -38,7 +39,7 @@ export function publishPdf(project:PortableProject,status:HTMLElement,opener:HTM
  const controller=new AbortController();let busy=false;
  form.addEventListener('submit',event=>{event.preventDefault();if(busy)return;busy=true;submit.disabled=true;paper.disabled=true;answers.disabled=true;result.textContent='Preparing all course content and generating the PDF…';status.textContent=result.textContent;
   void (async()=>{try{
-   const response=await fetch('/api/projects/pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:snapshot,options:{paper:paper.value,includeAnswers:answers.checked}}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(60000)])});
+   const response=await authorizedFetch('/api/projects/pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:snapshot,options:{paper:paper.value,includeAnswers:answers.checked}}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(60000)])});
    if(!response.ok){const data=await response.json();throw new Error(data.error??'PDF export failed.');}
    const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=answers.checked?'course-with-answers.pdf':'course.pdf';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent=answers.checked?'PDF prepared with answer key. Keep your editable project separately.':'Learner PDF prepared without an answer key. Keep your editable project separately.';modal.close();
   }catch(error){if(!controller.signal.aborted){result.textContent=error instanceof Error?error.message:'PDF export failed. Your course is unchanged.';status.textContent=result.textContent;}}finally{busy=false;submit.disabled=false;paper.disabled=false;answers.disabled=false;}})();

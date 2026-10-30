@@ -13,7 +13,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Open the development app through your local tooling. Create an author account, then sign in. Passwords are 15–128 characters and may contain spaces. Registration is enabled locally and local authors do not need email verification unless configured.
+Open the public homepage through your local tooling; account flows are under `/account/` and approved authoring is under `/app/`. Request an account, explicitly bootstrap a local owner through the trusted CLI, and use that owner to approve verified pending accounts before authoring; see [instance access](INSTANCE-ACCESS.md). Passwords are 15–128 characters and may contain spaces. Registration is enabled locally and local authors do not need email verification unless configured.
 
 Use the library to create blank courses, open them, rename, duplicate, search, sort, and switch between grid/list layouts. A course opened from the library now appears in the Step 5 outline editor. Save an imported or starter project with **Save a copy to library**. This always makes a new library record. The portable-file workspace remains separate and local until downloaded or saved as a copy. Stored library courses use the outline editor with autosave; see [course organization](COURSE-ORGANIZATION.md). Library rename/deletion include the listed revision so stale listings cannot overwrite or delete a changed course.
 
@@ -25,7 +25,8 @@ The present limit is 100 courses per author, so the library can show the entire 
 | --- | --- | --- |
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | Explicit HTTPS origin required |
 | `REGISTRATION_ENABLED` | `true` | Configurable; false blocks registration server-side |
-| `REQUIRE_EMAIL_VERIFICATION` | `false` | Defaults true |
+| `REQUIRE_EMAIL_VERIFICATION` | `false` | Must be true |
+| `ACCESS_REQUEST_NOTIFY_EMAIL` | Unset | Optional single request-notification recipient, separate from SMTP credentials |
 | `MAIL_MODE` | `outbox` | SMTP required |
 | `MAIL_OUTBOX_DIR` | `.local/mail` | Development only |
 | `SMTP_HOST` | Unset | Required for SMTP |
@@ -35,7 +36,7 @@ The present limit is 100 courses per author, so the library can show the entire 
 
 The example Compose application explicitly opts into local HTTP on loopback with `ALLOW_INSECURE_LOCAL_HTTP=true`. This override is rejected for non-loopback hostnames. It is for local container validation, not VPS deployment. Production certificate validation stays enabled. SMTP credentials belong in secure runtime configuration, never the repository, a project file, or browser storage.
 
-Production email verification is the recommended default. An operator may deliberately disable it for a controlled instance; doing so does not change verification flags on existing accounts. A verified author can still sign in when new registrations are disabled.
+Production email verification is mandatory. Verification never grants authoring approval. Verified pending accounts can sign in to view their status; only approved accounts can use authoring/project/library APIs. Each installation owns its approval policy independently.
 
 ## Reset and verification emails
 
@@ -69,7 +70,7 @@ Opening a portable file remains a stateless validation operation. It does not cr
 
 Course deletion requires a browser confirmation and permanently removes its active database record and asset rows. There is no trash or undo in this step. Recommend downloading an editable copy before deletion. Files previously downloaded by the author are unchanged. Operator backups, once configured, follow the operator's backup-retention policy.
 
-Authors and their courses remain stored until explicitly removed. Self-service account deletion and administrator lifecycle tools are not implemented in this step; define the production privacy/retention policy before public launch. No automatic purge of inactive accounts is enabled.
+Authors and their courses remain stored until explicitly removed. Self-service account deletion is not implemented; owner approval/revocation and host operator suspension preserve account data. Define the production privacy/retention policy before public launch. No automatic purge of inactive accounts is enabled.
 
 ## Migrations and operation
 

@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca npm ci --strict-ssl=true; else npm ci --strict-ssl=true; fi
-COPY tsconfig*.json vite.config.ts index.html player.html ./
+COPY tsconfig*.json vite.config.ts index.html app.html account.html player.html ./
 COPY src ./src
 COPY tools/player-notices.ts ./tools/player-notices.ts
 RUN npm run build && npm prune --omit=dev
