@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd
+        image: postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
         env:
           POSTGRES_USER: openscroll
           POSTGRES_PASSWORD: openscroll_dev
@@ -13,13 +13,17 @@ jobs:
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U openscroll -d openscroll" --health-interval 2s --health-timeout 3s --health-retries 30
     env:
-      DATABASE_URL: postgresql://openscroll:openscroll_dev@127.0.0.1:5432/openscroll
+      PROVISION_DATABASE_URL: postgresql://openscroll:openscroll_dev@127.0.0.1:5432/openscroll
+      ADMIN_DATABASE_URL: postgresql://openscroll_migrator:synthetic-migrator-password-at-least-32-bytes@127.0.0.1:5432/openscroll
+      DATABASE_URL: postgresql://openscroll_app:synthetic-runtime-password-at-least-32-bytes@127.0.0.1:5432/openscroll
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
       - run: npm ci
+      - name: Provision isolated runtime and migrator database roles
+        run: printf '%s' '{"runtimePassword":"synthetic-runtime-password-at-least-32-bytes","migratorPassword":"synthetic-migrator-password-at-least-32-bytes"}' | node --import tsx src/server/provision.ts
       - run: npx playwright install --with-deps chromium
       - name: Install PDF inspection tools and fonts
         run: |
@@ -50,7 +54,7 @@ jobs:
         run: node tools/renderer-test-service.mjs stop
   container:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     permissions:
       contents: read
     steps:
@@ -58,6 +62,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
+      - name: Install disposable deployment rehearsal dependencies
+        run: npm ci
       - name: Install PDF inspection tools
         run: |
           sudo apt-get update -qq
@@ -71,6 +77,11 @@ jobs:
         run: node tools/container-smoke.mjs openscroll:ci openscroll:renderer-ci
       - name: Verify renderer process, credential, network and deadline boundaries
         run: node tools/renderer-isolation-smoke.mjs openscroll:renderer-ci openscroll:ci
+      - name: Rehearse production roles, host authentication, backup, restore and HTTPS
+        env:
+          OPENSCROLL_TEST_IMAGE: openscroll:ci
+          OPENSCROLL_TEST_RENDERER_IMAGE: openscroll:renderer-ci
+        run: node --import tsx tools/deployment-smoke.ts
       - name: Scan both final images including OS and application packages
         id: scan
         if: always() && steps.image.outcome == 'success'

@@ -60,7 +60,7 @@ CREATE TABLE access_request_notifications (
 DELETE FROM author_sessions;
 DELETE FROM account_tokens;
 `}];
-export async function migrate(pool:pg.Pool) {
+export async function migrate(pool:pg.Pool,afterMigrate?:(client:pg.PoolClient)=>Promise<void>) {
   const client=await pool.connect();
   try {
     await client.query('BEGIN');
@@ -73,6 +73,7 @@ export async function migrate(pool:pg.Pool) {
       await client.query(migration.sql);
       await client.query('INSERT INTO schema_migrations(version) VALUES ($1)',[migration.version]);
     }
+    if(afterMigrate)await afterMigrate(client);
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }

@@ -3,9 +3,8 @@ import { approveFixtureAuthor } from '../helpers/accounts.js';
 import assert from 'node:assert/strict';
 import { randomUUID,createHash } from 'node:crypto';
 import pg from 'pg';
-import { readConfig } from '../../src/server/config.js';
 import { buildApp } from '../../src/server/app.js';
-import { migrate } from '../../src/server/migrations.js';
+import { isolatedDatabase, migrate } from '../helpers/database.js';
 import { accountConfig } from '../../src/server/accounts/config.js';
 import { sampleProject } from '../../src/project/sample.js';
 import { importProject } from '../../src/project/archive.js';
@@ -15,12 +14,10 @@ import { assessmentProject } from '../helpers/assessment-project.js';
 import { mediaProject } from '../helpers/media-project.js';
 import { copySection } from '../../src/shared/outline.js';
 test('outline persistence and concurrency against isolated PostgreSQL',async t=>{
-  const admin=new pg.Pool({connectionString:readConfig().databaseUrl});const schema=`outline_${randomUUID().replaceAll('-','')}`;
-  await admin.query(`CREATE SCHEMA ${schema}`);
-  const pool=new pg.Pool({connectionString:readConfig().databaseUrl,options:`-c search_path=${schema}`});
+  const database=await isolatedDatabase(),{pool,runtimePool}=database;
   await migrate(pool);await migrate(pool);
   const config=accountConfig({APP_ORIGIN:'http://outline.test'});
-  const app=await buildApp(pool,undefined,{pool,config,mailer:async ()=>{}});
+  const app=await buildApp(runtimePool,undefined,{pool:runtimePool,config,mailer:async ()=>{}});
   const password='An outline testing password 42';
   const base={'x-openscroll-request':'1',origin:config.origin};
   const register=async(email:string)=>{
@@ -118,5 +115,5 @@ test('outline persistence and concurrency against isolated PostgreSQL',async t=>
       assert.equal((await save(payload,{...a,'x-csrf-token':'invalid'})).statusCode,403);
       assert.equal((await snapshot()).revision,opened.revision);
     });
-  }finally{await app.close();await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}
+  }finally{await app.close();await database.close();}
 });

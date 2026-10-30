@@ -5,7 +5,7 @@ import { readConfig } from '../src/server/config.js';
 test('configuration rejects missing credentials and invalid ports', () => {
   assert.throws(() => readConfig({}), /DATABASE_URL/);
   assert.throws(() => readConfig({ DATABASE_URL: 'https://example.org' }), /PostgreSQL/);
-  assert.throws(() => readConfig({ DATABASE_URL: 'postgres://localhost/db', PORT: '0' }), /PORT/);
+  assert.throws(() => readConfig({ DATABASE_URL: 'postgres://fixture:fixture@localhost/db', PORT: '0' }), /PORT/);
 });
 test('readiness checks database and does not expose failure details', async () => {
   let available = true;

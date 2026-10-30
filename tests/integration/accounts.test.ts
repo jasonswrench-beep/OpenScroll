@@ -6,8 +6,7 @@ import { mkdtemp,readFile,readdir,stat,rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
 import { buildApp } from '../../src/server/app.js';
-import { readConfig } from '../../src/server/config.js';
-import { migrate } from '../../src/server/migrations.js';
+import { isolatedDatabase, migrate } from '../helpers/database.js';
 import { accountConfig } from '../../src/server/accounts/config.js';
 import { createMailer, type Message } from '../../src/server/accounts/mail.js';
 import { sampleProject } from '../../src/project/sample.js';
@@ -16,14 +15,11 @@ import { tokenHash } from '../../src/server/accounts/passwords.js';
 const password='A long testing password 42';
 
 test('accounts and private library against isolated PostgreSQL schema',async t => {
-  const admin=new pg.Pool({connectionString:readConfig().databaseUrl});
-  const schema=`test_${randomUUID().replaceAll('-','')}`;
-  await admin.query(`CREATE SCHEMA ${schema}`);
-  const pool=new pg.Pool({connectionString:readConfig().databaseUrl,options:`-c search_path=${schema}`});
+  const database=await isolatedDatabase(),{pool,runtimePool}=database;
   const messages:Message[]=[];
   const config=accountConfig({APP_ORIGIN:'http://test.local',MAIL_MODE:'outbox'});
   await migrate(pool);await migrate(pool);
-  const app=await buildApp(pool,undefined,{pool,config,mailer:async message => {messages.push(message);}});
+  const app=await buildApp(runtimePool,undefined,{pool:runtimePool,config,mailer:async message => {messages.push(message);}});
   let ip=1;
   type Session={cookie:string;csrf:string;id:string};
   async function request(method:'GET'|'POST'|'PATCH'|'DELETE',url:string,payload?:unknown,session?:Session,headers:Record<string,string>={}) {
@@ -108,7 +104,7 @@ test('accounts and private library against isolated PostgreSQL schema',async t =
       assert.equal((await request('GET','/api/account/session',undefined,bob)).json().author,null);
     });
     await t.test('closed registration is enforced and verification gates sign-in',async () => {
-      const verifiedApp=await buildApp(pool,undefined,{pool,config:{...config,requireVerification:true},mailer:async message => {messages.push(message);}});
+      const verifiedApp=await buildApp(runtimePool,undefined,{pool:runtimePool,config:{...config,requireVerification:true},mailer:async message => {messages.push(message);}});
       try {
         const headers={'x-openscroll-request':'1',origin:config.origin};
         const send=(url:string,payload:object) => verifiedApp.inject({method:'POST',url,headers,payload});
@@ -119,12 +115,12 @@ test('accounts and private library against isolated PostgreSQL schema',async t =
         assert.equal((await send('/api/account/verify',{token:raw})).statusCode,400);
         assert.equal((await send('/api/account/login',{email:'verify@example.invalid',password})).statusCode,200);
       }finally{await verifiedApp.close();}
-      const closed=await buildApp(pool,undefined,{pool,config:{...config,registration:false},mailer:async () => {}});
+      const closed=await buildApp(runtimePool,undefined,{pool:runtimePool,config:{...config,registration:false},mailer:async () => {}});
       try {assert.equal((await closed.inject({method:'POST',url:'/api/account/register',headers:{'x-openscroll-request':'1'},payload:{email:'closed@example.invalid',name:'Closed',password}})).statusCode,403);}
       finally{await closed.close();}
     });
     await t.test('HTTPS deployments issue host-only secure cookies',async () => {
-      const secure=await buildApp(pool,undefined,{pool,config:{...config,origin:'https://secure.example',secureCookie:true},mailer:async () => {}});
+      const secure=await buildApp(runtimePool,undefined,{pool:runtimePool,config:{...config,origin:'https://secure.example',secureCookie:true},mailer:async () => {}});
       try {
         const response=await secure.inject({method:'POST',url:'/api/account/login',headers:{'x-openscroll-request':'1',origin:'https://secure.example'},payload:{email:'verify@example.invalid',password}});
         assert.equal(response.statusCode,200);
@@ -146,5 +142,5 @@ test('accounts and private library against isolated PostgreSQL schema',async t =
         assert.equal((await stat(join(path,files[0]!))).mode & 0o777,0o600);
       }finally{await rm(path,{recursive:true});}
     });
-  }finally {await app.close();await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}
+  }finally {await app.close();await database.close();}
 });
