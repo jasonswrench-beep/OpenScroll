@@ -5,7 +5,7 @@ import { ThemeControls } from './theme-controls.js';
 import { assertProjectBudget } from '../shared/reuse.js';
 import { previewCourse,publishHtml,publishPdf } from './publishing.js';
 import { BlockEditor } from './block-editor.js';
-import { api,account } from './account-api.js';
+import { api,account,authorizedFetch } from './account-api.js';
 import { SaveController, type RecoveryDraft, type SaveAck } from './save-controller.js';
 import { readDraft,storeDraft,clearOwnerDrafts } from './recovery.js';
 import { assetPath,parseCourse,assetSchema,type PortableProject,type Asset } from '../shared/course.js';
@@ -206,7 +206,7 @@ document.querySelector<HTMLButtonElement>('#outline-html')!.addEventListener('cl
 document.querySelector('#outline-download')!.addEventListener('click',async ()=>{
   if(!controller)return;
   try {
-    const response=await fetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(candidate?.project ?? controller.project),signal:AbortSignal.timeout(30000)});
+    const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(candidate?.project ?? controller.project),signal:AbortSignal.timeout(30000)});
     if(!response.ok){const data=await response.json();throw new Error(data.error ?? 'Download failed.');}
     const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.download='course.openscroll';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);notice.textContent='Download prepared. This does not overwrite the library course.';
   }catch(error){tell(error);}

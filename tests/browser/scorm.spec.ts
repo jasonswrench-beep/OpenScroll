@@ -1,6 +1,6 @@
 import { sampleProject } from '../../src/project/sample.js';
 import { prepareBlock } from '../../src/shared/block-catalog.js';
-import { test,expect } from '@playwright/test';
+import { test,expect } from './fixtures.js';
 import { createServer,type Server } from 'node:http';
 import yauzl from 'yauzl';
 import { exportScorm } from '../../src/project/scorm-export.js';

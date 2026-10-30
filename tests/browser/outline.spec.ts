@@ -1,5 +1,6 @@
+import { approveFixtureAuthor } from '../helpers/accounts.js';
 import { seedSampleCourse } from '../helpers/library-fixture.js';
-import { test,expect,type APIRequestContext,type Page } from '@playwright/test';
+import { test,expect,type APIRequestContext,type Page } from './fixtures.js';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -16,6 +17,7 @@ test.beforeAll(async({playwright})=>{
   client=await playwright.request.newContext({baseURL:'http://127.0.0.1:3000',extraHTTPHeaders:{'x-openscroll-request':'1',origin:'http://127.0.0.1:3000'}});
   const credentials={email,password:'An outline browser password 42'};
   expect((await client.post('/api/account/register',{data:{...credentials,name:'Outline browser author'}})).ok()).toBe(true);
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await approveFixtureAuthor(pool,email);}finally{await pool.end();}
   const login=await client.post('/api/account/login',{data:credentials});expect(login.ok()).toBe(true);const data=await login.json();csrf=data.csrf;owner=data.author.id;storage=await client.storageState();
 });
 test.beforeEach(async({context})=>{
@@ -30,7 +32,7 @@ test.afterAll(async()=>{
   await client?.dispose();
 });
 async function open(page:Page,title='Welcome to OpenScroll') {
-  await page.goto('/');await page.getByRole('button',{name:`Open: ${title}`,exact:true}).click();await expect(page.locator('#outline-course-title')).toHaveValue(title);
+  await page.goto('/app/');await page.getByRole('button',{name:`Open: ${title}`,exact:true}).click();await expect(page.locator('#outline-course-title')).toHaveValue(title);
 }
 const saved=(page:Page)=>expect(page.locator('#outline-save-status')).toHaveText('Saved to your library.');
 async function snapshot(){const response=await client.get(`/api/library/courses/${id}/edit`);expect(response.ok()).toBe(true);return response.json();}

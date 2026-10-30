@@ -1,5 +1,6 @@
+import { approveFixtureAuthor } from '../helpers/accounts.js';
 import { seedSampleCourse } from '../helpers/library-fixture.js';
-import { test,expect,type APIRequestContext,type Page } from '@playwright/test';
+import { test,expect,type APIRequestContext,type Page } from './fixtures.js';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -15,14 +16,14 @@ test.beforeAll(async({playwright})=>{
   const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
   try{
     await pool.query('INSERT INTO authors(id,email,display_name,password_hash,verified) VALUES($1,$2,$3,$4,true)',[owner,`blocks-${owner}@example.invalid`,'Block test author',await hashPassword(randomToken())]);
-    await pool.query("INSERT INTO author_sessions(token_hash,author_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[tokenHash(token),owner,csrf]);
+    await approveFixtureAuthor(pool,`blocks-${owner}@example.invalid`);await pool.query("INSERT INTO author_sessions(token_hash,author_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[tokenHash(token),owner,csrf]);
   }finally{await pool.end();}
   client=await playwright.request.newContext({baseURL:'http://127.0.0.1:3000',extraHTTPHeaders:{cookie:`openscroll_session=${token}`,'x-openscroll-request':'1','x-csrf-token':csrf,origin:'http://127.0.0.1:3000'}});
 });
 test.beforeEach(async({context})=>{await context.addCookies([cookie]);id=await seedSampleCourse(owner);});
 test.afterEach(async()=>{const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM courses WHERE owner_id=$1',[owner]);}finally{await pool.end();}});
 test.afterAll(async()=>{const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM authors WHERE id=$1',[owner]);}finally{await pool.end();}await client?.dispose();});
-async function open(page:Page){await page.goto('/');await page.getByRole('button',{name:'Open: Welcome to OpenScroll',exact:true}).click();await page.getByRole('button',{name:'Open lesson',exact:true}).first().click();await expect(page.getByRole('region',{name:'Lesson canvas',exact:true})).toBeVisible();}
+async function open(page:Page){await page.goto('/app/');await page.getByRole('button',{name:'Open: Welcome to OpenScroll',exact:true}).click();await page.getByRole('button',{name:'Open lesson',exact:true}).first().click();await expect(page.getByRole('region',{name:'Lesson canvas',exact:true})).toBeVisible();}
 const cards=(page:Page)=>page.locator('.lesson-canvas>article');
 const saved=(page:Page)=>expect(page.locator('#outline-save-status')).toHaveText('Saved to your library.');
 async function snapshot(){const response=await client.get(`/api/library/courses/${id}/edit`);expect(response.ok()).toBe(true);return response.json();}

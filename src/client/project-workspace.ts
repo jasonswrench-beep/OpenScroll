@@ -1,8 +1,9 @@
 import { ThemeControls } from './theme-controls.js';
 import { previewCourse,publishHtml,publishPdf } from './publishing.js';
-import { api, account } from './account-api.js';
+import { api, account, authorizedFetch } from './account-api.js';
 import { parseCourse, type PortableProject } from '../shared/course.js';
 const openSample = document.querySelector<HTMLButtonElement>('#open-sample')!;
+const downloadSample=document.querySelector<HTMLButtonElement>('#download-sample')!;
 const fileInput = document.querySelector<HTMLInputElement>('#project-file')!;
 const details = document.querySelector<HTMLDivElement>('#project-details')!;
 const title = document.querySelector<HTMLInputElement>('#course-title')!;
@@ -15,7 +16,7 @@ let dirty = false;
 const saveLibrary=document.querySelector<HTMLButtonElement>('#save-library')!;
 let privateProject=false;
 function setBusy(value: boolean) {
-  for (const control of [openSample,fileInput,title,download,saveLibrary]) control.disabled=value;
+  for (const control of [openSample,downloadSample,fileInput,title,download,saveLibrary]) control.disabled=value;
   details.setAttribute('aria-busy',String(value));
 }
 async function responseError(response: Response): Promise<never> {
@@ -46,7 +47,7 @@ async function openProject(file: Blob) {
   if (dirty && !window.confirm('Replace the current project? Download it first if you want to keep your changes.')) { fileInput.value=''; return; }
   setBusy(true); status.textContent='Opening and checking the project…';
   try {
-    const response=await fetch('/api/projects/import',{method:'POST',headers:{'Content-Type':'application/x-openscroll-project'},body:file,signal:AbortSignal.timeout(30_000)});
+    const response=await authorizedFetch('/api/projects/import',{method:'POST',headers:{'Content-Type':'application/x-openscroll-project'},body:file,signal:AbortSignal.timeout(30_000)});
     if (!response.ok) await responseError(response);
     const data = await response.json() as PortableProject;
     showProject(data,false);
@@ -57,13 +58,24 @@ async function openProject(file: Blob) {
 openSample.addEventListener('click', async () => {
   setBusy(true);
   try {
-    const response=await fetch('/api/projects/sample',{signal:AbortSignal.timeout(30_000)});
+    const response=await authorizedFetch('/api/projects/sample',{signal:AbortSignal.timeout(30_000)});
     if (!response.ok) await responseError(response);
     await openProject(await response.blob());
   } catch { status.textContent='The starter course is unavailable. Try again.'; }
   finally { setBusy(false); }
 });
 fileInput.addEventListener('change', () => { const file=fileInput.files?.[0]; if (file) void openProject(file); });
+downloadSample.addEventListener('click',async()=>{
+  setBusy(true);status.textContent='Preparing the starter project…';
+  try{
+    const response=await authorizedFetch('/api/projects/sample',{signal:AbortSignal.timeout(30_000)});
+    if(!response.ok)await responseError(response);
+    const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');
+    link.href=url;link.download='welcome.openscroll';link.click();setTimeout(()=>URL.revokeObjectURL(url),60_000);
+    status.textContent='Starter project download prepared.';
+  }catch(error){status.textContent=error instanceof Error?error.message:'The starter project could not be downloaded.';}
+  finally{setBusy(false);}
+});
 title.addEventListener('input', () => {
   if (!project) return;
   project.document.course.title=title.value;
@@ -74,7 +86,7 @@ download.addEventListener('click', async () => {
   if (!project) return;
   setBusy(true); status.textContent='Preparing the editable project…';
   try {
-    const response=await fetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(30_000)});
+    const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(30_000)});
     if (!response.ok) await responseError(response);
     const url=URL.createObjectURL(await response.blob());
     const link=document.createElement('a'); link.href=url; link.download='course.openscroll'; link.click();

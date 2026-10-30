@@ -46,3 +46,5 @@ Initial production hosting is planned for a Hostinger VPS. Accessibility, origin
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+Hosted authoring requires verified email and approval from that installation’s owner. The public homepage links to independent self-hosting; see [instance access and owner activation](docs/INSTANCE-ACCESS.md). No central approval service is required.

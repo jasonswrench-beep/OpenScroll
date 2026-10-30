@@ -5,7 +5,8 @@ import { projectRoutes } from './project-routes.js';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { accountRoutes, type AccountServices } from './accounts/routes.js';
-import { resolve } from 'node:path';
+import { installAccountAccess, requireAuthor, requireOwner } from './accounts/access.js';
+import { resolve, basename } from 'node:path';
 export interface Database { query: (text: string) => Promise<unknown>; }
 export async function buildApp(database: Database, staticRoot?: string, accounts?:AccountServices) {
   const hops=trustedProxyHops();
@@ -27,8 +28,32 @@ export async function buildApp(database: Database, staticRoot?: string, accounts
   });
   await app.register(cookie);
   await app.register(rateLimit,{global:false});
+  await installAccountAccess(app,accounts);
+  const publicApis=new Set(['/api/health','/api/account/session','/api/account/register','/api/account/login','/api/account/logout','/api/account/request-reset','/api/account/resend-verification','/api/account/reset','/api/account/verify']);
+  app.addHook('onRequest',async(request,reply)=>{
+    let path:string;
+    try{path=decodeURIComponent(request.url.split('?')[0]!);}catch{return reply.code(400).send({error:'The request path is invalid.'});}
+    // Fail closed before parsing bodies or taking the project-processing slot.
+    if(path==='/api'||path.startsWith('/api/')){
+      if(!publicApis.has(path)){
+        if(path==='/api/owner'||path.startsWith('/api/owner/'))requireOwner(request);else requireAuthor(request);
+      }
+    }
+    if(['/app','/app/','/app.html','/player.html'].includes(path)){
+      const author=request.author;
+      if(!author||!author.verified||author.approvalStatus!=='approved')return reply.redirect('/account/');
+    }
+  });
   if (accounts) await app.register(accountRoutes,{prefix:'/api',...accounts});
   await app.register(projectRoutes, { prefix: '/api/projects',playerRoot:staticRoot });
-  if (staticRoot) await app.register(staticFiles, { root: resolve(staticRoot) });
+  if (staticRoot){
+    await app.register(staticFiles,{root:resolve(staticRoot),index:false,allowedPath:(pathName,_root,request)=>{
+      if(!['app.html','player.html'].includes(basename(pathName)))return true;
+      return Boolean(request.author?.verified&&request.author.approvalStatus==='approved');
+    }});
+    app.get('/',async(_request,reply)=>reply.sendFile('index.html'));
+    for(const path of ['/app','/app/'])app.get(path,async(_request,reply)=>reply.header('Cache-Control','no-store').sendFile('app.html'));
+    for(const path of ['/account','/account/'])app.get(path,async(_request,reply)=>reply.header('Cache-Control','no-store').sendFile('account.html'));
+  }
   return app;
 }

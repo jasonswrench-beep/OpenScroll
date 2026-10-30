@@ -20,6 +20,6 @@ test('readiness checks database and does not expose failure details', async () =
     assert.equal(response.statusCode, 503);
     assert.deepEqual(response.json(), { status: 'unavailable', database: 'unavailable' });
     assert.equal(response.headers['cache-control'], 'no-store');
-    assert.equal((await app.inject('/api/missing')).statusCode, 404);
+    assert.equal((await app.inject('/api/missing')).statusCode, 401, 'Private API paths fail closed before route lookup.');
   } finally { await app.close(); }
 });

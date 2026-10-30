@@ -33,3 +33,23 @@ test('duplication remaps all IDs and asset references without changing source',(
 test('operator asset limits reject invalid values and default to one GiB',()=>{assert.equal(accountConfig({}).assetLimitBytes,1024*1024*1024);assert.equal(accountConfig({AUTHOR_ASSET_LIMIT_MIB:'2'}).assetLimitBytes,2*1024*1024);for(const value of ['0','-1','1.5','bad','65537'])assert.throws(()=>accountConfig({AUTHOR_ASSET_LIMIT_MIB:value}),/AUTHOR_ASSET/);});
 
 test('proxy trust is bounded to a single explicitly enabled hop',()=>{assert.equal(trustedProxyHops({}),false);assert.equal(trustedProxyHops({TRUST_PROXY:'1'}),1);assert.throws(()=>trustedProxyHops({TRUST_PROXY:'true'}),/TRUST_PROXY/);});
+
+test('production cannot disable email verification while isolated development may', () => {
+  assert.equal(accountConfig({}).requireVerification, false);
+  for (const env of [
+    { NODE_ENV: 'production', APP_ORIGIN: 'https://public.example', SMTP_HOST: 'smtp.example', MAIL_FROM: 'no-reply@example.org' },
+    { NODE_ENV: 'production', APP_ORIGIN: 'http://127.0.0.1:3000', ALLOW_INSECURE_LOCAL_HTTP: 'true' },
+  ]) {
+    assert.throws(() => accountConfig({ ...env, REQUIRE_EMAIL_VERIFICATION: 'false' }), /verification|REQUIRE_EMAIL_VERIFICATION/i);
+  }
+});
+
+test('access-request notices have one explicitly configured recipient and reject invalid mail destinations', () => {
+  assert.equal(accountConfig({}).accessRequestNotifyEmail, undefined);
+  assert.equal(accountConfig({ ACCESS_REQUEST_NOTIFY_EMAIL: '' }).accessRequestNotifyEmail, undefined);
+  assert.equal(accountConfig({ ACCESS_REQUEST_NOTIFY_EMAIL: '   ' }).accessRequestNotifyEmail, undefined);
+  assert.equal(accountConfig({ ACCESS_REQUEST_NOTIFY_EMAIL: 'owner@example.org' }).accessRequestNotifyEmail, 'owner@example.org');
+  for (const value of ['invalid-address', 'owner@example.org,second@example.org', 'Owner <owner@example.org>', 'owner@example.org\nBcc: second@example.org']) {
+    assert.throws(() => accountConfig({ ACCESS_REQUEST_NOTIFY_EMAIL: value }), /ACCESS_REQUEST_NOTIFY_EMAIL/);
+  }
+});

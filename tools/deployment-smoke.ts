@@ -22,7 +22,8 @@ async function login(index:number){const response=await api(index,'/api/account/
 try{
  for(const index of [0,1])await run(index,['config']);
  console.log('Starting independent fresh installation.');await run(0,['start']);
- await run(0,['admin','create-author','smoke@example.invalid','Recovery fixture'],password+'\n');const auth=await login(0),project=sampleProject();
+ const owner=JSON.parse(await run(0,['admin','create-author','smoke@example.invalid','Recovery fixture'],password+'\n'));
+ await run(0,['admin','bootstrap-owner',owner.author,'smoke@example.invalid']);const auth=await login(0),project=sampleProject();
  const created=await api(0,'/api/library/courses/import','POST',project,auth);assert.equal(created.status,200);const {id}=await created.json();
  const current=await (await api(0,`/api/library/courses/${id}/edit`,'GET',undefined,auth)).json();
  assert.equal((await api(0,`/api/library/courses/${id}/snapshots`,'POST',{id:crypto.randomUUID(),title:'Recovery fixture',revision:current.revision},auth)).status,200);
@@ -35,7 +36,7 @@ try{
  assert.deepEqual(await (await api(1,`/api/library/courses/${id}/edit`,'GET',undefined,restoredAuth)).json(),current);
  assert.equal((await (await api(1,`/api/library/courses/${id}/snapshots`,'GET',undefined,restoredAuth)).json()).snapshots.length,1);
  assert.equal((await (await api(1,'/api/library/reusable','GET',undefined,restoredAuth)).json()).items.length,1);
- const pdf=await api(1,'/api/projects/pdf','POST',{project,options:{paper:'A4',includeAnswers:false}});assert.equal(pdf.status,200);assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
+ const pdf=await api(1,'/api/projects/pdf','POST',{project,options:{paper:'A4',includeAnswers:false}},restoredAuth);assert.equal(pdf.status,200);assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
  await run(1,['stop']);await assert.rejects(run(1,['restore',file]),/not empty/);
  const tlsConfig=join(dir,'Caddyfile'),overlay=join(dir,'tls.yaml'),caFile=join(dir,'root.crt');
  await writeFile(tlsConfig,'{\n admin off\n}\nlocalhost {\n tls internal\n reverse_proxy app:3000\n}\n');

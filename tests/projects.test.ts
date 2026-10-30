@@ -6,7 +6,7 @@ import { crc32, deflateRawSync } from 'node:zlib';
 import { exportProject, importProject, LIMITS, validateProject } from '../src/project/archive.js';
 import { sampleProject } from '../src/project/sample.js';
 import { assetPath, parseCourse } from '../src/shared/course.js';
-import { buildApp } from '../src/server/app.js';
+import { buildApprovedProjectApp } from './helpers/project-app.js';
 
 // Construct adversarial archives without asking a ZIP writer to sanitize them.
 function rawZip(entries: { name: string; data: Buffer; method?: number; mode?: number; flags?: number; declaredSize?: number }[]): Buffer {
@@ -104,7 +104,7 @@ test('unknown versions preserve the original archive bytes', async () => {
 });
 
 test('project API downloads, imports, and re-exports without database writes', async () => {
-  const app=await buildApp({query:async () => { throw new Error('Project operations must not access storage'); }});
+  const app=await buildApprovedProjectApp();
   try {
     const sample=await app.inject('/api/projects/sample'); assert.equal(sample.statusCode,200);
     const imported=await app.inject({method:'POST',url:'/api/projects/import',headers:{'content-type':'application/x-openscroll-project'},payload:sample.rawPayload});
@@ -120,7 +120,7 @@ test('project API downloads, imports, and re-exports without database writes', a
 });
 
 test('parallel project requests are bounded and the processing slot recovers', async () => {
-  const app=await buildApp({query:async () => {}});
+  const app=await buildApprovedProjectApp();
   try {
     const responses=await Promise.all([app.inject('/api/projects/sample'),app.inject('/api/projects/sample')]);
     assert.deepEqual(responses.map(r => r.statusCode).sort(),[200,429]);
