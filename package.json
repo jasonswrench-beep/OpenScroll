@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env --import tsx tools/dev.ts",
     "build": "tsc --noEmit && vite build && tsx tools/player-notices.ts && tsc -p tsconfig.server.json",
-    "start": "node --env-file-if-exists=.env dist/server/src/server/index.js",
+    "start": "node --env-file-if-exists=.env tools/start-app.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:integration": "node --env-file-if-exists=.env --import tsx --test tests/integration/*.test.ts",
@@ -21,7 +21,8 @@
     "project": "tsx tools/project.ts",
     "schema": "tsx tools/schema.ts",
     "schema:check": "tsx tools/schema.ts --check",
-    "db:migrate": "node --env-file-if-exists=.env --import tsx src/server/migrate.ts"
+    "db:migrate": "node --env-file-if-exists=.env --import tsx src/server/migrate.ts",
+    "db:provision": "node --env-file-if-exists=.env --import tsx src/server/provision.ts --from-env"
   },
   "dependencies": {
     "@fastify/cookie": "11.1.3",

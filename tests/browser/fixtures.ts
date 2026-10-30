@@ -5,7 +5,7 @@ import { cleanupTestAuthor, seedTestAuthor, type TestAuthor } from '../helpers/a
 /** Approved synthetic accounts belong only to the explicitly supplied disposable database. */
 export const test = base.extend<{ approvedAuthor: TestAuthor }>({
   approvedAuthor: async ({}, use) => {
-    const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+    const pool = new pg.Pool({ connectionString: process.env.ADMIN_DATABASE_URL });
     let author: TestAuthor | undefined;
     try { author = await seedTestAuthor(pool); await use(author); }
     finally { try { if (author) await cleanupTestAuthor(pool, author); } finally { await pool.end(); } }

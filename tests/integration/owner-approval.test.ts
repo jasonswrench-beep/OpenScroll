@@ -8,7 +8,7 @@ import { accountConfig } from '../../src/server/accounts/config.js';
 import type { Message } from '../../src/server/accounts/mail.js';
 import { hashPassword, randomToken, tokenHash } from '../../src/server/accounts/passwords.js';
 import { administer } from '../../src/server/admin-operations.js';
-import { migrate } from '../../src/server/migrations.js';
+import { isolatedDatabase, migrate } from '../helpers/database.js';
 import { sampleProject } from '../../src/project/sample.js';
 import { assetPath } from '../../src/shared/course.js';
 import { seedTestAuthor, type TestAuthor } from '../helpers/accounts.js';
@@ -16,14 +16,12 @@ import { processAccessRequestNotifications } from '../../src/server/accounts/not
 
 const password='Owner approval integration password 42';
 type Session=Pick<TestAuthor,'id'|'cookie'|'csrf'>;
-async function isolated(run:(pool:pg.Pool)=>Promise<void>) {
-  const root=new pg.Pool({connectionString:process.env.DATABASE_URL});
-  const schema=`approval_${randomUUID().replaceAll('-','')}`;
-  await root.query(`CREATE SCHEMA ${schema}`);
-  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,options:`-c search_path=${schema}`});
-  try {await migrate(pool);await run(pool);}
-  finally {await pool.end();await root.query(`DROP SCHEMA ${schema} CASCADE`);await root.end();}
+async function isolated(run:(pool:pg.Pool,runtimePool:pg.Pool)=>Promise<void>) {
+  const database=await isolatedDatabase();
+  try {await run(database.pool,database.runtimePool);}
+  finally {await database.close();}
 }
+
 function requests(app:FastifyInstance,origin:string) {
   let ip=1;
   return (method:HTTPMethods,url:string,payload?:unknown,session?:Session,extra:Record<string,string>={})=>app.inject({
@@ -36,9 +34,9 @@ function sessionOf(response:{json:()=>any;cookies:{value:string}[]}):Session {
   return {id:response.json().author.id,cookie:`openscroll_session=${response.cookies[0]!.value}`,csrf:response.json().csrf};
 }
 
-test('an empty instance never treats its first registrant as an approved author or owner',async()=>isolated(async pool=>{
+test('an empty instance never treats its first registrant as an approved author or owner',async()=>isolated(async (pool,runtimePool)=>{
   const messages:Message[]=[],config=accountConfig({APP_ORIGIN:'http://empty.test',REQUIRE_EMAIL_VERIFICATION:'true'});
-  const app=await buildApp(pool,undefined,{pool,config,mailer:async message=>{messages.push(message);}}),send=requests(app,config.origin);
+  const app=await buildApp(runtimePool,undefined,{pool:runtimePool,config,mailer:async message=>{messages.push(message);}}),send=requests(app,config.origin);
   try {
     for(const path of ['/api/projects/sample','/api/library/courses','/api/owner/accounts','/api/unknown-route'])assert.equal((await send('GET',path)).statusCode,401,path);
     assert.equal((await send('GET','/api/account/session')).json().author,null);
@@ -53,9 +51,9 @@ test('an empty instance never treats its first registrant as an approved author 
   } finally {await app.close();}
 }));
 
-test('approval gates every author API and owner decisions revoke stale credentials',async t=>isolated(async pool=>{
+test('approval gates every author API and owner decisions revoke stale credentials',async t=>isolated(async (pool,runtimePool)=>{
   const messages:Message[]=[],config=accountConfig({APP_ORIGIN:'http://approval.test',REQUIRE_EMAIL_VERIFICATION:'true',ACCESS_REQUEST_NOTIFY_EMAIL:'owner-notices@example.invalid'});
-  const app=await buildApp(pool,undefined,{pool,config,mailer:async message=>{messages.push(message);}});
+  const app=await buildApp(runtimePool,undefined,{pool:runtimePool,config,mailer:async message=>{messages.push(message);}});
   const send=requests(app,config.origin),owner=await seedTestAuthor(pool,{role:'owner',email:'owner@example.invalid'});
   let pending:Session;
   const applicant='applicant@example.invalid';
@@ -199,7 +197,7 @@ test('approval gates every author API and owner decisions revoke stale credentia
   } finally {await app.close();}
 }));
 
-test('migration 5 quarantines every legacy account while preserving private content and explicit owner bootstrap',async()=>isolated(async pool=>{
+test('migration 5 quarantines every legacy account while preserving private content and explicit owner bootstrap',async()=>isolated(async (pool,runtimePool)=>{
   // Recreate the actual pre-approval schema boundary only in this disposable schema.
   await pool.query('DROP TABLE access_request_notifications');
   await pool.query('ALTER TABLE admin_events DROP COLUMN actor_author_id, DROP COLUMN actor_kind');
@@ -247,10 +245,10 @@ test('migration 5 quarantines every legacy account while preserving private cont
   assert.equal((await pool.query('SELECT approval_status FROM authors WHERE id=$1',[created.author])).rows[0].approval_status,'revoked');
 }));
 
-test('owner notices retry failed delivery and mark success only after delivery without duplicate successful sends',async()=>isolated(async pool=>{
+test('owner notices retry failed delivery and mark success only after delivery without duplicate successful sends',async()=>isolated(async (pool,runtimePool)=>{
   const messages:Message[]=[],config=accountConfig({APP_ORIGIN:'http://notice.test',REQUIRE_EMAIL_VERIFICATION:'true',ACCESS_REQUEST_NOTIFY_EMAIL:'notice-owner@example.invalid'});
   let attempts=0;
-  const app=await buildApp(pool,undefined,{pool,config,mailer:async message=>{
+  const app=await buildApp(runtimePool,undefined,{pool:runtimePool,config,mailer:async message=>{
     if(message.to===config.accessRequestNotifyEmail){attempts++;if(attempts===1)throw new Error('Synthetic mail delivery failure');}
     messages.push(message);
   }}),send=requests(app,config.origin),email='notice-applicant@example.invalid';
@@ -265,7 +263,7 @@ test('owner notices retry failed delivery and mark success only after delivery w
     const failed=(await pool.query('SELECT attempts,sent_at FROM access_request_notifications WHERE author_id=$1',[account.id])).rows[0];
     assert.equal(failed.attempts,1);assert.equal(failed.sent_at,null);
     await pool.query("UPDATE access_request_notifications SET available_at=now()-interval '1 second' WHERE author_id=$1",[account.id]);
-    const services={pool,config,mailer:async(message:Message)=>{if(message.to===config.accessRequestNotifyEmail)attempts++;messages.push(message);}};
+    const services={pool:runtimePool,config,mailer:async(message:Message)=>{if(message.to===config.accessRequestNotifyEmail)attempts++;messages.push(message);}};
     await Promise.all([processAccessRequestNotifications(services,account.id),processAccessRequestNotifications(services,account.id)]);
     assert.equal(attempts,2);assert.equal(messages.filter(message=>message.to===config.accessRequestNotifyEmail).length,1);
     const delivered=(await pool.query('SELECT status,attempts,sent_at FROM access_request_notifications WHERE author_id=$1',[account.id])).rows[0];
@@ -276,11 +274,11 @@ test('owner notices retry failed delivery and mark success only after delivery w
   } finally {await app.close();}
 }));
 
-test('notification retry caps and leases retain a failed applicant in the authoritative owner queue',async()=>isolated(async pool=>{
+test('notification retry caps and leases retain a failed applicant in the authoritative owner queue',async()=>isolated(async (pool,runtimePool)=>{
   const config=accountConfig({APP_ORIGIN:'http://retry-cap.test',ACCESS_REQUEST_NOTIFY_EMAIL:'queue-owner@example.invalid'});
   let attempts=0;
-  const services={pool,config,mailer:async()=>{attempts++;throw new Error('Synthetic unavailable notification transport');}};
-  const app=await buildApp(pool,undefined,services),send=requests(app,config.origin);
+  const services={pool:runtimePool,config,mailer:async()=>{attempts++;throw new Error('Synthetic unavailable notification transport');}};
+  const app=await buildApp(runtimePool,undefined,services),send=requests(app,config.origin);
   const owner=await seedTestAuthor(pool,{role:'owner'}),applicant=await seedTestAuthor(pool,{approvalStatus:'pending'});
   try {
     assert.equal((await send('POST','/api/account/login',{email:applicant.email,password:applicant.password})).statusCode,200);

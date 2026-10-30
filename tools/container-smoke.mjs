@@ -5,6 +5,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const [appImage, rendererImage] = process.argv.slice(2);
 assert.ok(process.argv.length === 4 && [appImage, rendererImage].every(value =>
@@ -12,18 +13,24 @@ assert.ok(process.argv.length === 4 && [appImage, rendererImage].every(value =>
   'Usage: node tools/container-smoke.mjs <app-image> <renderer-image>');
 const expectedNode = (await readFile(new URL('../.node-version', import.meta.url), 'utf8')).trim();
 assert.match(expectedNode, /^24\.\d+\.\d+$/);
-const postgres = 'postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd';
+const postgres = 'postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5';
 const suffix = randomBytes(6).toString('hex');
 const network = `openscroll-image-test-${suffix}`;
 const database = `${network}-db`, migration = `${network}-migrate`, app = `${network}-app`, renderer = `${network}-renderer`;
 const socketVolume = `${network}-socket`, socketDirectory = '/run/openscroll-renderer';
 const socketPath = `${socketDirectory}/renderer.sock`;
+const hbaFile=fileURLToPath(new URL('../deploy/pg_hba.conf',import.meta.url));
+const hbaTarget='/etc/postgresql/openscroll-pg-hba.conf';
 const directory = await mkdtemp(join(tmpdir(), 'openscroll-image-test-'));
 const password = randomBytes(24).toString('hex');
+const runtimePassword = randomBytes(32).toString('hex');
+const migratorPassword = randomBytes(32).toString('hex');
 const smtpCanary = `synthetic-smtp-${randomBytes(16).toString('hex')}`;
 const sessionCanary = `synthetic-session-${randomBytes(16).toString('hex')}`;
-const databaseUrl = `postgresql://openscroll:${password}@db:5432/openscroll`;
-const secrets = [password, smtpCanary, sessionCanary];
+const provisionUrl = `postgresql://openscroll:${password}@db:5432/openscroll`;
+const adminUrl = `postgresql://openscroll_migrator:${migratorPassword}@db:5432/openscroll`;
+const databaseUrl = `postgresql://openscroll_app:${runtimePassword}@db:5432/openscroll`;
+const secrets = [password, runtimePassword, migratorPassword, smtpCanary, sessionCanary];
 const sanitize = text => secrets.reduce((value, secret) => value.replaceAll(secret, '[synthetic-configuration]'), text);
 const proxyKeys = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'];
 const noProxies = proxyKeys.flatMap(key => ['--env', `${key}=`]);
@@ -55,23 +62,44 @@ try {
   assert.equal(appDefinition.Config.User, 'node', 'The app image must retain its unprivileged node user.');
   assert.equal(rendererDefinition.Config.User, '0:1000', 'Only the renderer supervisor uses UID0 with the app client group.');
   assert.deepEqual(rendererDefinition.Config.Cmd, ['node', 'dist/server/src/renderer/server.js']);
-  const sensitiveKey = /^(?:DATABASE_URL|POSTGRES_|SMTP_|MAIL_|SESSION_|APP_|ACCESS_REQUEST_NOTIFY_EMAIL)/;
+  const sensitiveKey = /^(?:DATABASE_URL|ADMIN_DATABASE_URL|PROVISION_DATABASE_URL|MIGRATOR_DB_PASSWORD|RUNTIME_DB_PASSWORD|PGPASSWORD|PGPASSFILE|PGSERVICE|PGSERVICEFILE|PGUSER|POSTGRES_|SMTP_|MAIL_|SESSION_|APP_|ACCESS_REQUEST_NOTIFY_EMAIL)/;
   assert.ok(!rendererDefinition.Config.Env.some(value => sensitiveKey.test(value.split('=')[0])),
     'The renderer image must contain no application credential configuration.');
   await docker(['network', 'create', '--internal', network]);
   await docker(['volume', 'create', socketVolume]);
   await docker(['run', '--detach', '--name', database, '--network', network, '--network-alias', 'db',
     '--tmpfs', '/var/lib/postgresql/data:rw,nosuid,size=512m',
+    '--mount',`type=bind,src=${hbaFile},dst=${hbaTarget},readonly`,
     '--env', 'POSTGRES_USER=openscroll', '--env', 'POSTGRES_DB=openscroll', '--env', `POSTGRES_PASSWORD=${password}`,
-    ...noProxies, postgres], { timeout: 240000 });
+    ...noProxies, postgres,'postgres','-c',`hba_file=${hbaTarget}`], { timeout: 240000 });
   let ready = false;
   for (let attempt = 0; attempt < 120; attempt++) {
     try { await docker(['exec', database, 'pg_isready', '-h', '127.0.0.1', '-U', 'openscroll', '-d', 'openscroll']); ready = true; break; }
     catch { await pause(); }
   }
   assert.ok(ready, 'The isolated test database did not become ready.');
-  const operator = ['run', '--rm', '--name', migration, '--network', network, '--env', `DATABASE_URL=${databaseUrl}`, ...noProxies];
+  const databasePolicy=JSON.parse(await docker(['exec',database,'psql','-X','-U','openscroll','-d','openscroll','-At','-c',
+    "SELECT json_build_object('version',current_setting('server_version'),'versionNum',current_setting('server_version_num')::int,'hbaFile',current_setting('hba_file'),'hbaErrors',(SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL))"]));
+  assert.equal(databasePolicy.versionNum,170011);assert.equal(databasePolicy.hbaFile,hbaTarget);
+  assert.equal(databasePolicy.hbaErrors,0,'The mounted production host-authentication policy must parse without errors.');
+  const isolatedOperator = ['run', '--rm', '--name', migration, '--network', network,
+    '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges:true',
+    '--tmpfs', '/tmp:rw,nosuid,noexec,size=64m,mode=1777'];
+  await docker([...isolatedOperator.slice(0,2),'--interactive',...isolatedOperator.slice(2),
+    '--env',`PROVISION_DATABASE_URL=${provisionUrl}`,...noProxies,appImage,'node','dist/server/src/server/provision.js'],
+    {input:JSON.stringify({runtimePassword,migratorPassword})});
+  const operator = [...isolatedOperator, '--env', `ADMIN_DATABASE_URL=${adminUrl}`, ...noProxies];
   await docker([...operator, appImage, 'node', 'dist/server/src/server/migrate.js']);
+  await docker([...operator.slice(0,2),'--interactive',...operator.slice(2),appImage,'node','--input-type=module','-'],{input:`
+    import assert from 'node:assert/strict';import pg from 'pg';
+    const current=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});
+    try{assert.equal((await current.query('SELECT current_user AS name')).rows[0].name,'openscroll_migrator');}finally{await current.end();}
+    for(const database of ['postgres','template1']){
+      const url=new URL(process.env.ADMIN_DATABASE_URL);url.pathname='/'+database;
+      const pool=new pg.Pool({connectionString:url.href,connectionTimeoutMillis:3000});
+      try{await assert.rejects(pool.query('SELECT 1'),{code:'28000'});}finally{await pool.end();}
+    }
+  `});
   const created = JSON.parse(await docker([...operator.slice(0, 2), '--interactive', ...operator.slice(2), appImage,
     'node', 'dist/server/src/server/admin.js', 'create-author', 'smoke-owner@example.invalid', 'Container fixture owner'], { input: password + '\n' }));
   await docker([...operator, appImage, 'node', 'dist/server/src/server/admin.js', 'bootstrap-owner', created.author, 'smoke-owner@example.invalid']);
@@ -150,6 +178,10 @@ try {
     '--env', `SESSION_SECRET=${sessionCanary}`, '--env', 'REQUIRE_EMAIL_VERIFICATION=true', '--env', 'REGISTRATION_ENABLED=false',
     ...noProxies, appImage]);
   const appContainer = await inspect('container', app);
+  assert.ok(!appContainer.Config.Env.some(value=>/^(?:ADMIN_DATABASE_URL|PROVISION_DATABASE_URL|MIGRATOR_DB_PASSWORD|RUNTIME_DB_PASSWORD|POSTGRES_PASSWORD|PGPASSWORD|PGPASSFILE|PGSERVICE|PGSERVICEFILE|PGUSER)=/.test(value)),
+    'Only the runtime database connection may enter the app container.');
+  assert.ok(![password,migratorPassword].some(secret=>appContainer.Config.Env.some(value=>value.includes(secret))),
+    'Bootstrap and migrator passwords must stay outside the app container.');
   const appSocket = appContainer.Mounts.find(mount => mount.Name === socketVolume);
   assert.ok(appSocket && appSocket.Destination === socketDirectory && !appSocket.RW, 'The app must mount the socket volume read-only.');
   assert.ok([smtpCanary, sessionCanary].every(secret => appContainer.Config.Env.some(value => value.includes(secret))),
@@ -160,10 +192,31 @@ try {
     import {lstatSync,readdirSync} from 'node:fs';
     import {writeFile} from 'node:fs/promises';
     import {sampleProject} from '/app/dist/server/src/project/sample.js';
+    import pg from '/app/node_modules/pg/lib/index.js';
+    import {assertRuntimeDatabaseRole} from '/app/dist/server/src/server/database-access.js';
     assert.equal(process.getuid(),1000);assert.equal(process.versions.node,${JSON.stringify(expectedNode)});
     ${packageManagerChecks}
+    const runtimePool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+    try{
+      await assertRuntimeDatabaseRole(runtimePool);
+      assert.equal((await runtimePool.query('SELECT current_user AS name')).rows[0].name,'openscroll_app');
+      const wrongUrl=new URL(process.env.DATABASE_URL);wrongUrl.password='wrong-synthetic-password-for-scram';
+      const wrongPool=new pg.Pool({connectionString:wrongUrl.href,connectionTimeoutMillis:3000});
+      try{await assert.rejects(wrongPool.query('SELECT 1'),{code:'28P01'});}finally{await wrongPool.end();}
+      for(const database of ['postgres','template1']){
+        const url=new URL(process.env.DATABASE_URL);url.pathname='/'+database;
+        const deniedPool=new pg.Pool({connectionString:url.href,connectionTimeoutMillis:3000});
+        try{await assert.rejects(deniedPool.query('SELECT 1'),{code:'28000'});}finally{await deniedPool.end();}
+      }
+      for(const sql of ['CREATE TABLE public.container_denied(id int)','CREATE TEMP TABLE container_denied(id int)',
+        "UPDATE admin_events SET operation='changed' WHERE false",'DELETE FROM schema_migrations WHERE false',
+        "SELECT pg_read_file('/dev/null',0,0)"])
+        await assert.rejects(runtimePool.query(sql),{code:'42501'});
+    }finally{await runtimePool.end();}
     for(const path of ['/usr/bin/chromium','/usr/lib/chromium','/usr/bin/fc-match'])
       assert.throws(()=>lstatSync(path),{code:'ENOENT'},'The app must not contain native browser/font tooling.');
+    for(const path of ['/var/run/postgresql/.s.PGSQL.5432','/tmp/.s.PGSQL.5432'])
+      assert.throws(()=>lstatSync(path),{code:'ENOENT'},'The protected database Unix socket must not be shared with the app.');
     for(const path of ['/usr/share/fonts','/usr/local/share/fonts']){
       let files=[];try{files=readdirSync(path,{recursive:true});}catch(error){if(error.code!=='ENOENT')throw error;}
       assert.ok(!files.some(file=>/\\.(?:ttf|otf|ttc)$/i.test(file)),'Native rendering fonts must not exist in the app.');
@@ -211,8 +264,9 @@ try {
     'The final PDF must embed all fonts.');
   const workerLogs = await docker(['logs', renderer], { mergeOutput: true });
   assert.ok(!secrets.some(secret => workerLogs.includes(secret)), 'Renderer logs must not contain app configuration canaries.');
+  console.log(JSON.stringify({postgres:databasePolicy.version,hbaErrors:databasePolicy.hbaErrors,runtimeAndMigratorMaintenanceDatabaseAccess:'rejected with SQLSTATE 28000',runtimePasswordAuthentication:'wrong password rejected with SQLSTATE 28P01'}));
   console.log(rendererEvidence.trim());console.log(evidence.trim());
-  console.log('PASS: app/renderer separation, restricted socket, isolated database, approval gate, actual API PDF, embedded Latin/CJK fonts.');
+  console.log('PASS: app/renderer separation, restricted socket, isolated database roles and host authentication, approval gate, actual API PDF, embedded Latin/CJK fonts.');
   verified = true;
 } catch (error) {
   const logs = await docker(['logs', '--tail', '40', renderer], { mergeOutput: true }).catch(() => '');

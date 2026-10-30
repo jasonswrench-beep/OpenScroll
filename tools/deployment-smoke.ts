@@ -15,40 +15,93 @@ async function port(){const server=createServer();await new Promise<void>(r=>ser
 const sourcePort=await port(),targetPort=await port(),tlsPort=await port();
 const common:NodeJS.ProcessEnv={...process.env};
 // Shell deployment settings must never override these unique disposable fixtures.
-for(const key of Object.keys(common))if(/^(APP_|SMTP_|MAIL_|OPENSCROLL_|COMPOSE_)/.test(key)||['DATABASE_URL','POSTGRES_PASSWORD','ACME_EMAIL','REGISTRATION_ENABLED','AUTHOR_ASSET_LIMIT_MIB','REQUIRE_EMAIL_VERIFICATION','ACCESS_REQUEST_NOTIFY_EMAIL','DOCKER_CONTEXT','DOCKER_TLS','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH','PDF_RENDERER_SOCKET'].includes(key))delete common[key];
+for(const key of Object.keys(common))if(/^(APP_|SMTP_|MAIL_|OPENSCROLL_|COMPOSE_)/.test(key)||['DATABASE_URL','ADMIN_DATABASE_URL','PROVISION_DATABASE_URL','MIGRATOR_DB_PASSWORD','RUNTIME_DB_PASSWORD','POSTGRES_PASSWORD','ACME_EMAIL','REGISTRATION_ENABLED','AUTHOR_ASSET_LIMIT_MIB','REQUIRE_EMAIL_VERIFICATION','ACCESS_REQUEST_NOTIFY_EMAIL','DOCKER_CONTEXT','DOCKER_TLS','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH','PDF_RENDERER_SOCKET'].includes(key))delete common[key];
 common.DOCKER_HOST='unix:///var/run/docker.sock';
 common.OPENSCROLL_BACKUP_DIR=join(dir,'backups');
-const configs=await Promise.all([['source',sourcePort],['restore',targetPort]].map(async([kind,appPort])=>{const file=join(dir,`${kind}.env`);await writeFile(file,`POSTGRES_PASSWORD=${randomBytes(32).toString('hex')}\nOPENSCROLL_IMAGE=${process.env.OPENSCROLL_TEST_IMAGE??'openscroll:production'}\nOPENSCROLL_RENDERER_IMAGE=${process.env.OPENSCROLL_TEST_RENDERER_IMAGE??'openscroll:renderer'}\nOPENSCROLL_HOST=openscroll-test.invalid\nAPP_ORIGIN=${origin}\nAPP_PORT=${appPort}\nACME_EMAIL=test@example.invalid\nMAIL_FROM=OpenScroll <no-reply@example.invalid>\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=465\nREGISTRATION_ENABLED=false\n`,{mode:0o600});return {env:{...common,OPENSCROLL_ENV_FILE:file,COMPOSE_PROJECT_NAME:`openscroll-smoke-${suffix}-${kind}`},port:Number(appPort)};}));
+const configs=await Promise.all([['source',sourcePort],['restore',targetPort]].map(async([kind,appPort])=>{const file=join(dir,`${kind}.env`);await writeFile(file,`POSTGRES_PASSWORD=${randomBytes(32).toString('hex')}\nMIGRATOR_DB_PASSWORD=${randomBytes(32).toString('hex')}\nRUNTIME_DB_PASSWORD=${randomBytes(32).toString('hex')}\nOPENSCROLL_IMAGE=${process.env.OPENSCROLL_TEST_IMAGE??'openscroll:production'}\nOPENSCROLL_RENDERER_IMAGE=${process.env.OPENSCROLL_TEST_RENDERER_IMAGE??'openscroll:renderer'}\nOPENSCROLL_HOST=openscroll-test.invalid\nAPP_ORIGIN=${origin}\nAPP_PORT=${appPort}\nACME_EMAIL=test@example.invalid\nMAIL_FROM=OpenScroll <no-reply@example.invalid>\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=465\nREGISTRATION_ENABLED=false\n`,{mode:0o600});return {env:{...common,OPENSCROLL_ENV_FILE:file,COMPOSE_PROJECT_NAME:`openscroll-smoke-${suffix}-${kind}`},port:Number(appPort)};}));
 function run(index:number,args:string[],input?:string){return new Promise<string>((accept,reject)=>{const child=execFile(resolve('deploy/ops.sh'),args,{cwd:root,env:configs[index]!.env,maxBuffer:2*1024*1024},(error,out,err)=>{if(error)reject(new Error(`ops ${args[0]} failed: ${err.slice(-1200)}`));else accept(out);});child.stdin!.end(input);});}
 async function compose(index:number,args:string[]){return exec('docker',['compose','--env-file',configs[index]!.env.OPENSCROLL_ENV_FILE,'-f',resolve('deploy/compose.yaml'),...args],{env:configs[index]!.env});}
+async function removeOwnRuntime(index:number){
+ const project=configs[index]!.env.COMPOSE_PROJECT_NAME!;
+ assert.match(project,/^openscroll-smoke-[a-f0-9]{8}-(source|restore)$/);
+ const ids=(await compose(index,['ps','--all','--quiet','app','renderer'])).stdout.trim().split(/\s+/).filter(Boolean);
+ for(const id of ids){
+  const metadata=JSON.parse((await exec('docker',['inspect','--format','{{json .Config.Labels}}',id],{env:configs[index]!.env})).stdout) as Record<string,string>;
+  assert.equal(metadata['com.docker.compose.project'],project,'Refusing to remove an unrelated test container.');
+  assert.ok(['app','renderer'].includes(metadata['com.docker.compose.service']!));
+ }
+ await compose(index,['stop','app','renderer']);
+ await compose(index,['rm','--force','app','renderer']);
+}
 async function api(index:number,path:string,method='GET',payload?:unknown,auth?:{cookie:string;csrf:string}){return fetch(`http://127.0.0.1:${configs[index]!.port}${path}`,{method,headers:{'Content-Type':'application/json','x-openscroll-request':'1',origin,...(auth?{cookie:auth.cookie,'x-csrf-token':auth.csrf}:{})},...(payload===undefined?{}:{body:JSON.stringify(payload)})});}
 async function login(index:number){const response=await api(index,'/api/account/login','POST',{email:'smoke@example.invalid',password});assert.equal(response.status,200);assert.match(response.headers.get('set-cookie')!,/Secure/);assert.match(response.headers.get('set-cookie')!,/__Host-openscroll_session/);const data=await response.json();return {cookie:response.headers.get('set-cookie')!.split(';')[0]!,csrf:data.csrf};}
+async function restrictedRuntime(index:number){
+ const id=(await compose(index,['ps','-q','app'])).stdout.trim();
+ const environment=JSON.parse((await exec('docker',['inspect','--format','{{json .Config.Env}}',id],{env:configs[index]!.env})).stdout) as string[];
+ assert.ok(!environment.some(value=>/^(?:ADMIN_DATABASE_URL|PROVISION_DATABASE_URL|POSTGRES_PASSWORD|MIGRATOR_DB_PASSWORD|RUNTIME_DB_PASSWORD|PGPASSWORD|PGPASSFILE|PGSERVICE|PGSERVICEFILE|PGUSER)=/.test(value)),'Elevated database configuration must not enter the app service.');
+ const result=await compose(index,['exec','-T','app','node','--input-type=module','-e',`
+  import assert from 'node:assert/strict';import pg from 'pg';
+  import {assertRuntimeDatabaseRole} from './dist/server/src/server/database-access.js';
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+  try{await assertRuntimeDatabaseRole(pool);assert.equal((await pool.query('SELECT current_user AS name')).rows[0].name,'openscroll_app');
+   for(const database of ['postgres','template1']){
+    const url=new URL(process.env.DATABASE_URL);url.pathname='/'+database;
+    const denied=new pg.Pool({connectionString:url.href,connectionTimeoutMillis:3000});
+    try{await assert.rejects(denied.query('SELECT 1'),{code:'28000'});}finally{await denied.end();}
+   }
+   for(const sql of ['CREATE TEMP TABLE deployment_denied(id int)','DELETE FROM schema_migrations WHERE false','DELETE FROM admin_events WHERE false',"SELECT pg_read_file('/dev/null',0,0)"])
+    await assert.rejects(pool.query(sql),{code:'42501'});
+   console.log('Restricted application database identity and denied administration verified.');
+  }finally{await pool.end();}
+ `]);
+ assert.match(result.stdout,/Restricted application database identity/);
+ const hba=JSON.parse((await compose(index,['exec','-T','db','psql','-X','-U','openscroll','-d','openscroll','-At','-c',
+  "SELECT json_build_object('versionNum',current_setting('server_version_num')::int,'errors',(SELECT count(*) FROM pg_hba_file_rules WHERE error IS NOT NULL))"])).stdout);
+ assert.equal(hba.versionNum,170011);assert.equal(hba.errors,0,'Production host-authentication rules must parse without errors.');
+ const maintenance=await compose(index,['run','--rm','--no-deps','-T','maintenance','node','--input-type=module','-e',`
+  import assert from 'node:assert/strict';import pg from 'pg';
+  const current=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});
+  try{assert.equal((await current.query('SELECT current_user AS name')).rows[0].name,'openscroll_migrator');}finally{await current.end();}
+  for(const database of ['postgres','template1']){
+   const url=new URL(process.env.ADMIN_DATABASE_URL);url.pathname='/'+database;
+   const denied=new pg.Pool({connectionString:url.href,connectionTimeoutMillis:3000});
+   try{await assert.rejects(denied.query('SELECT 1'),{code:'28000'});}finally{await denied.end();}
+  }
+  console.log('Restricted migrator database connection boundary verified.');
+ `]);
+ assert.match(maintenance.stdout,/Restricted migrator database connection boundary/);
+}
 try{
  for(const index of [0,1])await run(index,['config']);
- console.log('Starting independent fresh installation.');await run(0,['start']);
+ console.log('Starting independent fresh installation.');await run(0,['start']);await restrictedRuntime(0);
  const owner=JSON.parse(await run(0,['admin','create-author','smoke@example.invalid','Recovery fixture'],password+'\n'));
  await run(0,['admin','bootstrap-owner',owner.author,'smoke@example.invalid']);const auth=await login(0),project=sampleProject();
  const created=await api(0,'/api/library/courses/import','POST',project,auth);assert.equal(created.status,200);const {id}=await created.json();
  const current=await (await api(0,`/api/library/courses/${id}/edit`,'GET',undefined,auth)).json();
  assert.equal((await api(0,`/api/library/courses/${id}/snapshots`,'POST',{id:crypto.randomUUID(),title:'Recovery fixture',revision:current.revision},auth)).status,200);
  assert.equal((await api(0,'/api/library/reusable','POST',{id:crypto.randomUUID(),kind:'group',title:'Recovery group',project:groupPacket(project,[project.document.course.sections[0]!.lessons[0]!.blocks[0]!.id])},auth)).status,200);
- await run(0,['upgrade']);console.log('Backup-first upgrade and migration rerun succeeded.');const file=join(dir,'backups',(await readdir(join(dir,'backups'))).find(f=>f.endsWith('.dump'))!);assert.equal((await stat(file)).mode&0o777,0o600);
+ await run(0,['upgrade']);await restrictedRuntime(0);console.log('Backup-first upgrade and migration rerun succeeded.');const file=join(dir,'backups',(await readdir(join(dir,'backups'))).find(f=>f.endsWith('.dump'))!);assert.equal((await stat(file)).mode&0o777,0o600);
  await compose(0,['restart','app']);for(let i=0;i<60;i++){try{if((await api(0,'/api/health')).ok)break;}catch{}await new Promise(r=>setTimeout(r,250));}assert.equal((await api(0,'/api/health')).status,200);assert.deepEqual(await (await api(0,`/api/library/courses/${id}/edit`,'GET',undefined,auth)).json(),current);
  await assert.rejects(run(0,['restore',file]));
- console.log('Restart preserved data; restoring backup into a separate empty database.');const sidecar=await readFile(file+'.sha256','utf8');await writeFile(file+'.sha256','0'.repeat(64)+'  fixture.dump\n');await assert.rejects(run(1,['restore',file]),/checksum mismatch/);await writeFile(file+'.sha256',sidecar);await run(1,['restore',file]);await run(1,['start']);
+ // Retain both independent databases/volumes while keeping only one browser root filesystem active.
+ await removeOwnRuntime(0);
+ console.log('Restart preserved data; restoring backup into a separate empty database.');const sidecar=await readFile(file+'.sha256','utf8');await writeFile(file+'.sha256','0'.repeat(64)+'  fixture.dump\n');await assert.rejects(run(1,['restore',file]),/checksum mismatch/);await writeFile(file+'.sha256',sidecar);await run(1,['restore',file]);await run(1,['start']);await restrictedRuntime(1);
  assert.equal((await api(1,'/api/library/courses','GET',undefined,auth)).status,401);const restoredAuth=await login(1);
  assert.deepEqual(await (await api(1,`/api/library/courses/${id}/edit`,'GET',undefined,restoredAuth)).json(),current);
  assert.equal((await (await api(1,`/api/library/courses/${id}/snapshots`,'GET',undefined,restoredAuth)).json()).snapshots.length,1);
  assert.equal((await (await api(1,'/api/library/reusable','GET',undefined,restoredAuth)).json()).items.length,1);
  const pdf=await api(1,'/api/projects/pdf','POST',{project,options:{paper:'A4',includeAnswers:false}},restoredAuth);assert.equal(pdf.status,200);assert.equal(Buffer.from(await pdf.arrayBuffer()).subarray(0,4).toString(),'%PDF');
  await run(1,['stop']);await assert.rejects(run(1,['restore',file]),/not empty/);
+ await removeOwnRuntime(1);
+ await run(0,['start']);await restrictedRuntime(0);
+ assert.deepEqual(await (await api(0,`/api/library/courses/${id}/edit`,'GET',undefined,auth)).json(),current,'Cold source recreation must preserve its independent database and sessions.');
  const tlsConfig=join(dir,'Caddyfile'),overlay=join(dir,'tls.yaml'),caFile=join(dir,'root.crt');
  await writeFile(tlsConfig,'{\n admin off\n}\nlocalhost {\n tls internal\n reverse_proxy app:3000\n}\n');
  await writeFile(overlay,`services:\n  edge:\n    ports: !override ["127.0.0.1:${tlsPort}:443"]\n    volumes: !override\n      - "${tlsConfig}:/etc/caddy/Caddyfile:ro"\n      - certificates:/data\n      - caddy_config:/config\n`);
  const tlsCompose=async(args:string[])=>exec('docker',['compose','--env-file',configs[0]!.env.OPENSCROLL_ENV_FILE,'-f',resolve('deploy/compose.yaml'),'-f',overlay,'--profile','edge',...args],{env:configs[0]!.env});
- await tlsCompose(['up','-d','--no-build','--wait','edge']);
+ await tlsCompose(['up','-d','--no-build','--no-deps','--wait','edge']);
  for(let i=0;i<30;i++){try{await tlsCompose(['cp','edge:/data/caddy/pki/authorities/local/root.crt',caFile]);break;}catch{await new Promise(r=>setTimeout(r,250));}}
  const ca=await readFile(caFile);const tlsHealth=await new Promise<string>((accept,reject)=>{const request=httpsGet({hostname:'localhost',family:4,port:tlsPort,path:'/api/health',ca,rejectUnauthorized:true},response=>{let data='';response.on('data',chunk=>data+=chunk);response.on('end',()=>{if(response.statusCode===200)accept(data);else reject(new Error('TLS health check failed: '+response.statusCode+' '+data.slice(0,200)));});});request.setTimeout(10000,()=>request.destroy(new Error('TLS health timeout')));request.on('error',reject);});assert.equal(JSON.parse(tlsHealth).status,'ready');
  const logs=(await compose(0,['logs','--no-color','app'])).stdout;assert.equal(logs.includes(password),false);assert.equal(logs.includes(auth.csrf),false);assert.equal(logs.includes('smoke@example.invalid'),false);
- console.log(JSON.stringify({trustedLocalHttpsProxy:'pass',freshInstall:'pass',backupFirstUpgrade:'pass',restartPersistence:'pass',backupRestore:'pass',assetsAndRevisions:'pass',snapshotsAndReusableItems:'pass',oldSessionsRevoked:'pass',checksumMismatchRefused:'pass',nonemptyRestoreRefused:'pass',containerPdf:'pass',privateLogs:'pass',evidenceDirectory:dir}));
+ console.log(JSON.stringify({trustedLocalHttpsProxy:'pass',freshInstall:'pass',restrictedDatabaseRole:'pass',runtimeAndMigratorMaintenanceDatabaseAccess:'denied',postgresVersion:'17.11',hostAuthenticationRules:'valid',elevatedDatabaseCredentialsAbsentFromApp:'pass',backupFirstUpgrade:'pass',restartPersistence:'pass',backupRestore:'pass',assetsAndRevisions:'pass',snapshotsAndReusableItems:'pass',oldSessionsRevoked:'pass',checksumMismatchRefused:'pass',nonemptyRestoreRefused:'pass',containerPdf:'pass',privateLogs:'pass',evidenceDirectory:dir}));
 }finally{for(const index of [1,0])await compose(index,['--profile','edge','down','--volumes','--remove-orphans']).catch(()=>{});}

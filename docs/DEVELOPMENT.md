@@ -14,6 +14,7 @@ Run from the repository root:
 npm ci
 cp .env.example .env # only if .env does not already exist
 npm run db:up
+npm run db:provision
 npm run db:migrate
 docker build --target renderer --tag openscroll:renderer .
 node tools/renderer-test-service.mjs start openscroll:renderer
@@ -21,9 +22,9 @@ node tools/renderer-test-service.mjs start openscroll:renderer
 npm run dev
 ```
 
-The development browser server listens on port 5173 and proxies `/api` to the API on port 3000. Both bind to loopback. The API verifies its database connection and migration version before accepting requests. Vite reloads browser edits; restart `npm run dev` after server edits. Ctrl+C stops both application processes. The isolated PDF renderer is a separate disposable service: stop it with `node tools/renderer-test-service.mjs stop` after use. `npm run db:down` stops PostgreSQL without deleting its data volume.
+The development browser server listens on port 5173 and proxies `/api` to the API on port 3000. Both bind to loopback. The API verifies its runtime-only environment, restricted database role/privileges, connection and migration version before accepting requests. Vite reloads browser edits; restart `npm run dev` after server edits. Ctrl+C stops both application processes. The isolated PDF renderer is a separate disposable service: stop it with `node tools/renderer-test-service.mjs stop` after use. `npm run db:down` stops PostgreSQL without deleting its data volume.
 
-The example password is exclusively for the local database. Do not use this Compose configuration as an Internet-facing deployment. Preserve existing `.env` files and do not commit credentials.
+The local example contains separate bootstrap/provision, migrator/admin and restricted runtime connections. `db:provision` explicitly reads the disposable bootstrap URL and runtime/migrator password inputs; `db:migrate` uses only `ADMIN_DATABASE_URL`; the app uses only restricted `DATABASE_URL`. Existing development `.env` files need the new separate settings reviewed/copied without overwriting their existing values. There is no fallback to a shared superuser app login. The example passwords are exclusively for this local database. Do not use this Compose configuration as an Internet-facing deployment. Preserve existing `.env` files and do not commit credentials.
 
 ## Checks
 
@@ -42,7 +43,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Browser tests launch the built application themselves, so build first and stop any service using port 3000. Integration tests require PostgreSQL and DATABASE_URL. They use a temporary table inside a rolled-back transaction and do not create an application schema prematurely.
+Browser tests launch the built application themselves, so build first and stop any service using port 3000. Integration/browser fixtures require explicitly supplied `DATABASE_URL`, `ADMIN_DATABASE_URL` and `PROVISION_DATABASE_URL` for the same disposable PostgreSQL cluster. Integration fixtures create uniquely named temporary databases, provision/migrate with their separate privileged connections, exercise runtime operations through the restricted connection and remove only their generated databases afterward. Browser setup seeds only its synthetic account/course data through the admin connection; the tested app still uses the runtime login. Never run these commands against a production or shared database cluster.
 
 If a compatible Chromium is already installed, select it for browser checks:
 
@@ -56,10 +57,14 @@ This cloud environment blocks the Playwright download domain; its installed Chro
 
 ```sh
 npm run build
+npm run db:up
+npm run db:provision
 npm run db:migrate
 . .local/renderer-test.env # renderer helper must already be running
 npm start
 ```
+
+Use `npm start` or `npm run dev`: the trusted launchers load local configuration and filter maintenance database URL/password and `PG*` settings from the app child (and Vite child for development). They do not remove credentials from the trusted operator/launcher on the host. A raw `node dist/server/src/server/index.js` requires an explicitly runtime-only environment; passing a shared `.env` directly into that process is rejected. See [database privileges and direct CLI](DATABASE-PRIVILEGES.md#direct-cli-and-development).
 
 The API serves the built browser assets on port 3000. `/api/health` returns HTTP 200 only after a PostgreSQL query succeeds, otherwise 503 without internal connection details. It is a readiness check, not an authentication or security audit.
 
@@ -69,7 +74,7 @@ The API serves the built browser assets on port 3000. `/api/health` returns HTTP
 docker compose -f compose.yaml -f compose.app.yaml up -d --build --wait
 ```
 
-This optional override runs the app, database and isolated PDF renderer in containers, with the renderer socket wired through its private volume. Stop the host application first to avoid port conflicts. Containers use the Compose database hostname rather than localhost. The app runs as a non-root user; the renderer uses the separate supervisor/browser UIDs described in [renderer isolation](RENDERER-ISOLATION.md). Database data stays in the named volume. The app never starts an in-process browser if the renderer is unavailable. Do not use `down -v` unless intentionally deleting local data.
+This optional override runs the app, database and isolated PDF renderer in containers, with the renderer socket wired through its private volume. Stop the host application first to avoid port conflicts. Containers use the Compose database hostname rather than localhost. The app uses the restricted runtime database login. Separate provisioning and migration/admin services use their dedicated connections; this is a dedicated local cluster, not an external shared database. The app runs as a non-root user; the renderer uses the separate supervisor/browser UIDs described in [renderer isolation](RENDERER-ISOLATION.md). Database data stays in the named volume. The app never starts an in-process browser if the renderer is unavailable. Do not use `down -v` unless intentionally deleting local data.
 
 Managed cloud builds need the session CA for npm while keeping verification enabled:
 
@@ -142,7 +147,7 @@ Step 12 adds [themes, templates, reusable assets and snapshots](THEMES-AND-REUSE
 
 ## Production preparation
 
-Step 13 adds the independent `deploy/compose.yaml` stack and [self-hosting guide](SELF-HOSTING.md). Apply migrations through **5** to the development database before restarting the current server. Migration 5 requires explicit owner bootstrap and preserves other accounts as pending; see [instance access](INSTANCE-ACCESS.md). No new npm package or cloud configuration review is required. `AUTHOR_ASSET_LIMIT_MIB` defaults to 1024; local development keeps proxy trust disabled. Production deliberately trusts one private reverse-proxy hop. Operator commands compile into the runtime image; deployment smoke tests create only isolated disposable projects. See [validation evidence](STEP-13-VALIDATION.md).
+Step 13 adds the independent `deploy/compose.yaml` stack and [self-hosting guide](SELF-HOSTING.md). Apply migrations through **5** to the development database before restarting the current server. Migration 5 requires explicit owner bootstrap and preserves other accounts as pending; see [instance access](INSTANCE-ACCESS.md). No new npm package or cloud configuration review is required. `AUTHOR_ASSET_LIMIT_MIB` defaults to 1024; local development keeps proxy trust disabled. Production deliberately trusts one private reverse-proxy hop. Database privilege separation adds a bootstrap-only provisioning service, a non-superuser schema-owner/migrator and a restricted runtime login, without changing schema 5 account/course rows. Run `db:provision` before `db:migrate` on the disposable development cluster; use the separate maintenance connection for explicit owner bootstrap. See [database privileges](DATABASE-PRIVILEGES.md). Operator commands compile into the runtime image; deployment smoke tests create only isolated disposable projects. See [validation evidence](STEP-13-VALIDATION.md).
 
 ## Question spreadsheet import
 

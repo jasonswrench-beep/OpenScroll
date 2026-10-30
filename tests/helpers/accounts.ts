@@ -18,7 +18,7 @@ function syntheticEmail(value:string) {
   return value.toLowerCase();
 }
 
-/** Trusted fixture setup only: callers supply their disposable test database/schema. */
+/** Trusted fixture setup only: callers supply their disposable migrator connection, never the application pool. */
 export async function seedTestAuthor(pool:pg.Pool,options:FixtureOptions={}):Promise<TestAuthor> {
   const id=randomUUID(),email=syntheticEmail(options.email??`fixture-${id}@example.invalid`);
   const password=`Synthetic account fixture ${randomUUID()}`,token=randomToken(),csrf=randomToken();

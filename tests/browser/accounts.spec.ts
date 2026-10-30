@@ -7,7 +7,7 @@ import { readdir,readFile,unlink } from 'node:fs/promises';
 const createdEmails:string[]=[];
 test.afterEach(async () => {
   const emails=createdEmails.splice(0);
-  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});
+  const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});
   try {await pool.query('DELETE FROM authors WHERE email=ANY($1::text[])',[emails]);}finally{await pool.end();}
   for(const file of await readdir('.local/test-mail').catch(() => [])) {
     const path=`.local/test-mail/${file}`;
@@ -22,7 +22,7 @@ async function signup(page:Page,email:string,name:string) {
   await page.getByRole('button',{name:'Request account',exact:true}).click();
   await expect(page.locator('#account-status')).toContainText(/verification|verify|email/i);
   createdEmails.push(email);
-  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await approveFixtureAuthor(pool,email);}finally{await pool.end();}
+  const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});try{await approveFixtureAuthor(pool,email);}finally{await pool.end();}
 }
 async function login(page:Page,email:string,pass=password) {
   await page.locator('#login-email').fill(email);await page.locator('#login-password').fill(pass);

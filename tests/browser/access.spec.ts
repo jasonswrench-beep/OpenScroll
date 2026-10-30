@@ -11,7 +11,7 @@ const createdEmails: string[] = [];
 const createdFixtures: TestAuthor[] = [];
 
 test.afterEach(async () => {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new pg.Pool({ connectionString: process.env.ADMIN_DATABASE_URL });
   try {
     for (const fixture of createdFixtures.splice(0)) await cleanupTestAuthor(pool, fixture);
     const emails = createdEmails.splice(0);
@@ -25,7 +25,7 @@ test.afterEach(async () => {
 });
 
 async function fixture(options: Parameters<typeof seedTestAuthor>[1] = {}) {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new pg.Pool({ connectionString: process.env.ADMIN_DATABASE_URL });
   try { const author = await seedTestAuthor(pool, options); createdFixtures.push(author); return author; }
   finally { await pool.end(); }
 }

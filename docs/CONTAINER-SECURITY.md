@@ -63,6 +63,38 @@ resource limits or weaken the host security profile to make a test pass. Browser
 and Fontconfig caches use writable temporary storage in the renderer, without
 making its root filesystem writable.
 
+## Runtime database role checks
+
+The production app receives only the restricted `DATABASE_URL`/`openscroll_app`
+connection. Bootstrap provisioning and backup/restore use the existing
+administrator separately; migrations and the maintenance admin CLI use
+`ADMIN_DATABASE_URL`/`openscroll_migrator`. Neither privileged connection or its
+password is passed to the running app, and the renderer receives no database
+configuration. Direct host startup uses the filtering `npm start`/`npm run dev`
+launchers; raw app startup requires an explicitly runtime-only environment.
+
+Validation must demonstrate real denial through the restricted login, rather
+than merely checking its configured role name: no privileged attributes or
+memberships, object ownership, DDL, schema/temporary/large-object creation,
+migration-history changes, audit update/delete or account owner-role writes.
+Normal account/session/course operations and audit insertion must still work.
+Migrations/admin commands must use the separate schema-owner connection. Also
+verify the app rejects an administrative login or privileged database variables
+before opening its HTTP listener.
+
+The provisioning/upgrade/restore checks use unique disposable databases and
+synthetic data, including preserved account/course identities and an isolated
+restore without old owners/ACLs followed by role/grant reapplication. A source
+unit assertion or a successful app query alone does not prove the database
+privilege boundary. Test helpers with bootstrap/admin credentials are trusted
+fixtures; their connections must not be reused by the app under test. See
+[database privileges, credential input and recovery](DATABASE-PRIVILEGES.md).
+
+This role change adds no browser patch or application data migration beyond the
+existing schema 5. Unknown objects or unsafe designated roles must fail closed
+and remain available for investigation; tests must not delete them or grant
+superuser privileges to make setup succeed.
+
 ## CI scans and interpretation
 
 The `container` job builds and tests both final images, then uses pinned Trivy

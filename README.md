@@ -12,6 +12,8 @@ Steps 1–12 are implemented; Step 13 production preparation is available, with 
 
 - [Spreadsheet assessment import: Excel and CSV templates](docs/QUESTION-IMPORT.md)
 - [Production installation, backups and operator guide](docs/SELF-HOSTING.md)
+- [Database runtime/migration privileges and credential separation](docs/DATABASE-PRIVILEGES.md)
+- [Current security draft deployment handoff](DEPLOYMENT-HANDOFF.md)
 - [Step 13 preparation and validation](docs/STEP-13-VALIDATION.md)
 - [Themes, templates, reusable assets and snapshots](docs/THEMES-AND-REUSE.md)
 - [Block compatibility matrix](docs/BLOCK-COMPATIBILITY.md)
@@ -51,3 +53,5 @@ Apache License 2.0. See [LICENSE](LICENSE).
 Hosted authoring requires verified email and approval from that installation’s owner. The public homepage links to independent self-hosting; see [instance access and owner activation](docs/INSTANCE-ACCESS.md). No central approval service is required.
 
 PDF generation runs in a separate credential-free container with no network access, bounded resources and a supervisor deadline. The app has no in-process browser fallback. Review [renderer isolation and its limits](docs/RENDERER-ISOLATION.md) before enabling PDF publishing.
+
+The running app uses a restricted PostgreSQL role; schema migration and host account maintenance use a separate non-superuser role, while bootstrap credentials are reserved for provisioning and backup/restore. See [database privilege boundaries and cutover requirements](docs/DATABASE-PRIVILEGES.md). This engineering draft is not a deployment approval.
