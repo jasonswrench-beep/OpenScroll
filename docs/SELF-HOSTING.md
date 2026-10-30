@@ -8,7 +8,7 @@ Jason confirmed that OpenScroll will share the existing VPS with Pressbooks and 
 
 ## Requirements and boundaries
 
-Use a Linux host with Docker Engine and Compose **2.24.4 or newer**, Python 3, a shell and `sha256sum`. The development source needs Node 24.19.0 and npm only when building outside Docker or running development checks. Runtime containers include the server, built player, official icon, runtime dependencies, Chromium and fonts. No Vite/development server is needed.
+Use a Linux host with Docker Engine and Compose **2.24.4 or newer**, Python 3, a shell and `sha256sum`. The development source needs Node 24.22.2 and npm only when building outside Docker or running development checks. Runtime containers include the server, built player, official icon, runtime dependencies, Chromium and fonts. No Vite/development server is needed.
 
 Plan for at least 2 CPU cores, 4 GiB RAM (8 GiB recommended for shared hosting/PDF workloads), and sufficient free disk for PostgreSQL, application images, builds and backups. The app has a 2 GiB container limit and a single file-processing slot. These are starting settings, not a VPS sizing certification; inspect existing services and measure representative courses before accepting users. Allow several extra GiB during image builds. Do not prune someone else's containers, images or volumes to make room.
 
