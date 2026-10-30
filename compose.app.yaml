@@ -1,14 +1,33 @@
 # Local container workflow. Replace local credentials/settings before deployment.
 services:
+  provision:
+    image: openscroll:foundation
+    build: .
+    command: [node, dist/server/src/server/provision.js, --from-env]
+    environment:
+      PROVISION_DATABASE_URL: postgresql://openscroll:openscroll_dev@db:5432/openscroll
+      MIGRATOR_DB_PASSWORD: openscroll_migrator_local_dev_password_0123456789
+      RUNTIME_DB_PASSWORD: openscroll_runtime_local_dev_password_9876543210
+    depends_on:
+      db:
+        condition: service_healthy
   migrate:
     image: openscroll:foundation
     build: .
     command: ["node", "dist/server/src/server/migrate.js"]
     environment:
-      DATABASE_URL: postgresql://openscroll:openscroll_dev@db:5432/openscroll
+      ADMIN_DATABASE_URL: postgresql://openscroll_migrator:openscroll_migrator_local_dev_password_0123456789@db:5432/openscroll
     depends_on:
       db:
         condition: service_healthy
+      provision:
+        condition: service_completed_successfully
+  maintenance:
+    image: openscroll:foundation
+    profiles: [operations]
+    command: [node, dist/server/src/server/admin.js]
+    environment:
+      ADMIN_DATABASE_URL: postgresql://openscroll_migrator:openscroll_migrator_local_dev_password_0123456789@db:5432/openscroll
   renderer:
     image: openscroll:renderer
     build:
@@ -53,7 +72,7 @@ services:
     image: openscroll:foundation
     build: .
     environment:
-      DATABASE_URL: postgresql://openscroll:openscroll_dev@db:5432/openscroll
+      DATABASE_URL: postgresql://openscroll_app:openscroll_runtime_local_dev_password_9876543210@db:5432/openscroll
       APP_ORIGIN: http://127.0.0.1:3000
       ALLOW_INSECURE_LOCAL_HTTP: "true"
       MAIL_MODE: outbox

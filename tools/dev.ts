@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
+import { runtimeEnvironment } from './runtime-environment.mjs';
 const children = [
-  spawn(process.execPath, ['--import', 'tsx', 'src/server/index.ts'], { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'development' } }),
-  spawn(process.execPath, ['node_modules/vite/bin/vite.js'], { stdio: 'inherit' }),
+  spawn(process.execPath, ['--import', 'tsx', 'src/server/index.ts'], { stdio: 'inherit', env: { ...runtimeEnvironment(), NODE_ENV: 'development' } }),
+  spawn(process.execPath, ['node_modules/vite/bin/vite.js'], { stdio: 'inherit', env: runtimeEnvironment() }),
 ];
 let stopping = false;
 function stop(code: number) {

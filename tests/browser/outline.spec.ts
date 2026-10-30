@@ -17,7 +17,7 @@ test.beforeAll(async({playwright})=>{
   client=await playwright.request.newContext({baseURL:'http://127.0.0.1:3000',extraHTTPHeaders:{'x-openscroll-request':'1',origin:'http://127.0.0.1:3000'}});
   const credentials={email,password:'An outline browser password 42'};
   expect((await client.post('/api/account/register',{data:{...credentials,name:'Outline browser author'}})).ok()).toBe(true);
-  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await approveFixtureAuthor(pool,email);}finally{await pool.end();}
+  const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});try{await approveFixtureAuthor(pool,email);}finally{await pool.end();}
   const login=await client.post('/api/account/login',{data:credentials});expect(login.ok()).toBe(true);const data=await login.json();csrf=data.csrf;owner=data.author.id;storage=await client.storageState();
 });
 test.beforeEach(async({context})=>{
@@ -25,10 +25,10 @@ test.beforeEach(async({context})=>{
   id=await seedSampleCourse(owner);
 });
 test.afterEach(async()=>{
-  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM courses WHERE owner_id=$1',[owner]);}finally{await pool.end();}
+  const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});try{await pool.query('DELETE FROM courses WHERE owner_id=$1',[owner]);}finally{await pool.end();}
 });
 test.afterAll(async()=>{
-  if(owner){const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM authors WHERE id=$1 AND email=$2',[owner,email]);}finally{await pool.end();}}
+  if(owner){const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});try{await pool.query('DELETE FROM authors WHERE id=$1 AND email=$2',[owner,email]);}finally{await pool.end();}}
   await client?.dispose();
 });
 async function open(page:Page,title='Welcome to OpenScroll') {

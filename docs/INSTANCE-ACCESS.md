@@ -25,6 +25,13 @@ never creates an owner, including the first public signup. The operator must
 verify the account identity and supply both its exact UUID and matching email.
 No owner email is hardcoded into OpenScroll.
 
+An account's owner/author label is separate from its PostgreSQL login: the
+running app uses `openscroll_app`, and trusted account commands run through the
+`maintenance` service (`operations` profile) with
+`ADMIN_DATABASE_URL`/`openscroll_migrator`. The web app never receives bootstrap
+or migrator credentials for owner provisioning. See
+[database privilege boundaries](DATABASE-PRIVILEGES.md).
+
 Migration 5 preserves all account, course, asset, reusable-item and snapshot data.
 It marks existing accounts pending and gives them the ordinary author role,
 without grandfathering any account. It invalidates existing sessions and account
@@ -32,13 +39,24 @@ recovery/verification tokens. No account or authored data is deleted. An existin
 intended owner's UUID, email, password hash and authored data remain intact; the
 trusted bootstrap step restores approved owner access explicitly.
 
+Migration 5 is applied once: a database already at version 5 is not demoted again
+by a database-role update. Privilege provisioning transfers only reviewed
+database-object ownership and changes grants; it does not change account roles,
+approvals or course rows.
+
 Plan the cutover before running the production migration:
 
-1. Take and verify a database backup. Use the existing operator account list to
-   identify the intended account by UUID and verified email. Do not select an
+1. Take a fresh database backup, verify its checksum and isolated restore, and
+   confirm its encrypted off-host copy before an approved production change.
+   Preserve the matched app/renderer image pair and protected configuration. Use
+   the existing operator account list to identify the intended account by UUID and verified email. Do not select an
    account only because it was created first.
-2. Keep authoring unavailable during the migration and owner bootstrap. Apply
-   migration 5 using the documented deployment procedure.
+2. Keep authoring unavailable during privilege setup, migration and owner
+   bootstrap. Use the documented backup-first procedure to provision dedicated
+   PostgreSQL roles, migrate as the migrator and reapply runtime grants. If the
+   prior schema predates migration 5, apply it once as part of that procedure.
+   A privilege-only upgrade of schema 5 must preserve the existing owner
+   approval/account state rather than resetting it.
 3. Run the private, read-only review report, then bootstrap the intended owner:
 
    ```sh
@@ -48,8 +66,9 @@ Plan the cutover before running the production migration:
    ```
 
    These variables are operator-supplied identity confirmations, not defaults.
-   The report lists unexpected accounts for review without deleting them. Keep
-   it private: it contains account identities. Bootstrap refuses a mismatched,
+   The separate maintenance service supplies the admin connection; do not replace
+   the app's runtime database URL to run these commands. The report lists
+   unexpected accounts for review without deleting them. Keep it private: it contains account identities. Bootstrap refuses a mismatched,
    unverified or suspended account. Investigate such a state before changing it.
 4. Sign in afresh and verify the owner's existing courses. Other accounts remain
    pending until explicitly approved, with their data preserved.
@@ -89,7 +108,10 @@ Existing root `/#verify=...` and `/#reset=...` links are forwarded to the accoun
 flow while keeping tokens in fragments, not query strings or server logs. Tokens
 invalidated during the security migration must be requested again.
 
-Owner approval reduces who can invoke native rendering. It does not fix browser
-or native-library vulnerabilities or provide a separate PDF worker boundary.
-Keep the renderer mitigation and deployment review requirements from
-`CONTAINER-SECURITY.md`; this feature does not authorize a deployment.
+Owner approval reduces who can invoke native rendering; it does not fix browser
+or native-library vulnerabilities. The [separate renderer](RENDERER-ISOLATION.md)
+and [database role boundary](DATABASE-PRIVILEGES.md) address different exposure
+paths and have their own limitations. Keep the remaining browser patch, full
+scan, backup/recovery and deployment review requirements from
+[container validation](CONTAINER-SECURITY.md). None of these engineering drafts
+authorizes a production deployment or live owner promotion.

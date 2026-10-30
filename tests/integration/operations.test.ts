@@ -3,7 +3,7 @@ import { approveFixtureAuthor } from '../helpers/accounts.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { migrate } from '../../src/server/migrations.js';
+import { isolatedDatabase, migrate } from '../helpers/database.js';
 import { buildApp } from '../../src/server/app.js';
 import { accountConfig } from '../../src/server/accounts/config.js';
 import { administer } from '../../src/server/admin-operations.js';
@@ -11,9 +11,9 @@ import { sampleProject } from '../../src/project/sample.js';
 import { assetPath } from '../../src/shared/course.js';
 const password='Operator test password 12345';
 test('production operations preserve data, revoke access and enforce transactional storage quotas',async t=>{
- const root=new pg.Pool({connectionString:process.env.DATABASE_URL}),schema='ops_'+randomUUID().replaceAll('-','');await root.query(`CREATE SCHEMA ${schema}`);const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,options:`-c search_path=${schema}`});await migrate(pool);
+ const database=await isolatedDatabase(),{pool,runtimePool}=database;
  const project=sampleProject(),config=accountConfig({APP_ORIGIN:'http://ops.test'});config.assetLimitBytes=project.document.assets[0]!.byteLength*2-1;
- const app=await buildApp(pool,undefined,{pool,config,mailer:async()=>{}}),headers={'x-openscroll-request':'1',origin:config.origin};let session:Record<string,string>={},id='';
+ const app=await buildApp(runtimePool,undefined,{pool:runtimePool,config,mailer:async()=>{}}),headers={'x-openscroll-request':'1',origin:config.origin};let session:Record<string,string>={},id='';
  const login=()=>app.inject({method:'POST',url:'/api/account/login',headers,payload:{email:'operator@example.invalid',password}});
  const upload=()=>app.inject({method:'POST',url:'/api/library/courses/import',headers:{...headers,...session},payload:project});
  try{
@@ -21,5 +21,5 @@ test('production operations preserve data, revoke access and enforce transaction
  await t.test('closed-registration provisioning validates password and records its operation without retaining it',async()=>{await assert.rejects(administer(pool,'create-author',['bad','Name'],password));await assert.rejects(administer(pool,'create-author',['operator@example.invalid','Operator'],'short'));const created=await administer(pool,'create-author',['operator@example.invalid','Operator'],password) as {author:string};id=created.author;await approveFixtureAuthor(pool,'operator@example.invalid');const signed=await login();assert.equal(signed.statusCode,200);session={cookie:'openscroll_session='+signed.cookies[0]!.value,'x-csrf-token':signed.json().csrf};assert.equal((await pool.query('SELECT count(*)::int AS n FROM admin_events WHERE author_id=$1',[id])).rows[0].n,1);});
  await t.test('parallel imports admit only one within quota and failed saves leave documents and bytes intact',async()=>{const replies=await Promise.all([upload(),upload()]);assert.deepEqual(replies.map(r=>r.statusCode).sort(),[200,409]);const courseId=replies.find(r=>r.statusCode===200)!.json().id;const before=(await app.inject({url:`/api/library/courses/${courseId}/edit`,headers:session})).json();const added=structuredClone(before.project),asset={...added.document.assets[0]!,id:'new-image'};added.document.assets.push(asset);added.files[assetPath(asset)]=added.files[assetPath(added.document.assets[0]!)];const rejected=await app.inject({method:'PUT',url:`/api/library/courses/${courseId}/document`,headers:{...headers,...session},payload:{revision:before.revision,mutationId:randomUUID(),document:added.document,files:added.files}});assert.equal(rejected.statusCode,409);assert.deepEqual((await app.inject({url:`/api/library/courses/${courseId}/edit`,headers:session})).json(),before);const usage=await administer(pool,'usage',[]) as {id:string;asset_bytes:string}[];assert.equal(Number(usage.find(r=>r.id===id)!.asset_bytes),project.document.assets[0]!.byteLength);});
  await t.test('suspension blocks existing sessions and fresh logins, preserves content, and enabling requires a fresh login',async()=>{await administer(pool,'suspend',[id]);assert.equal((await login()).statusCode,401);assert.equal((await app.inject({url:'/api/library/courses',headers:session})).statusCode,401);assert.equal((await pool.query('SELECT count(*)::int AS n FROM courses WHERE owner_id=$1',[id])).rows[0].n,1);await administer(pool,'enable',[id]);assert.equal((await app.inject({url:'/api/library/courses',headers:session})).statusCode,401);assert.equal((await login()).statusCode,200);await administer(pool,'revoke-sessions',['all']);assert.equal((await pool.query('SELECT count(*)::int AS n FROM author_sessions')).rows[0].n,0);await assert.rejects(administer(pool,'suspend',[randomUUID()]));});
- }finally{await app.close();await pool.end();await root.query(`DROP SCHEMA ${schema} CASCADE`);await root.end();}
+ }finally{await app.close();await database.close();}
 });

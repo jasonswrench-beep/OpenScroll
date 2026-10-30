@@ -1,13 +1,18 @@
 name: openscroll-production
-x-app: &app
+x-image: &image
   image: ${OPENSCROLL_IMAGE:-openscroll:production}
-  environment: &environment
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+x-runtime-environment: &runtime-environment
     TRUST_PROXY: "1"
     NODE_ENV: production
     HOST: 0.0.0.0
     PORT: "3000"
     PDF_RENDERER_SOCKET: /run/openscroll-renderer/renderer.sock
-    DATABASE_URL: postgresql://openscroll:${POSTGRES_PASSWORD:?Generate deploy/.env.production first}@db:5432/openscroll
+    DATABASE_URL: postgresql://openscroll_app:${RUNTIME_DB_PASSWORD:?Run db-credentials for existing configuration}@db:5432/openscroll
     APP_ORIGIN: ${APP_ORIGIN:?Set the public HTTPS origin}
     REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
     ACCESS_REQUEST_NOTIFY_EMAIL: ${ACCESS_REQUEST_NOTIFY_EMAIL:-}
@@ -19,31 +24,58 @@ x-app: &app
     SMTP_PORT: ${SMTP_PORT:-465}
     SMTP_USER: ${SMTP_USER:-}
     SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-  logging: &logging
-    driver: json-file
-    options:
-      max-size: "10m"
-      max-file: "3"
 services:
   db:
-    image: postgres:17.7-bookworm@sha256:86e0b703649d7a792bd9243ee28afc9d8f7c6b2b5638077c9d6882d4d472bbfd
+    image: postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+    command: [postgres, -c, hba_file=/etc/postgresql/openscroll-pg-hba.conf]
     restart: unless-stopped
     environment:
       POSTGRES_USER: openscroll
       POSTGRES_DB: openscroll
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate deploy/.env.production first}
-    volumes: ["database:/var/lib/postgresql/data"]
+    volumes: ["database:/var/lib/postgresql/data", "./pg_hba.conf:/etc/postgresql/openscroll-pg-hba.conf:ro"]
     healthcheck:
       test: [CMD-SHELL, "pg_isready -U openscroll -d openscroll"]
       interval: 5s
       timeout: 4s
       retries: 20
     logging: *logging
-  migrate:
-    <<: *app
-    command: [node, dist/server/src/server/migrate.js]
+  provision:
+    <<: *image
+    command: [node, dist/server/src/server/provision.js, --from-env]
+    environment:
+      PROVISION_DATABASE_URL: postgresql://openscroll:${POSTGRES_PASSWORD:?Generate private configuration first}@db:5432/openscroll
+      MIGRATOR_DB_PASSWORD: ${MIGRATOR_DB_PASSWORD:?Run db-credentials for existing configuration}
+      RUNTIME_DB_PASSWORD: ${RUNTIME_DB_PASSWORD:?Run db-credentials for existing configuration}
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp:rw,nosuid,noexec,size=32m,mode=1777"]
     depends_on:
       db: {condition: service_healthy}
+  migrate:
+    <<: *image
+    command: [node, dist/server/src/server/migrate.js]
+    environment:
+      ADMIN_DATABASE_URL: postgresql://openscroll_migrator:${MIGRATOR_DB_PASSWORD:?Run db-credentials for existing configuration}@db:5432/openscroll
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      db: {condition: service_healthy}
+      provision: {condition: service_completed_successfully}
+  maintenance:
+    <<: *image
+    profiles: [operations]
+    command: [node, dist/server/src/server/admin.js]
+    environment:
+      ADMIN_DATABASE_URL: postgresql://openscroll_migrator:${MIGRATOR_DB_PASSWORD:?Run db-credentials for existing configuration}@db:5432/openscroll
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
   renderer:
     image: ${OPENSCROLL_RENDERER_IMAGE:-openscroll:renderer}
     # This service deliberately does not inherit the app environment or networks.
@@ -83,7 +115,8 @@ services:
     stop_grace_period: 5s
     logging: *logging
   app:
-    <<: *app
+    <<: *image
+    environment: *runtime-environment
     restart: unless-stopped
     init: true
     read_only: true
