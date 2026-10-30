@@ -1,20 +1,66 @@
-import { chromium,type Browser } from 'playwright-core';
-import { ProjectError } from '../shared/course.js';
-import { LIMITS } from './archive.js';
-import { pdfHtml } from './pdf-html.js';
-/** Inert authored text/images only. Each job owns a fresh, network-isolated browser. */
+import {createConnection,type Socket} from 'node:net';
+import {isAbsolute} from 'node:path';
+import {ProjectError} from '../shared/course.js';
+import {pdfHtml} from './pdf-html.js';
+import {PDF_CLIENT_DEADLINE_MS,PDF_RENDER_REQUEST_LIMIT,PDF_RENDER_OUTPUT_LIMIT,PDF_STATUS_OK,PDF_STATUS_ERROR,PDF_STATUS_BUSY,type PdfRenderRequest} from './pdf-protocol.js';
+
+const unavailable=()=>new ProjectError('The PDF could not be generated. Reduce course size or try again shortly.');
+/** Internal transport; a shorter deadline supports isolated protocol tests, never a fallback. */
+export async function renderPdfViaSocket(socketPath:string|undefined,request:PdfRenderRequest,deadlineMs=PDF_CLIENT_DEADLINE_MS):Promise<Buffer>{
+  let payload:Buffer;
+  try{
+    if(typeof socketPath!=='string'||!isAbsolute(socketPath)||socketPath.includes('\0')||Buffer.byteLength(socketPath)>107)throw unavailable();
+    if(!Number.isInteger(deadlineMs)||deadlineMs<1||deadlineMs>PDF_CLIENT_DEADLINE_MS)throw unavailable();
+    if(typeof request.html!=='string'||!['A4','Letter'].includes(request.paper))throw unavailable();
+    if(Buffer.byteLength(request.html)>PDF_RENDER_REQUEST_LIMIT-32)throw unavailable();
+    payload=Buffer.from(JSON.stringify({html:request.html,paper:request.paper}),'utf8');
+    if(payload.length===0||payload.length>PDF_RENDER_REQUEST_LIMIT)throw unavailable();
+  }catch{throw unavailable();}
+  const frame=Buffer.allocUnsafe(payload.length+4);frame.writeUInt32BE(payload.length,0);payload.copy(frame,4);
+  return new Promise<Buffer>((resolve,reject)=>{
+    let socket:Socket|undefined,settled=false,headerBytes=0,expected:number|undefined,received=0,status:number|undefined,body:Buffer|undefined;
+    const header=Buffer.alloc(4);
+    const finish=(result?:Buffer)=>{
+      if(settled)return;settled=true;clearTimeout(deadline);socket?.destroy();
+      if(result)resolve(result);else reject(unavailable());
+    };
+    const deadline=setTimeout(()=>finish(),deadlineMs);
+    try{
+      socket=createConnection({path:socketPath!});
+      socket.once('connect',()=>{try{socket!.end(frame);}catch{finish();}});
+      socket.on('error',()=>finish());
+      socket.on('close',()=>{if(!settled)finish();});
+      socket.on('data',(chunk:Buffer)=>{
+        if(settled)return;
+        let offset=0;
+        if(headerBytes<4){const take=Math.min(4-headerBytes,chunk.length);chunk.copy(header,headerBytes,0,take);headerBytes+=take;offset+=take;
+          if(headerBytes<4)return;
+          expected=header.readUInt32BE(0);
+          if(expected<1||expected>PDF_RENDER_OUTPUT_LIMIT+1){finish();return;}
+          body=Buffer.allocUnsafe(expected);
+        }
+        const data=chunk.subarray(offset);
+        if(!data.length)return;
+        if(received+data.length>expected!){finish();return;}
+        if(status===undefined){
+          status=data[0];
+          if((status===PDF_STATUS_OK&&expected!<6)||(status===PDF_STATUS_ERROR&&expected!>1025)||(status===PDF_STATUS_BUSY&&expected!==1)||![PDF_STATUS_OK,PDF_STATUS_ERROR,PDF_STATUS_BUSY].includes(status!)){finish();return;}
+        }
+        data.copy(body!,received);received+=data.length;
+      });
+      socket.once('end',()=>{
+        if(settled)return;
+        if(expected===undefined||received!==expected||status!==PDF_STATUS_OK){finish();return;}
+        const pdf=body!.subarray(1);
+        if(pdf.length<5||pdf.length>PDF_RENDER_OUTPUT_LIMIT||pdf.subarray(0,5).toString('ascii')!=='%PDF-'){finish();return;}
+        finish(pdf);
+      });
+    }catch{finish();}
+  });
+}
+
+/** Only sanitized HTML and paper selection cross into the credential-free worker. */
 export async function exportPdf(input:unknown,settings:unknown={}){
- const {html,options}=pdfHtml(input,settings);let browser:Browser|undefined,expired=false;
- const deadline=setTimeout(()=>{expired=true;void browser?.close().catch(()=>{});},45000);
- try{
-  try{browser=await chromium.launch({executablePath:process.env.PDF_CHROMIUM_EXECUTABLE_PATH??'/usr/bin/chromium',headless:true,timeout:15000,args:['--disable-dev-shm-usage']});}catch{throw new ProjectError('PDF publishing is unavailable. The server needs Chromium; see the PDF installation guide.');}
-  const context=await browser.newContext({javaScriptEnabled:false,serviceWorkers:'block',offline:true});
-  await context.route('**/*',route=>route.abort());const page=await context.newPage();page.setDefaultTimeout(20000);
-  await page.setContent(html,{waitUntil:'load',timeout:20000});await page.emulateMedia({media:'print'});
-  const ready=await page.evaluate(async()=>{await document.fonts.ready;await Promise.all([...document.images].map(image=>image.decode().catch(()=>{})));return [...document.images].every(image=>image.complete && image.naturalWidth>0);});
-  if(!ready)throw new ProjectError('An image could not be decoded for PDF publishing. Replace the damaged image and try again.');
-  const bytes=await page.pdf({format:options.paper,tagged:true,outline:true,printBackground:true,displayHeaderFooter:true,headerTemplate:'<span></span>',footerTemplate:'<div style="font:9px sans-serif;width:100%;text-align:center;color:#425e52">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',margin:{top:'18mm',right:'18mm',bottom:'20mm',left:'18mm'}});
-  if(bytes.length>LIMITS.archive)throw new ProjectError('The PDF exceeds 32 MiB. Reduce image sizes or split the course.');return bytes;
- }catch(error){if(expired)throw new ProjectError('PDF generation timed out. Reduce image sizes or split the course and try again.');if(error instanceof ProjectError)throw error;throw new ProjectError('The PDF could not be generated. Check course images and try again.');}
- finally{clearTimeout(deadline);await browser?.close().catch(()=>{});}
+  const {html,options}=pdfHtml(input,settings);
+  return renderPdfViaSocket(process.env.PDF_RENDERER_SOCKET,{html,paper:options.paper});
 }

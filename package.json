@@ -12,7 +12,7 @@
     "build": "tsc --noEmit && vite build && tsx tools/player-notices.ts && tsc -p tsconfig.server.json",
     "start": "node --env-file-if-exists=.env dist/server/src/server/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
     "test:integration": "node --env-file-if-exists=.env --import tsx --test tests/integration/*.test.ts",
     "db:up": "docker compose up -d --wait db",
     "db:down": "docker compose stop db",

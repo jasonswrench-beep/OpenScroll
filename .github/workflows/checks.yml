@@ -28,20 +28,26 @@ jobs:
           python3 -m venv .local/pdf-checks
           .local/pdf-checks/bin/pip install pypdf==6.10.0
           echo "$PWD/.local/pdf-checks/bin" >> "$GITHUB_PATH"
-          node --input-type=module -e 'import fs from "node:fs"; import {chromium} from "playwright-core"; fs.appendFileSync(process.env.GITHUB_ENV, "PDF_CHROMIUM_EXECUTABLE_PATH="+chromium.executablePath()+"\n")'
+      - name: Build and start credential-free renderer for source tests
+        run: |
+          docker build --pull --target renderer --tag openscroll:renderer-tests .
+          node tools/renderer-test-service.mjs start openscroll:renderer-tests
       - run: npm run licenses
       - run: npm run schema:check
       - run: npm run build
       - name: Run unit tests with CI reports
         run: |
           mkdir -p .local/test-results
-          node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=.local/test-results/unit.xml tests/*.test.ts
+          node --import tsx --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=.local/test-results/unit.xml tests/*.test.ts
       - name: Publish unit test summary
         if: always()
         run: python3 tools/report-unit-results.py .local/test-results/unit.xml
       - run: npm run db:migrate
       - run: npm run test:integration
       - run: npm run test:browser
+      - name: Remove disposable source-test renderer
+        if: always()
+        run: node tools/renderer-test-service.mjs stop
   container:
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -56,31 +62,43 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y poppler-utils
-      - name: Build final application image
+      - name: Build final application and renderer images
         id: image
-        run: docker build --pull --tag openscroll:ci .
+        run: |
+          docker build --pull --target runtime --tag openscroll:ci .
+          docker build --pull --target renderer --tag openscroll:renderer-ci .
       - name: Test final image with an isolated database and Chromium
-        run: node tools/container-smoke.mjs openscroll:ci
-      - name: Scan final image including installed OS and application packages
+        run: node tools/container-smoke.mjs openscroll:ci openscroll:renderer-ci
+      - name: Verify renderer process, credential, network and deadline boundaries
+        run: node tools/renderer-isolation-smoke.mjs openscroll:renderer-ci openscroll:ci
+      - name: Scan both final images including OS and application packages
         id: scan
         if: always() && steps.image.outcome == 'success'
         run: |
           mkdir -p .local/container-checks
-          docker run --rm \
-            --volume /var/run/docker.sock:/var/run/docker.sock \
-            --volume "$PWD/.local/container-checks:/reports" \
-            aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
-            image --image-src docker --scanners vuln --pkg-types os,library --list-all-pkgs \
-            --format json --output /reports/trivy.json --exit-code 0 openscroll:ci
+          for component in app renderer; do
+            if [ "$component" = app ]; then image=openscroll:ci; else image=openscroll:renderer-ci; fi
+            docker run --rm \
+              --volume /var/run/docker.sock:/var/run/docker.sock \
+              --volume "$PWD/.local/container-checks:/reports" \
+              aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+              image --image-src docker --scanners vuln --pkg-types os,library --list-all-pkgs \
+              --format json --output "/reports/$component-trivy.json" --exit-code 0 "$image"
+          done
       - name: Report all findings and reject fixable high or critical vulnerabilities
         if: always() && steps.scan.outcome == 'success'
-        run: node tools/report-container-scan.mjs .local/container-checks/trivy.json
+        run: |
+          app_status=0
+          renderer_status=0
+          node tools/report-container-scan.mjs .local/container-checks/app-trivy.json || app_status=$?
+          node tools/report-container-scan.mjs .local/container-checks/renderer-trivy.json || renderer_status=$?
+          [ "$app_status" -eq 0 ] && [ "$renderer_status" -eq 0 ]
       - name: Preserve complete final-image vulnerability inventory
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: final-container-vulnerabilities
-          path: .local/container-checks/trivy.json
+          path: .local/container-checks/*-trivy.json
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
