@@ -42,3 +42,45 @@ jobs:
       - run: npm run db:migrate
       - run: npm run test:integration
       - run: npm run test:browser
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Install PDF inspection tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y poppler-utils
+      - name: Build final application image
+        id: image
+        run: docker build --pull --tag openscroll:ci .
+      - name: Test final image with an isolated database and Chromium
+        run: node tools/container-smoke.mjs openscroll:ci
+      - name: Scan final image including installed OS and application packages
+        id: scan
+        if: always() && steps.image.outcome == 'success'
+        run: |
+          mkdir -p .local/container-checks
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume "$PWD/.local/container-checks:/reports" \
+            aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --image-src docker --scanners vuln --pkg-types os,library --list-all-pkgs \
+            --format json --output /reports/trivy.json --exit-code 0 openscroll:ci
+      - name: Report all findings and reject fixable high or critical vulnerabilities
+        if: always() && steps.scan.outcome == 'success'
+        run: node tools/report-container-scan.mjs .local/container-checks/trivy.json
+      - name: Preserve complete final-image vulnerability inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-container-vulnerabilities
+          path: .local/container-checks/trivy.json
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

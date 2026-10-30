@@ -2,7 +2,7 @@
 
 ## Requirements
 
-Node.js 24.19.0 (the pinned baseline), npm 11, Docker Engine, and Docker Compose v2. PostgreSQL 17 is supplied by Compose. No hosted credentials or email provider are needed for the foundation.
+Node.js 24.22.2 (the pinned baseline), npm 11, Docker Engine, and Docker Compose v2. PostgreSQL 17 is supplied by Compose. No hosted credentials or email provider are needed for the foundation.
 
 Use the existing checkout in a cloud task. Tasks are already isolated; do not create another Git worktree unless requested.
 
