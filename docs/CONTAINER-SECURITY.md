@@ -1,56 +1,98 @@
 # Container security validation
 
-The Docker build and source checks use Node 24.22.2. Both Docker stages pin the
+The Docker build and source checks use Node 24.22.2. Docker stages pin the
 official `24.22.2-bookworm-slim` multi-platform image digest. Keep the Dockerfile,
 `.node-version`, package engine requirement and lockfile engine requirement in
 sync when updating Node. Node 24.22.1 contains the October 2026 security fixes;
 24.22.2 is the compatible patch selected here.
 
-The runtime updates installed Debian packages before installing Chromium and Noto
-fonts. The build refuses Perl older than `5.36.0-7+deb12u4` or PCRE2 older than
-`10.42-1+deb12u1`. Debian updates remain current at build time; the base digest
-alone does not pin every final package. Preserve the final scan inventory for the
-specific image that will be deployed. Runtime npm, npx, Corepack and Yarn are
-removed because application startup and deployment operations invoke Node
-directly. Dependency installation still occurs in the separate build stage.
+Build and validate **both** final images. The app target does not install a
+browser or fonts; the separate `renderer` target contains Debian Chromium,
+Noto core/CJK fonts and required native libraries. The renderer copies its worker,
+protocol and `playwright-core`, without the app, database/mail modules or private
+configuration. Both targets update installed Debian packages and remove runtime
+npm, npx, Corepack and Yarn. Dependency installation occurs in the build stage;
+startup and deployment operations invoke Node directly. The Perl/PCRE2 minimum
+package checks remain in the builds.
 
-Run the final-image checks locally with Docker, Node from `.node-version`, and
-Poppler's `pdftotext` and `pdffonts` installed:
+Debian packages remain current at build time; the Node base digest does not pin
+every final package. Keep the final scan inventories and image identities for
+the actual image pair being considered for release. The current Bookworm
+Chromium `.73` package is below the upstream `.79` security release. Do not read
+containment or a passing scan gate as installing the missing fixes. See
+[browser patch availability and residual exposure](RENDERER-ISOLATION.md#browser-patch-availability).
+
+## Local validation
+
+Use Docker, Node from `.node-version`, and Poppler's `pdftotext` and `pdffonts`:
 
 ```sh
-docker build --pull --tag openscroll:checked .
-node tools/container-smoke.mjs openscroll:checked
+docker build --pull --target runtime --tag openscroll:checked .
+docker build --pull --target renderer --tag openscroll:renderer-checked .
+node tools/container-smoke.mjs openscroll:checked openscroll:renderer-checked
+node tools/renderer-isolation-smoke.mjs openscroll:renderer-checked openscroll:checked
 ```
 
+The optional second image argument supplies a smaller trusted Node image for
+builtins-only local network canaries; renderer-boundary checks still target the
+first image. This avoids unnecessary browser filesystem copies on VFS hosts.
+
 In a managed environment that requires a proxy CA, pass the supported secret to
-the build: `--secret id=proxy_ca,src="$CODEX_PROXY_CERT"`. The certificate is not
-copied into the image.
+each build: `--secret id=proxy_ca,src="$CODEX_PROXY_CERT"`. The certificate is not
+copied into final image layers. Keep the platform's supported proxy settings for
+build downloads; production renderer jobs have no network route or proxy use.
 
-The smoke test creates uniquely named disposable containers and an internal
-network. It uses no host database, host port, `.env` file, email provider, or live
-installation. It verifies migrations, health, the built application, runtime
-package versions, a real PDF request through system Chromium, embedded fonts,
-and extracted Latin/CJK text. The app runs as its unprivileged user with a
-read-only filesystem. Test resources are removed afterward.
-Chromium and Fontconfig use the image's XDG cache/configuration paths under `/tmp`,
-which must remain writable in read-only deployments.
+The container smoke test creates uniquely named disposable services, a private
+database, a socket volume and a renderer with `network_mode: none`. It uses no
+host database, published host port, `.env` file, real email provider or live
+installation. It checks migrations, health, the built application, unprivileged
+app startup, anonymous API denial, explicit synthetic owner access, a real PDF
+request, embedded fonts and extracted Latin/CJK text. Test resources are removed
+afterward.
 
-The `container` CI job builds and tests the final image, then uses pinned Trivy
-0.76.1 to scan all installed OS and Node packages. It retains the complete JSON
-inventory as `final-container-vulnerabilities` for 14 days, including findings
-without a published fix. The report step rejects high/critical findings with a
-published fix. Scanner/database failures also fail CI; a missing scan is not a
-clean scan.
+The isolation smoke test checks the actual worker boundary separately from
+browser policy: process identity/capabilities, credential absence using synthetic
+fixtures, private mounts/PID namespaces, denied network access and bounded job
+failure/cleanup. Its evidence must identify exactly which probes ran. An aborted
+Playwright request or an inert authored script alone does not prove kernel
+network denial, and sanitizing `process.env` alone does not prove isolation.
+
+The renderer's root supervisor is distinct from the unprivileged browser job;
+see [the UID/capability and deadline design](RENDERER-ISOLATION.md). Do not remove
+resource limits or weaken the host security profile to make a test pass. Browser
+and Fontconfig caches use writable temporary storage in the renderer, without
+making its root filesystem writable.
+
+## CI scans and interpretation
+
+The `container` job builds and tests both final images, then uses pinned Trivy
+0.76.1 to scan all installed OS and Node packages in each image. The
+`final-container-vulnerabilities` artifact retains complete `app-trivy.json` and
+`renderer-trivy.json` inventories for 14 days, including findings without a
+published fix. The existing report step runs for each inventory and rejects
+high/critical findings with a reported published fix. Scanner/database failures
+also fail CI; a missing scan is not a clean scan. No finding is suppressed to
+obtain a green check.
+
+Keep app and renderer findings separate. Removing native browser packages from
+the app reduces their presence there; those packages still need review in the
+renderer image. Do not add the two images' record counts and call the result a
+unique-CVE total: shared packages and CVEs can occur in both inventories. Review
+vendor status, source-package families and actual component reachability as well
+as severity and fix availability. Missing scanner records for an alternative
+browser package would not establish that the browser is safe.
 
 The six original screenshot reports exposed only ten individual findings and
-overlapped one Dockerfile/base-image report. A complete final-image scan also
-includes Chromium, fonts and application dependencies, and uses a different
-scanner database. Its counts cannot be treated as a direct before/after
-comparison to the screenshots' 121 findings. A package finding alone does not
-establish reachability or exploitability in OpenScroll. Review remaining Debian
-findings and their vendor status before deployment; do not suppress them merely
-to obtain a green check.
+overlapped one Dockerfile/base-image report. Complete final-image scans include
+installed native and application dependencies and use a different scanner
+inventory. Their counts cannot be treated as a direct before/after comparison to
+the screenshots' 121 findings. A package finding alone does not establish
+reachability or exploitability in OpenScroll. Equally, no packaged fix or no
+obvious JavaScript import does not establish that a native library is unreachable.
 
-These checks build and test local images. They do not push images or deploy the
-application. Hostinger settings and external deployment hooks are outside the
-repository's checks and must be inspected separately before deployment.
+These checks build and test disposable local images. They do not push images,
+merge branches or deploy the application. Hostinger settings and external
+deployment hooks are outside the repository's checks and must be inspected
+separately before deployment. Browser patch availability, full residual review,
+production host isolation/capacity and the normal operator release checks remain
+prerequisites for a live release.

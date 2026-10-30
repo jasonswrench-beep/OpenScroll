@@ -15,14 +15,22 @@ npm ci
 cp .env.example .env # only if .env does not already exist
 npm run db:up
 npm run db:migrate
+docker build --target renderer --tag openscroll:renderer .
+node tools/renderer-test-service.mjs start openscroll:renderer
+. .local/renderer-test.env
 npm run dev
 ```
 
-The development browser server listens on port 5173 and proxies `/api` to the API on port 3000. Both bind to loopback. The API verifies its database connection and migration version before accepting requests. Vite reloads browser edits; restart `npm run dev` after server edits. Ctrl+C stops both application processes. `npm run db:down` stops PostgreSQL without deleting its data volume.
+The development browser server listens on port 5173 and proxies `/api` to the API on port 3000. Both bind to loopback. The API verifies its database connection and migration version before accepting requests. Vite reloads browser edits; restart `npm run dev` after server edits. Ctrl+C stops both application processes. The isolated PDF renderer is a separate disposable service: stop it with `node tools/renderer-test-service.mjs stop` after use. `npm run db:down` stops PostgreSQL without deleting its data volume.
 
 The example password is exclusively for the local database. Do not use this Compose configuration as an Internet-facing deployment. Preserve existing `.env` files and do not commit credentials.
 
 ## Checks
+
+Keep the isolated renderer from first-run setup running and source its generated
+`.local/renderer-test.env` in this shell before checks. PDF tests and the PDF CLI
+require its explicit socket; there is no app-process browser fallback. Build the
+renderer again after worker/browser changes, then stop and restart the helper.
 
 ```sh
 npm run licenses
@@ -49,6 +57,7 @@ This cloud environment blocks the Playwright download domain; its installed Chro
 ```sh
 npm run build
 npm run db:migrate
+. .local/renderer-test.env # renderer helper must already be running
 npm start
 ```
 
@@ -60,7 +69,7 @@ The API serves the built browser assets on port 3000. `/api/health` returns HTTP
 docker compose -f compose.yaml -f compose.app.yaml up -d --build --wait
 ```
 
-This optional override runs both application and database in containers. Stop the host application first to avoid port conflicts. Containers use the Compose database hostname rather than localhost. The application runs as a non-root user. Database data stays in the named volume. Do not use `down -v` unless intentionally deleting local data.
+This optional override runs the app, database and isolated PDF renderer in containers, with the renderer socket wired through its private volume. Stop the host application first to avoid port conflicts. Containers use the Compose database hostname rather than localhost. The app runs as a non-root user; the renderer uses the separate supervisor/browser UIDs described in [renderer isolation](RENDERER-ISOLATION.md). Database data stays in the named volume. The app never starts an in-process browser if the renderer is unavailable. Do not use `down -v` unless intentionally deleting local data.
 
 Managed cloud builds need the session CA for npm while keeping verification enabled:
 
@@ -123,7 +132,7 @@ Step 10 adds SCORM 1.2 and SCORM 2004 4th Edition. See [publishing and Brightspa
 
 ## PDF publishing
 
-Step 11 adds [PDF export](PDF-PUBLISHING.md) and [validation evidence](STEP-11-VALIDATION.md). `npm ci` now retains exact `playwright-core` for runtime printing. The cloud workspace already has `/usr/bin/chromium`, Poppler and pypdf; no new cloud configuration review is needed for its existing startup commands. For another installation, install the documented browser/fonts and PDF inspection tools. The Dockerfile includes runtime Chromium/fonts and CI installs its browser before PDF unit checks. No new secret, schema or database migration is required.
+PDF export uses the [separate renderer](RENDERER-ISOLATION.md), rather than launching Chromium in the app process. Build the `renderer` Docker target, start it with `tools/renderer-test-service.mjs`, and source its generated socket export as above. The app image has no browser or fonts. The renderer contains exact `playwright-core`, Debian Chromium and Noto fonts; Poppler and pypdf remain host development/CI inspection tools. CI starts an isolated renderer before PDF unit/browser checks. No new secret, course schema or database migration is introduced by isolation. The current browser patch gap is documented separately; installing a host browser does not change the contained renderer version.
 
 `tests/pdf-export.test.ts` checks every block family, answer-key separation, inert HTML, network isolation and actual tagged PDFs. Browser cases test both authoring entry points, download/source isolation, dialog options and keyboard/error recovery. The CLI is `npx tsx tools/pdf.ts INPUT OUTPUT [--answers] [--letter]`. Inspect a sample in `artifacts/pdf-publishing`; do not describe structural tests as PDF/UA or screen-reader certification.
 
@@ -133,7 +142,7 @@ Step 12 adds [themes, templates, reusable assets and snapshots](THEMES-AND-REUSE
 
 ## Production preparation
 
-Step 13 adds the independent `deploy/compose.yaml` stack and [self-hosting guide](SELF-HOSTING.md). Apply migration **4** to the development database before restarting the current server. No new npm package or cloud configuration review is required. `AUTHOR_ASSET_LIMIT_MIB` defaults to 1024; local development keeps proxy trust disabled. Production deliberately trusts one private reverse-proxy hop. Operator commands compile into the runtime image; deployment smoke tests create only isolated disposable projects. See [validation evidence](STEP-13-VALIDATION.md).
+Step 13 adds the independent `deploy/compose.yaml` stack and [self-hosting guide](SELF-HOSTING.md). Apply migrations through **5** to the development database before restarting the current server. Migration 5 requires explicit owner bootstrap and preserves other accounts as pending; see [instance access](INSTANCE-ACCESS.md). No new npm package or cloud configuration review is required. `AUTHOR_ASSET_LIMIT_MIB` defaults to 1024; local development keeps proxy trust disabled. Production deliberately trusts one private reverse-proxy hop. Operator commands compile into the runtime image; deployment smoke tests create only isolated disposable projects. See [validation evidence](STEP-13-VALIDATION.md).
 
 ## Question spreadsheet import
 
