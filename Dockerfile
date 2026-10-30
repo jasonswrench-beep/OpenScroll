@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.19.0-bookworm-slim AS build
+FROM node:24.19.0-trixie-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 RUN --mount=type=secret,id=proxy_ca \
@@ -9,7 +9,7 @@ COPY src ./src
 COPY tools/player-notices.ts ./tools/player-notices.ts
 RUN npm run build && npm prune --omit=dev
 
-FROM node:24.19.0-bookworm-slim AS runtime
+FROM node:24.19.0-trixie-slim AS runtime
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 WORKDIR /app
 # Chromium prints trusted, inert course HTML; keep distribution license notices.
