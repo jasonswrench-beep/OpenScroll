@@ -1,4 +1,4 @@
-import { test,expect,type Page } from '@playwright/test';
+import { test,expect,type Page } from './fixtures.js';
 import { createServer,type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import yauzl from 'yauzl';
@@ -15,7 +15,7 @@ test.beforeAll(async()=>{
 test.afterAll(async()=>{await new Promise<void>((resolve,reject)=>server.close(error=>error ? reject(error) : resolve()));});
 async function unzip(bytes:Buffer){return new Promise<Map<string,Buffer>>((resolve,reject)=>yauzl.fromBuffer(bytes,{lazyEntries:true},(error,zip)=>{if(error || !zip)return reject(error);const files=new Map<string,Buffer>();zip.on('error',reject);zip.on('end',()=>resolve(files));zip.on('entry',entry=>zip.openReadStream(entry,(error,stream)=>{if(error || !stream)return reject(error);const chunks:Buffer[]=[];stream.on('data',chunk=>chunks.push(chunk));stream.on('error',reject);stream.on('end',()=>{files.set(entry.fileName,Buffer.concat(chunks));zip.readEntry();});}));zip.readEntry();}));}
 function gated(){const project=sampleProject(),lesson=project.document.course.sections[0]!.lessons[0]!;project.document.course.settings.navigation='sequential';const text=lesson.blocks[1]!,gate=lesson.blocks[3]!;if(gate.type!=='continue')throw new Error();gate.completion='previous';lesson.blocks=[text,gate,{...structuredClone(text),id:'revealed-text',content:{heading:'',text:'A second part that starts hidden.'}} as typeof text,{...structuredClone(gate),id:'last-gate',completion:'all-previous'}];return project;}
-async function openPortable(page:Page,project:PortableProject){await page.goto('/');await page.getByLabel('Open an .openscroll project (up to 32 MiB)',{exact:true}).setInputFiles({name:'player.openscroll',mimeType:'application/octet-stream',buffer:await exportProject(project)});await expect(page.locator('#project-details')).toBeVisible();}
+async function openPortable(page:Page,project:PortableProject){await page.goto('/app/');await page.getByLabel('Open an .openscroll project (up to 32 MiB)',{exact:true}).setInputFiles({name:'player.openscroll',mimeType:'application/octet-stream',buffer:await exportProject(project)});await expect(page.locator('#project-details')).toBeVisible();}
 async function publish(page:Page){const downloading=page.waitForEvent('download');await page.getByRole('button',{name:'Export portable HTML ZIP',exact:true}).click();const download=await downloading;publication=await unzip(await readFile((await download.path())!));expect(publication.has('LICENSE.txt')).toBe(true);expect(publication.has('THIRD-PARTY-NOTICES.txt')).toBe(true);}
 
 test('preview gates, sequential navigation, device sizes, restart and return leave source state untouched',async({page})=>{

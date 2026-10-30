@@ -9,6 +9,7 @@ x-app: &app
     DATABASE_URL: postgresql://openscroll:${POSTGRES_PASSWORD:?Generate deploy/.env.production first}@db:5432/openscroll
     APP_ORIGIN: ${APP_ORIGIN:?Set the public HTTPS origin}
     REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-false}
+    ACCESS_REQUEST_NOTIFY_EMAIL: ${ACCESS_REQUEST_NOTIFY_EMAIL:-}
     REQUIRE_EMAIL_VERIFICATION: "true"
     AUTHOR_ASSET_LIMIT_MIB: ${AUTHOR_ASSET_LIMIT_MIB:-1024}
     MAIL_MODE: smtp

@@ -1,3 +1,4 @@
+import { approveFixtureAuthor } from '../helpers/accounts.js';
 import { test,expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { randomUUID } from 'node:crypto';
@@ -16,15 +17,17 @@ test.afterEach(async () => {
 });
 const password='A browser testing password 42';
 async function signup(page:Page,email:string,name:string) {
-  await page.goto('/');
+  await page.goto('/account/');
   await page.locator('#register-name').fill(name);await page.locator('#register-email').fill(email);await page.locator('#register-password').fill(password);
-  await page.getByRole('button',{name:'Create account',exact:true}).click();
-  await expect(page.locator('#account-status')).toContainText('You can now try signing in');
+  await page.getByRole('button',{name:'Request account',exact:true}).click();
+  await expect(page.locator('#account-status')).toContainText(/verification|verify|email/i);
   createdEmails.push(email);
+  const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await approveFixtureAuthor(pool,email);}finally{await pool.end();}
 }
 async function login(page:Page,email:string,pass=password) {
   await page.locator('#login-email').fill(email);await page.locator('#login-password').fill(pass);
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page).toHaveURL(/\/app\/$/);
   await expect(page.locator('#library-panel')).toBeVisible();
 }
 test('author manages persistent library with accessible controls and no cross-account content',async ({page,browser}) => {
@@ -69,10 +72,11 @@ test('author saves a portable starter and resets password through a private deve
   await expect(page.locator('#account-status')).toContainText('If an account matches');
   let text='';
   await expect.poll(async () => {
-    for(const file of await readdir('.local/test-mail')) {const message=JSON.parse(await readFile(`.local/test-mail/${file}`,'utf8'));if(message.to===email)text=message.text;}
+    for(const file of await readdir('.local/test-mail')) {const message=JSON.parse(await readFile(`.local/test-mail/${file}`,'utf8'));if(message.to===email&&message.subject.includes('Reset'))text=message.text;}
     return !!text;
   }).toBe(true);
-  const link=text.match(/http[^\s]+/)![0];await page.goto(link);
+  const link=new URL(text.match(/http[^\s]+/)![0]);await page.goto('/'+link.hash);
+  await expect(page).toHaveURL(/\/account\//);
   await expect(page.locator('#reset-form')).toBeVisible();expect(page.url()).not.toContain('#reset=');
   const next='A changed browser password 43';await page.locator('#new-password').fill(next);await page.getByRole('button',{name:'Change password',exact:true}).click();
   await expect(page.locator('#account-status')).toContainText('Password changed');

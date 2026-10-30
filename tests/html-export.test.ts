@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { htmlFiles,exportHtml } from '../src/project/html-export.js';
 import { sampleProject } from '../src/project/sample.js';
-import { buildApp } from '../src/server/app.js';
+import { buildApprovedProjectApp } from './helpers/project-app.js';
 test('HTML packaging includes only its player dependency graph, canonical assets, and notices with relative paths',async()=>{
  const root=await mkdtemp(join(tmpdir(),'openscroll-html-')),playerRoot=join(root,'dist/client');
  try{
@@ -23,5 +23,5 @@ test('HTML packaging includes only its player dependency graph, canonical assets
 });
 test('HTML API rejects invalid snapshots and absent player builds without changing the project',async()=>{
  const project=sampleProject(),before=structuredClone(project);await assert.rejects(htmlFiles(project,'/tmp/openscroll-missing-player-build'),/build is unavailable/);assert.deepEqual(project,before);
- const app=await buildApp({query:async()=>({})});try{const bad=structuredClone(project);bad.document.course.sections[0]!.lessons[0]!.blocks[0]!.id='INVALID';const response=await app.inject({method:'POST',url:'/api/projects/html',payload:bad});assert.equal(response.statusCode,422);assert.match(response.json().error,/Invalid course/);}finally{await app.close();}
+ const app=await buildApprovedProjectApp();try{const bad=structuredClone(project);bad.document.course.sections[0]!.lessons[0]!.blocks[0]!.id='INVALID';const response=await app.inject({method:'POST',url:'/api/projects/html',payload:bad});assert.equal(response.statusCode,422);assert.match(response.json().error,/Invalid course/);}finally{await app.close();}
 });

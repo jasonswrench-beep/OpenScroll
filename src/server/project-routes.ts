@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { exportProject, importProject, LIMITS } from '../project/archive.js';
 import { sampleProject } from '../project/sample.js';
 import { ProjectError } from '../shared/course.js';
+import { HttpError } from './accounts/access.js';
 
 export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:string}) {
   app.addContentTypeParser('application/octet-stream',{parseAs:'buffer',bodyLimit:QUESTION_FILE_LIMIT},(_request,body,done)=>done(null,body));
@@ -29,6 +30,7 @@ export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:st
   app.addHook('onRequestAbort', async request => { if (!request.projectProcessing) release(request); });
   app.addHook('onTimeout', async request => { if (!request.projectProcessing) release(request); });
   app.setErrorHandler((error,_request,reply) => {
+    if(error instanceof HttpError)return reply.code(error.statusCode).send({error:error.message});
     if (error instanceof ProjectError) return reply.code(422).send({ error: error.message });
     const code = typeof error === 'object' && error !== null && 'statusCode' in error ? error.statusCode : undefined;
     if (code === 413) return reply.code(413).send({ error: 'The project upload exceeds the size limit.' });

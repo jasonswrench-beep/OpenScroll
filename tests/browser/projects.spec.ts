@@ -1,12 +1,12 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import AxeBuilder from '@axe-core/playwright';
 import { importProject } from '../../src/project/archive.js';
 import { readFile } from 'node:fs/promises';
 
 test('author opens starter, edits title, downloads and reopens a portable project', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/app/');
   await page.getByRole('button',{name:'Open starter course'}).click();
-  const title=page.getByRole('textbox',{name:'Course title'});
+  const title=page.getByRole('textbox',{name:'Course title',exact:true});
   await expect(title).toHaveValue('Welcome to OpenScroll');
   await expect(title).toBeFocused();
   await expect(page.locator('#project-summary')).toContainText('2 lessons');
@@ -30,9 +30,9 @@ test('author opens starter, edits title, downloads and reopens a portable projec
 });
 
 test('bad import preserves current project and downloaded text never becomes executable markup', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/app/');
   await page.getByRole('button',{name:'Open starter course'}).click();
-  const title=page.getByRole('textbox',{name:'Course title'});
+  const title=page.getByRole('textbox',{name:'Course title',exact:true});
   await expect(title).toHaveValue('Welcome to OpenScroll');
   const hostile='<img src=x onerror=alert(1)>';
   await title.fill(hostile);

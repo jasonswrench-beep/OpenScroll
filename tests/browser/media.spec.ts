@@ -1,4 +1,5 @@
-import { test,expect,type APIRequestContext,type Page } from '@playwright/test';
+import { approveFixtureAuthor } from '../helpers/accounts.js';
+import { test,expect,type APIRequestContext,type Page } from './fixtures.js';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer,type Server } from 'node:http';
@@ -13,7 +14,7 @@ let client:APIRequestContext,id:string,server:Server,origin:string;let files=new
 const owner=randomUUID(),token=randomToken(),csrf=randomToken();
 const cookie={name:'openscroll_session',value:token,domain:'127.0.0.1',path:'/',httpOnly:true,secure:false,sameSite:'Lax' as const};
 test.beforeAll(async({playwright})=>{
- const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('INSERT INTO authors(id,email,display_name,password_hash,verified) VALUES($1,$2,$3,$4,true)',[owner,`media-${owner}@example.invalid`,'Media test author',await hashPassword(randomToken())]);await pool.query("INSERT INTO author_sessions(token_hash,author_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[tokenHash(token),owner,csrf]);}finally{await pool.end();}
+ const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('INSERT INTO authors(id,email,display_name,password_hash,verified) VALUES($1,$2,$3,$4,true)',[owner,`media-${owner}@example.invalid`,'Media test author',await hashPassword(randomToken())]);await approveFixtureAuthor(pool,`media-${owner}@example.invalid`);await pool.query("INSERT INTO author_sessions(token_hash,author_id,csrf_token,expires_at) VALUES($1,$2,$3,now()+interval '1 hour')",[tokenHash(token),owner,csrf]);}finally{await pool.end();}
  client=await playwright.request.newContext({baseURL:'http://127.0.0.1:3000',extraHTTPHeaders:{cookie:`openscroll_session=${token}`,'x-csrf-token':csrf,'x-openscroll-request':'1',origin:'http://127.0.0.1:3000'}});
  server=createServer((req,res)=>{const path=new URL(req.url!,'http://test').pathname;const data=files.get(path.replace(/^\/lesson\//,''));if(!path.startsWith('/lesson/') || !data){res.writeHead(404);res.end();return;}const ext=path.split('.').at(-1)!;res.setHeader('Content-Type',({html:'text/html',js:'text/javascript',css:'text/css',json:'application/json',png:'image/png',wav:'audio/wav',mp4:'video/mp4',txt:'text/plain'} as Record<string,string>)[ext] ?? 'text/plain');res.end(data);});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
 });
@@ -23,7 +24,7 @@ test.beforeEach(async({context})=>{
 });
 test.afterEach(async()=>{const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM courses WHERE owner_id=$1',[owner]);}finally{await pool.end();}});
 test.afterAll(async()=>{const pool=new pg.Pool({connectionString:process.env.DATABASE_URL});try{await pool.query('DELETE FROM authors WHERE id=$1',[owner]);}finally{await pool.end();}await client?.dispose();await new Promise<void>(resolve=>server.close(()=>resolve()));});
-async function open(page:Page){await page.goto('/');await page.getByRole('button',{name:'Open: Welcome to OpenScroll',exact:true}).click();await page.getByRole('button',{name:'Open lesson',exact:true}).click();await expect(page.locator('.lesson-canvas')).toBeVisible();}
+async function open(page:Page){await page.goto('/app/');await page.getByRole('button',{name:'Open: Welcome to OpenScroll',exact:true}).click();await page.getByRole('button',{name:'Open lesson',exact:true}).click();await expect(page.locator('.lesson-canvas')).toBeVisible();}
 const block=(page:Page,type:string)=>page.locator(`.lesson-canvas>article:has(.os-${type})`);
 const saved=(page:Page)=>expect(page.locator('#outline-save-status')).toHaveText('Saved to your library.');
 async function snapshot(){const response=await client.get(`/api/library/courses/${id}/edit`);expect(response.ok()).toBe(true);return response.json();}

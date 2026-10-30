@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { approveFixtureAuthor } from '../helpers/accounts.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp,readFile,readdir,stat,rm } from 'node:fs/promises';
@@ -36,6 +37,7 @@ test('accounts and private library against isolated PostgreSQL schema',async t =
   }
   try {
     await register('alice@example.invalid','Alice');await register('bob@example.invalid','Bob');
+    await approveFixtureAuthor(pool,'alice@example.invalid');await approveFixtureAuthor(pool,'bob@example.invalid');
     let alice=await login(' ALICE@example.invalid ');const bob=await login('bob@example.invalid');
     await t.test('passwords and session tokens are never stored in plaintext',async () => {
       const author=(await pool.query('SELECT password_hash FROM authors WHERE id=$1',[alice.id])).rows[0];

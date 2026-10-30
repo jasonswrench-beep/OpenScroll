@@ -13,7 +13,7 @@ import {parseQuestionTable,importedQuestions,QUESTION_HEADERS} from '../src/shar
 import {assessmentIssue,correctAnswer} from '../src/shared/assessment.js';
 import {sampleProject} from '../src/project/sample.js';
 import {exportProject,importProject} from '../src/project/archive.js';
-import {buildApp} from '../src/server/app.js';
+import {buildApprovedProjectApp} from './helpers/project-app.js';
 async function unpack(bytes:Buffer){
  return new Promise<Map<string,Buffer>>((resolve,reject)=>{yauzl.fromBuffer(bytes,{lazyEntries:true},(error,zip)=>{if(error||!zip){reject(error);return;}const files=new Map<string,Buffer>();zip.on('error',reject);zip.on('end',()=>resolve(files));zip.on('entry',entry=>zip.openReadStream(entry,(err,stream)=>{if(err||!stream){reject(err);return;}const chunks:Buffer[]=[];stream.on('data',c=>chunks.push(c));stream.on('end',()=>{files.set(entry.fileName,Buffer.concat(chunks));zip.readEntry();});}));zip.readEntry();});});
 }
@@ -52,7 +52,7 @@ test('XLSX formulas, XML entities, macro payloads and oversized archives are rej
  const tooMany=parseQuestionTable([{row:1,cells:QUESTION_HEADERS},...Array.from({length:501},(_,i)=>({row:i+2,cells:TEMPLATE_ROWS[1]!}))],'CSV');assert.match(tooMany.errors[0]!.message,/500/);assert.equal(tooMany.questions.length,0);
 });
 test('question API downloads real templates and failed previews release the processing slot',async()=>{
- const app=await buildApp({query:async()=>({})});try{for(const format of ['csv','xlsx']as const){const r=await app.inject(`/api/projects/questions/template.${format}`);assert.equal(r.statusCode,200);assert.match(r.headers['content-disposition']!,/attachment/);assert.equal((await readQuestionFile(r.rawPayload,format)).questions.length,6);}
+ const app=await buildApprovedProjectApp();try{for(const format of ['csv','xlsx']as const){const r=await app.inject(`/api/projects/questions/template.${format}`);assert.equal(r.statusCode,200);assert.match(r.headers['content-disposition']!,/attachment/);assert.equal((await readQuestionFile(r.rawPayload,format)).questions.length,6);}
  const source=await readFile('tests/fixtures/question-import/ai-basics-20.csv');const parsed=await app.inject({method:'POST',url:'/api/projects/questions/import?format=csv',headers:{'content-type':'application/octet-stream'},payload:source});assert.equal(parsed.statusCode,200);assert.equal(parsed.json().questions.length,20);
  const bad=await app.inject({method:'POST',url:'/api/projects/questions/import?format=xlsx',headers:{'content-type':'application/octet-stream'},payload:Buffer.from('broken')});assert.equal(bad.statusCode,422);assert.equal((await app.inject('/api/projects/sample')).statusCode,200);
  }finally{await app.close();}

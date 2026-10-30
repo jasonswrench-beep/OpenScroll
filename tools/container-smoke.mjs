@@ -49,12 +49,16 @@ try {
   assert.ok(ready, 'The isolated test database did not become ready.');
   await docker(['run', '--rm', '--name', migration, '--network', network, '--env', `DATABASE_URL=${databaseUrl}`,
     image, 'node', 'dist/server/src/server/migrate.js']);
+  const created=JSON.parse(await docker(['run','--rm','--interactive','--name',migration,'--network',network,'--env',`DATABASE_URL=${databaseUrl}`,
+    image,'node','dist/server/src/server/admin.js','create-author','smoke-owner@example.invalid','Container fixture owner'],{input:password+'\n'}));
+  await docker(['run','--rm','--name',migration,'--network',network,'--env',`DATABASE_URL=${databaseUrl}`,
+    image,'node','dist/server/src/server/admin.js','bootstrap-owner',created.author,'smoke-owner@example.invalid']);
   await docker(['run', '--detach', '--init', '--name', app, '--network', network,
     '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges:true',
     '--tmpfs', '/tmp:rw,nosuid,size=256m,mode=1777', '--shm-size=256m', '--memory=2g', '--pids-limit=256',
     '--env', `DATABASE_URL=${databaseUrl}`, '--env', 'APP_ORIGIN=http://127.0.0.1:3000',
     '--env', 'ALLOW_INSECURE_LOCAL_HTTP=true', '--env', 'MAIL_MODE=outbox', '--env', 'MAIL_OUTBOX_DIR=/tmp/local-mail',
-    '--env', 'REQUIRE_EMAIL_VERIFICATION=false', '--env', 'REGISTRATION_ENABLED=false', image]);
+    '--env', 'REQUIRE_EMAIL_VERIFICATION=true', '--env', 'REGISTRATION_ENABLED=false', image]);
   console.log('Final image started with a fresh isolated database; no host ports or live configuration.');
   const evidence = await docker(['exec', '--interactive', app, 'node', '--input-type=module', '-'], { input: `
     import assert from 'node:assert/strict';
@@ -89,10 +93,19 @@ try {
     const home = await fetch('http://127.0.0.1:3000/');
     assert.equal(home.status,200); assert.ok(home.headers.get('content-type')?.includes('text/html'));
     assert.match(await home.text(),/OpenScroll/);
+    assert.equal((await fetch('http://127.0.0.1:3000/api/projects/sample')).status,401);
+    const origin='http://127.0.0.1:3000';
+    const login=await fetch(origin+'/api/account/login',{method:'POST',headers:{'content-type':'application/json','x-openscroll-request':'1',origin},
+      body:JSON.stringify({email:'smoke-owner@example.invalid',password:${JSON.stringify(password)}})});
+    assert.equal(login.status,200,'The explicitly bootstrapped fixture owner must sign in.');
+    const session=await login.json();assert.equal(session.author.role,'owner');assert.equal(session.author.approvalStatus,'approved');
+    const cookie=login.headers.get('set-cookie').split(';')[0];
+    const headers={'content-type':'application/json','x-openscroll-request':'1',origin,cookie,'x-csrf-token':session.csrf};
+    assert.equal((await fetch(origin+'/app/',{headers:{cookie}})).status,200);
     const project=sampleProject();
     project.document.course.sections[0].lessons[0].blocks.find(block=>block.type==='paragraph').content.text='CONTAINER-PDF-LATIN Café 中文学习';
     const response=await fetch('http://127.0.0.1:3000/api/projects/pdf',{
-      method:'POST',headers:{'content-type':'application/json'},
+      method:'POST',headers,
       body:JSON.stringify({project,options:{paper:'A4',includeAnswers:false}}),signal:AbortSignal.timeout(60000)
     });
     if (!response.ok) {
@@ -107,7 +120,7 @@ try {
     const bytes=Buffer.from(await response.arrayBuffer());
     assert.equal(bytes.subarray(0,5).toString(),'%PDF-'); assert.ok(bytes.length>1000);
     await writeFile('/tmp/openscroll-container-smoke.pdf',bytes);
-    console.log(JSON.stringify({node:process.versions.node,runtimePackageManagers:'absent',chromium:execFileSync('/usr/bin/chromium',['--version'],{encoding:'utf8'}).trim(),versions,families,pdfBytes:bytes.length}));
+    console.log(JSON.stringify({node:process.versions.node,runtimePackageManagers:'absent',accessGate:'anonymous denied; explicit owner approved',chromium:execFileSync('/usr/bin/chromium',['--version'],{encoding:'utf8'}).trim(),versions,families,pdfBytes:bytes.length}));
   ` });
   const pdf = join(directory, 'container.pdf');
   // Read through exec because Docker's archive/cp API may not expose tmpfs files.

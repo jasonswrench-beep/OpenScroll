@@ -9,7 +9,7 @@ import { exportPdf } from '../src/project/pdf-export.js';
 import { pdfProject } from './helpers/pdf-project.js';
 import { sampleProject } from '../src/project/sample.js';
 import { BLOCK_TEMPLATES } from '../src/shared/block-catalog.js';
-import { buildApp } from '../src/server/app.js';
+import { buildApprovedProjectApp } from './helpers/project-app.js';
 test('static PDF source expands every block family and excludes keys by default without changing authored state',async()=>{
  const project=await pdfProject(),before=structuredClone(project);const learner=pdfHtml(project),key=pdfHtml(project,{paper:'Letter',includeAnswers:true});for(const type of new Set(BLOCK_TEMPLATES.map(t=>t.type)))assert.ok(learner.html.includes(`data-block-type="${type}"`),type);
  for(const text of ['HIDDEN-TAB-CONTENT','FLASHCARD-BACK-CONTENT','AFTER-CONTINUE-CONTENT','END-OF-LONG-CONTENT','Transcript','Timed captions','Attachment text','Narration script'])assert.ok(learner.html.includes(text),text);
@@ -45,7 +45,7 @@ print(json.dumps(result))`,directory],{encoding:'utf8'}));
  }finally{await rm(directory,{recursive:true,force:true});}
 });
 test('PDF API rejects malformed options and snapshots and successfully returns a standalone PDF',async()=>{
- const app=await buildApp({query:async()=>({})});try{for(const payload of [{},{project:sampleProject(),options:{includeAnswers:'yes'}}]){const r=await app.inject({method:'POST',url:'/api/projects/pdf',payload});assert.equal(r.statusCode,422);}const r=await app.inject({method:'POST',url:'/api/projects/pdf',payload:{project:sampleProject(),options:{paper:'A4'}}});assert.equal(r.statusCode,200);assert.match(r.headers['content-type']!,/application\/pdf/);assert.equal(r.rawPayload.subarray(0,5).toString(),'%PDF-');}finally{await app.close();}
+ const app=await buildApprovedProjectApp();try{for(const payload of [{},{project:sampleProject(),options:{includeAnswers:'yes'}}]){const r=await app.inject({method:'POST',url:'/api/projects/pdf',payload});assert.equal(r.statusCode,422);}const r=await app.inject({method:'POST',url:'/api/projects/pdf',payload:{project:sampleProject(),options:{paper:'A4'}}});assert.equal(r.statusCode,200);assert.match(r.headers['content-type']!,/application\/pdf/);assert.equal(r.rawPayload.subarray(0,5).toString(),'%PDF-');}finally{await app.close();}
 });
 test('PDF rendering does not fetch external links or execute text masquerading as scripts',async()=>{
  const {createServer}=await import('node:http');const {prepareBlock}=await import('../src/shared/block-catalog.js');let requests=0;const server=createServer((_req,res)=>{requests++;res.end('private');});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
