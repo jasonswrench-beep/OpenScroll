@@ -32,6 +32,8 @@ installation. It verifies migrations, health, the built application, runtime
 package versions, a real PDF request through system Chromium, embedded fonts,
 and extracted Latin/CJK text. The app runs as its unprivileged user with a
 read-only filesystem. Test resources are removed afterward.
+Chromium and Fontconfig use the image's XDG cache/configuration paths under `/tmp`,
+which must remain writable in read-only deployments.
 
 The `container` CI job builds and tests the final image, then uses pinned Trivy
 0.76.1 to scan all installed OS and Node packages. It retains the complete JSON

@@ -26,6 +26,8 @@ RUN --mount=type=secret,id=proxy_ca \
 # Dependency installation happens only in the build stage; runtime invokes node directly.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
+# Chromium and Fontconfig must write only to the writable /tmp mount in read-only deployments.
+ENV XDG_CACHE_HOME=/tmp/openscroll-cache XDG_CONFIG_HOME=/tmp/openscroll-config
 COPY --from=build --chown=node:node /app/package.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist

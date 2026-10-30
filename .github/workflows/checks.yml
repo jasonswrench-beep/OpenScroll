@@ -57,10 +57,13 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y poppler-utils
       - name: Build final application image
+        id: image
         run: docker build --pull --tag openscroll:ci .
       - name: Test final image with an isolated database and Chromium
         run: node tools/container-smoke.mjs openscroll:ci
       - name: Scan final image including installed OS and application packages
+        id: scan
+        if: always() && steps.image.outcome == 'success'
         run: |
           mkdir -p .local/container-checks
           docker run --rm \
@@ -70,6 +73,7 @@ jobs:
             image --image-src docker --scanners vuln --pkg-types os,library --list-all-pkgs \
             --format json --output /reports/trivy.json --exit-code 0 openscroll:ci
       - name: Report all findings and reject fixable high or critical vulnerabilities
+        if: always() && steps.scan.outcome == 'success'
         run: node tools/report-container-scan.mjs .local/container-checks/trivy.json
       - name: Preserve complete final-image vulnerability inventory
         if: always()
