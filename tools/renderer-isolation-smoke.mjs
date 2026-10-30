@@ -24,7 +24,9 @@ function command(file,args,{input,timeout=20000,maxBuffer=1024*1024,env=process.
     child.stdin.on('error',()=>{});child.stdin.end(input);
   });
 }
-const docker=(args,options={})=>command('docker',['--host=unix:///var/run/docker.sock',...args],{...options,env:dockerEnv});
+const proxyKeys=['HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY','http_proxy','https_proxy','all_proxy','no_proxy'];
+const emptyProxies=proxyKeys.flatMap(key=>['--env',key+'=']);
+const docker=(args,options={})=>command('docker',['--host=unix:///var/run/docker.sock',...(args[0]==='run'?['run',...emptyProxies,...args.slice(1)]:args)],{...options,env:dockerEnv});
 async function removeContainer(name){await docker(['rm','--force',name]);containers.delete(name);}
 function pass(name,evidence){results.push({name,...evidence});console.log('PASS: '+name+(evidence?' '+JSON.stringify(evidence):''));}
 function frame(request){const body=Buffer.from(JSON.stringify(request)),out=Buffer.alloc(body.length+4);out.writeUInt32BE(body.length);body.copy(out,4);return out;}
@@ -84,6 +86,8 @@ try{
   assert.ok(!(helperInfo.Config.Env??[]).some(value=>/^(DATABASE_URL|SMTP_|SESSION_|MAIL_|APP_ORIGIN|ACCESS_REQUEST_NOTIFY_EMAIL|COOKIE_SECRET|NODE_OPTIONS)/.test(value)),'The controlled Node helper image must contain no credential or startup-hook keys');
   await worker('without-init',undefined,true);pass('startup fails closed without Docker init in a private PID namespace');
   const normal=await worker('normal');const info=await inspect(normal.name),host=info.HostConfig;
+  const actualEnv=Object.fromEntries(info.Config.Env.map(value=>[value.slice(0,value.indexOf('=')),value.slice(value.indexOf('=')+1)]));
+  for(const key of proxyKeys)assert.equal(actualEnv[key],'','Renderer proxies must be explicitly empty: '+key);
   assert.equal(host.NetworkMode,'none');assert.equal(host.ReadonlyRootfs,true);assert.equal(host.Privileged,false);assert.equal(host.Init,true);
   assert.deepEqual(host.CapAdd.map(value=>value.replace(/^CAP_/, '')).sort(),['KILL','SETGID','SETUID']);assert.ok(host.CapDrop.includes('ALL'));assert.ok(host.SecurityOpt.some(value=>value.includes('no-new-privileges')));
   assert.equal(host.Memory,1024**3);assert.equal(host.MemorySwap,1024**3);assert.equal(host.NanoCpus,1e9);assert.equal(host.PidsLimit,256);assert.equal(host.ShmSize,256*1024**2);assert.equal(host.IpcMode,'private');
@@ -138,14 +142,15 @@ try{
 
   const paused=await worker('paused','paused-job.mjs'),pending=exchange(paused.path,frame({html,paper:'Letter'}),{timeout:47000});
   let processes=[];for(let i=0;i<200;i++){
-    try{processes=JSON.parse(await readFile(join(paused.root,'renderer-os-probe.json'),'utf8'));if(processes.some(p=>p.args.includes('--type=renderer')))break;}catch{}
+    try{processes=JSON.parse(await readFile(join(paused.root,'renderer-os-probe.json'),'utf8'));if(processes.some(p=>p.cdpType==='renderer'))break;}catch{}
     let diagnostic;try{diagnostic=await readFile(join(paused.root,'renderer-probe-error.json'),'utf8');}catch{}if(diagnostic)throw new Error('Disposable paused fixture: '+diagnostic);
     await pause(100);
   }
-  assert.ok(processes.some(p=>p.args.includes('--type=renderer')),'Actual Chromium renderer was not observed');
+  if(!processes.some(p=>p.cdpType==='renderer'))console.error('Observed browser process metadata:',JSON.stringify(processes));
+  assert.ok(processes.some(p=>p.cdpType==='renderer'),'Actual browser renderer PID was not observed through CDP and /proc');
   // Debian's Chromium wrapper adds its own Google-build and D-Bus variable names.
-  const browserEnvKeys=new Set(['HOME','PATH','TMPDIR','LANG','LC_ALL','XDG_CACHE_HOME','XDG_CONFIG_HOME','PWD','CHROME_DESKTOP','CHROME_WRAPPER','CHROME_VERSION_EXTRA','CHROMIUM_FLAGS','GOOGLE_API_KEY','GOOGLE_DEFAULT_CLIENT_ID','GOOGLE_DEFAULT_CLIENT_SECRET','DBUS_SESSION_BUS_ADDRESS']);
-  for(const processInfo of processes){assert.ok(processInfo.Uid.split(/\s+/).every(v=>v==='65532'));assert.ok(processInfo.Gid.split(/\s+/).every(v=>v==='65532'));assert.equal(processInfo.Groups,'');for(const key of ['CapInh','CapPrm','CapEff','CapAmb'])assert.match(processInfo[key],/^0+$/);assert.equal(processInfo.NoNewPrivs,'1');assert.equal(processInfo.Seccomp,'2');for(const key of processInfo.envKeys)assert.ok(browserEnvKeys.has(key),'Unexpected browser environment key: '+key);}
+  const browserEnvKeys=new Set(['HOME','PATH','TMPDIR','LANG','LC_ALL','XDG_CACHE_HOME','XDG_CONFIG_HOME','PWD','CHROME_DESKTOP','CHROME_WRAPPER','CHROME_VERSION_EXTRA','CHROMIUM_FLAGS','GOOGLE_API_KEY','GOOGLE_DEFAULT_CLIENT_ID','GOOGLE_DEFAULT_CLIENT_SECRET','DBUS_SESSION_BUS_ADDRESS','FC_FONTATIONS']);
+  for(const processInfo of processes){assert.ok(processInfo.Uid.split(/\s+/).every(v=>v==='65532'));assert.ok(processInfo.Gid.split(/\s+/).every(v=>v==='65532'));assert.equal(processInfo.Groups,'');for(const key of ['CapInh','CapPrm','CapEff','CapAmb'])assert.match(processInfo[key],/^0+$/);assert.equal(processInfo.NoNewPrivs,'1');assert.equal(processInfo.Seccomp,'2');for(const key of processInfo.envKeys)assert.ok(browserEnvKeys.has(key),'Unexpected browser environment key: '+key);if(processInfo.envKeys.includes('FC_FONTATIONS'))assert.equal(processInfo.fontationsEnabled,true,'Chrome may add only its fixed public Fontations flag.');}
   assert.ok(processes.some(p=>p.args.includes('--no-sandbox')),'Explicit Chromium sandbox fallback should be recorded');
   assert.ok(processes.some(p=>p.envReadable&&p.envKeys.includes('PATH')),'Actual Chromium environment keys must be observed, not inferred');
   assert.equal(response(await pending.result).status,0);pass('actual production Chromium process boundary',{processes});await removeContainer(paused.name);

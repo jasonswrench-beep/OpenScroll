@@ -3,6 +3,7 @@ import type { Browser } from 'playwright-core';
 import type { PdfRenderRequest } from '../project/pdf-protocol.js';
 import { assertBrowserIdentity } from './identity.js';
 import { validPdf } from './framing.js';
+import { BROWSER_EXECUTABLE_PATH, checkInstalledBrowser } from './browser.js';
 
 /** Fixed rendering policy; no caller-supplied paths, launch flags or environment. */
 export async function renderPdf(request: PdfRenderRequest): Promise<Buffer> {
@@ -10,8 +11,10 @@ export async function renderPdf(request: PdfRenderRequest): Promise<Buffer> {
   const directory = await mkdtemp('/tmp/openscroll-renderer-');
   let browser: Browser | undefined;
   try {
+    const browserEnv = { PATH: '/usr/bin:/bin', HOME: directory, TMPDIR: directory, XDG_CACHE_HOME: directory + '/cache', XDG_CONFIG_HOME: directory + '/config', LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' };
+    await checkInstalledBrowser(browserEnv);
     const { chromium } = await import('playwright-core');
-    browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, chromiumSandbox: false, timeout: 15_000, args: ['--disable-dev-shm-usage'], env: { PATH: '/usr/bin:/bin', HOME: directory, TMPDIR: directory, XDG_CACHE_HOME: directory + '/cache', XDG_CONFIG_HOME: directory + '/config', LANG: 'C.UTF-8', LC_ALL: 'C.UTF-8' } });
+    browser = await chromium.launch({ executablePath: BROWSER_EXECUTABLE_PATH, headless: true, chromiumSandbox: false, timeout: 15_000, args: ['--disable-dev-shm-usage'], env: browserEnv });
     const context = await browser.newContext({ javaScriptEnabled: false, serviceWorkers: 'block', offline: true });
     await context.route('**/*', route => route.abort());
     const page = await context.newPage(); page.setDefaultTimeout(20_000);
