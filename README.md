@@ -18,6 +18,7 @@ Steps 1–12 are implemented; Step 13 production preparation is available, with 
 - [Step 12 validation results](docs/STEP-12-VALIDATION.md)
 - [Assessments and completion](docs/ASSESSMENTS-AND-COMPLETION.md)
 - [PDF publishing](docs/PDF-PUBLISHING.md)
+- [Separate PDF renderer boundary and operator guide](docs/RENDERER-ISOLATION.md)
 - [Step 11 validation results](docs/STEP-11-VALIDATION.md)
 - [SCORM publishing and Brightspace checks](docs/SCORM-PUBLISHING.md)
 - [Step 10 validation results](docs/STEP-10-VALIDATION.md)
@@ -48,3 +49,5 @@ Initial production hosting is planned for a Hostinger VPS. Accessibility, origin
 Apache License 2.0. See [LICENSE](LICENSE).
 
 Hosted authoring requires verified email and approval from that installation’s owner. The public homepage links to independent self-hosting; see [instance access and owner activation](docs/INSTANCE-ACCESS.md). No central approval service is required.
+
+PDF generation runs in a separate credential-free container with no network access, bounded resources and a supervisor deadline. The app has no in-process browser fallback. Review [renderer isolation and its limits](docs/RENDERER-ISOLATION.md) before enabling PDF publishing.

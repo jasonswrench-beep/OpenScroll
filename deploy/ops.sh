@@ -10,17 +10,17 @@ if [ "$#" -gt 0 ]; then shift; fi
 case "$command" in
  init) exec python3 "$root/deploy/configure.py" ;;
  config) compose config --quiet ;;
- start) compose up -d --no-build --wait db migrate app ;;
+ start) compose up -d --no-build --wait db migrate renderer app ;;
  upgrade)
   "$0" backup
-  compose stop app
+  compose stop app renderer
   compose run --rm --no-deps migrate
-  compose up -d --no-build --wait db migrate app
+  compose up -d --no-build --wait db migrate renderer app
   ;;
  edge) compose --profile edge up -d --no-build --wait ;;
  stop) compose --profile edge stop ;;
  status) compose --profile edge ps ;;
- logs) compose logs --tail 100 app migrate ;;
+ logs) compose logs --tail 100 app migrate renderer ;;
  mail-check) compose run --rm --no-deps -T app node dist/server/src/server/mail-check.js ;;
  admin) compose run --rm --no-deps -T app node dist/server/src/server/admin.js "$@" ;;
  backup)
