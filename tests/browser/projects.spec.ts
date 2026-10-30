@@ -22,6 +22,7 @@ test('author opens starter, edits title, downloads and reopens a portable projec
   expect(project.document.assets).toHaveLength(1);
   await page.reload();
   await expect(page.locator('#project-details')).toBeHidden();
+  await expect(page.locator('#authoring-content')).toBeVisible();
   await page.getByLabel('Open an .openscroll project').setInputFiles({name:'reopened.openscroll',mimeType:'application/x-openscroll-project',buffer:originalBytes});
   await expect(title).toHaveValue('My portable course');
   expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);

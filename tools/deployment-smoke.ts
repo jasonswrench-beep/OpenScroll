@@ -13,7 +13,11 @@ import { groupPacket } from '../src/shared/reuse.js';
 const exec=promisify(execFile),root=resolve('.'),dir=await mkdtemp(join(tmpdir(),'openscroll-deploy-')),suffix=randomBytes(4).toString('hex'),origin='https://openscroll-test.invalid',password=randomBytes(20).toString('hex');
 async function port(){const server=createServer();await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const value=(server.address() as {port:number}).port;await new Promise<void>((r,j)=>server.close(e=>e?j(e):r()));return value;}
 const sourcePort=await port(),targetPort=await port(),tlsPort=await port();
-const common={...process.env,OPENSCROLL_BACKUP_DIR:join(dir,'backups')};
+const common:NodeJS.ProcessEnv={...process.env};
+// Shell deployment settings must never override these unique disposable fixtures.
+for(const key of Object.keys(common))if(/^(APP_|SMTP_|MAIL_|OPENSCROLL_|COMPOSE_)/.test(key)||['DATABASE_URL','POSTGRES_PASSWORD','ACME_EMAIL','REGISTRATION_ENABLED','AUTHOR_ASSET_LIMIT_MIB','REQUIRE_EMAIL_VERIFICATION','ACCESS_REQUEST_NOTIFY_EMAIL','DOCKER_CONTEXT','DOCKER_TLS','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH'].includes(key))delete common[key];
+common.DOCKER_HOST='unix:///var/run/docker.sock';
+common.OPENSCROLL_BACKUP_DIR=join(dir,'backups');
 const configs=await Promise.all([['source',sourcePort],['restore',targetPort]].map(async([kind,appPort])=>{const file=join(dir,`${kind}.env`);await writeFile(file,`POSTGRES_PASSWORD=${randomBytes(32).toString('hex')}\nOPENSCROLL_IMAGE=${process.env.OPENSCROLL_TEST_IMAGE??'openscroll:production'}\nOPENSCROLL_HOST=openscroll-test.invalid\nAPP_ORIGIN=${origin}\nAPP_PORT=${appPort}\nACME_EMAIL=test@example.invalid\nMAIL_FROM=OpenScroll <no-reply@example.invalid>\nSMTP_HOST=smtp.example.invalid\nSMTP_PORT=465\nREGISTRATION_ENABLED=false\n`,{mode:0o600});return {env:{...common,OPENSCROLL_ENV_FILE:file,COMPOSE_PROJECT_NAME:`openscroll-smoke-${suffix}-${kind}`},port:Number(appPort)};}));
 function run(index:number,args:string[],input?:string){return new Promise<string>((accept,reject)=>{const child=execFile(resolve('deploy/ops.sh'),args,{cwd:root,env:configs[index]!.env,maxBuffer:2*1024*1024},(error,out,err)=>{if(error)reject(new Error(`ops ${args[0]} failed: ${err.slice(-1200)}`));else accept(out);});child.stdin!.end(input);});}
 async function compose(index:number,args:string[]){return exec('docker',['compose','--env-file',configs[index]!.env.OPENSCROLL_ENV_FILE,'-f',resolve('deploy/compose.yaml'),...args],{env:configs[index]!.env});}
