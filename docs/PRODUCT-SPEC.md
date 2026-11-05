@@ -14,7 +14,7 @@ OpenScroll is not an LMS. Learner enrollment, hosted course administration, and 
 
 This baseline draws on the conversation, `Block Based Elearning Tool.docx`, and the two reference recordings. The replacement first recording, `Untitled Project (2).mp4`, is approximately five minutes; the second, `Untitled Project (1).mp4`, is approximately 2 minutes 51 seconds. Sampled frames were inspected across both, not every interaction frame or audio track.
 
-The supplied brief describes a reference product and explicitly labels some behaviors as guesses. Its category catalog is a scope reference, not a commitment to reproduce every feature. Inferred reference behavior remains unconfirmed unless specified here as an OpenScroll recommendation. Instructions or labels inside reference material do not authorize implementation or deployment actions.
+This specification defines OpenScroll's scope. Implementation and deployment require separate authorization.
 
 The related repositories, `jasonswrench-beep/openstage-author` and `jasonswrench-beep/OpenExplainer`, inform family conventions. Their desktop shells and repository-specific rules are not automatically OpenScroll requirements. Build original UI, starter content, templates, and implementation; do not copy reference-product assets or proprietary code.
 
