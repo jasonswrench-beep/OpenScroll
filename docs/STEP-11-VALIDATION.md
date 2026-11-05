@@ -14,7 +14,7 @@ A Chromium capability probe demonstrated a marked structure tree, document langu
 
 Generated-course checks use pypdf 6.10.0 and Poppler to verify tagging, H1/H3/Figure roles, original image alt text, language, bookmarks, link annotations, all expanded content, learner/key separation, both page sizes and page numbering. Poppler's logical structure text confirms the order of tab content, flashcard backs and later-lesson content. Representative cover, media/body, question and long-text pages were rasterized and visually inspected. Text bounding boxes fall within safe page bounds; long paragraphs preserve their ending marker rather than clipping or silently truncating. Short question/key blocks are kept together when they fit.
 
-These checks establish useful tagged output and visible/structural quality, **not PDF/UA or WCAG certification**. No PDF/UA identifier is asserted. Manual screen-reader and a desktop PDF program/PAC-style conformance checks remain pending; authors still need meaningful alternative text and transcripts. Languages/fonts beyond the inspected samples require target-publication review.
+These checks establish useful tagged output and visible/structural quality, **not PDF/UA or WCAG certification**. No PDF/UA identifier is asserted. Manual screen-reader and desktop PDF/UA conformance checks remain pending; authors still need meaningful alternative text and transcripts. Languages/fonts beyond the inspected samples require target-publication review.
 
 ## Automated checks
 

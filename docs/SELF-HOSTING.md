@@ -4,7 +4,7 @@ Step 13 supplies a tested independent Docker installation, operator controls, co
 
 ## Intended Hostinger installation
 
-Jason confirmed that OpenScroll will share the existing VPS with the book-publishing site and other applications. Keep the product name OpenScroll; the public subdomain will be selected and pointed at the app later. Inspect existing workloads and proxy routes before installing anything. Do not take over ports 80/443 or replace the existing proxy. Plan a private localhost port and a separate database volume until the hostname is chosen. The current managed session reports no attached VPS credentials, Hostinger tools, VPN or TCP destination grants; live inspection is pending connection setup.
+Jason confirmed that OpenScroll will share the existing VPS with an existing book-publishing site and other applications. Keep the product name OpenScroll; the public subdomain will be selected and pointed at the app later. Inspect existing workloads and proxy routes before installing anything. Do not take over ports 80/443 or replace the existing proxy. Plan a private localhost port and a separate database volume until the hostname is chosen. The current managed session reports no attached VPS credentials, Hostinger tools, VPN or TCP destination grants; live inspection is pending connection setup.
 
 ## Requirements and boundaries
 

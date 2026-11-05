@@ -118,7 +118,7 @@ Implementation, local harness checks, and user acceptance of both Revision 4 edi
 - [x] Map every block to meaningful static content; add answer inclusion option.
 - [x] Verify representative output visually and with PDF structural/logical-text inspection.
 
-Gate: complete, legible tagged output with documented evidence and limits. Chromium capability/output checks verify tags, language, heading structure, image alt text, bookmarks and reading content. Screen-reader/a desktop PDF program/PAC checks and PDF/UA certification are not claimed. See [PDF guide](PDF-PUBLISHING.md) and [Step 11 validation](STEP-11-VALIDATION.md).
+Gate: complete, legible tagged output with documented evidence and limits. Chromium capability/output checks verify tags, language, heading structure, image alt text, bookmarks and reading content. Screen-reader and desktop PDF/UA checker results and PDF/UA certification are not claimed. See [PDF guide](PDF-PUBLISHING.md) and [Step 11 validation](STEP-11-VALIDATION.md).
 
 ## 12. Themes and reusable content
 
