@@ -1,5 +1,7 @@
 # OpenScroll
 
+[Roadmap & Feature Requests](https://app.productbridge.io/widget/784db895-cb64-45f4-9bde-4645df4aa083?tab=roadmap)
+
 <img src="src/assets/openscroll.svg" width="96" height="96" alt="OpenScroll official icon">
 
 An open-source, web-based tool for authoring responsive, block-based eLearning courses. Part of the OpenStage product family.
