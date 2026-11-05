@@ -16,7 +16,7 @@ This baseline draws on the conversation, `Block Based Elearning Tool.docx`, and 
 
 This specification defines OpenScroll's scope. Implementation and deployment require separate authorization.
 
-The related repositories, `jasonswrench-beep/openstage-author` and `jasonswrench-beep/OpenExplainer`, inform family conventions. Their desktop shells and repository-specific rules are not automatically OpenScroll requirements. Build original UI, starter content, templates, and implementation; do not copy reference-product assets or proprietary code.
+The related repositories, `jasonswrench-beep/openstage-author` and `jasonswrench-beep/OpenExplainer`, inform family conventions. Their desktop shells and repository-specific rules are not automatically OpenScroll requirements. Build original UI, starter content, templates, and implementation; do not copy assets or code from other software.
 
 ## Recommended family principles
 
@@ -90,7 +90,7 @@ Autosave must expose pending, saving, saved, and failed states and protect edits
 
 ## Deferred scope
 
-AI assistance and text import; question banks; review comments; co-authoring; localization; suite integrations; custom scripting. AI must not be required for manual authoring. The full reference-product feature catalog is not the first-release acceptance checklist.
+AI assistance and text import; question banks; review comments; co-authoring; localization; suite integrations; custom scripting. AI must not be required for manual authoring. A full feature catalog is not the first-release acceptance checklist.
 
 ## Decisions to resolve at the relevant implementation step
 

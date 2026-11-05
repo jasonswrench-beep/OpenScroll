@@ -16,4 +16,4 @@ The Node.js container runtime includes its own license and third-party notices.
 See docs/DEPENDENCIES.md and package-lock.json for the dependency inventory.
 
 Bundled starter illustrations, starter text, and synthetic tone/video test fixtures
-are original OpenScroll material. No proprietary reference-product assets are included.
+are original OpenScroll material. No assets from other software are included.
