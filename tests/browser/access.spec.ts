@@ -83,15 +83,18 @@ test('requesting and verifying an account leaves authoring pending until an owne
   await page.goto('/account/');
   await page.locator('#register-name').fill('Pending browser author');
   await page.locator('#register-email').fill(email);
-  await page.locator('#register-password').fill(password);
+  await expect(page.locator('#register-password')).toBeHidden();
   await page.getByRole('button', { name: 'Request account', exact: true }).click();
   await expect(page.locator('#account-status')).toContainText(/verification|verify|email/i);
   const link = await verificationLink(email);
   // Existing links issued at the site root must continue to reach the account flow.
   await page.goto('/' + link.hash);
   await expect(page).toHaveURL(/\/account\//);
-  await expect(page.locator('#account-status')).toContainText(/verified/i);
+  await expect(page.locator('#verify-form')).toBeVisible();
   expect(page.url()).not.toContain('#verify=');
+  await page.locator('#verify-password').fill(password);
+  await page.getByRole('button',{name:'Verify email',exact:true}).click();
+  await expect(page.locator('#account-status')).toContainText(/verified/i);
   await signIn(page, email);
   await expect(page.locator('#account-access')).toHaveAttribute('data-approval-status', 'pending');
   await expect(page.locator('#open-authoring')).toBeHidden();

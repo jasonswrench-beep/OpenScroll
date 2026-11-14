@@ -108,12 +108,25 @@ test('accounts and private library against isolated PostgreSQL schema',async t =
       try {
         const headers={'x-openscroll-request':'1',origin:config.origin};
         const send=(url:string,payload:object) => verifiedApp.inject({method:'POST',url,headers,payload});
-        assert.equal((await send('/api/account/register',{email:'verify@example.invalid',name:'Verify',password})).statusCode,200);
-        assert.equal((await send('/api/account/login',{email:'verify@example.invalid',password})).statusCode,401);
-        const raw=messages.at(-1)!.text.match(/#verify=([a-f0-9]{64})/)![1]!;
-        assert.equal((await send('/api/account/verify',{token:raw})).statusCode,200);
-        assert.equal((await send('/api/account/verify',{token:raw})).statusCode,400);
-        assert.equal((await send('/api/account/login',{email:'verify@example.invalid',password})).statusCode,200);
+        const email='verify@example.invalid';
+        const initialPassword='initial unverified password';
+        const duplicatePassword='different unverified password';
+        assert.equal((await send('/api/account/register',{email,name:'Verify',password:initialPassword})).statusCode,200);
+        const firstToken=messages.at(-1)!.text.match(/#verify=([a-f0-9]{64})/)![1]!;
+        assert.equal((await send('/api/account/register',{email,name:'Verify',password:duplicatePassword})).statusCode,200);
+        assert.equal((await send('/api/account/login',{email,password:initialPassword})).statusCode,401);
+        await pool.query("UPDATE account_tokens SET expires_at=now()-interval '1 second' WHERE author_id=(SELECT id FROM authors WHERE email=$1)",[email]);
+        assert.equal((await send('/api/account/verify',{token:firstToken,password})).statusCode,400);
+        assert.equal((await send('/api/account/resend-verification',{email})).statusCode,200);
+        const token=messages.at(-1)!.text.match(/#verify=([a-f0-9]{64})/)![1]!;
+        assert.equal((await send('/api/account/verify',{token})).statusCode,400);
+        const results=await Promise.all([0,1].map(()=>send('/api/account/verify',{token,password})));
+        assert.deepEqual(results.map(result=>result.statusCode).sort(),[200,400]);
+        assert.equal((await send('/api/account/login',{email,password:initialPassword})).statusCode,401);
+        assert.equal((await send('/api/account/login',{email,password:duplicatePassword})).statusCode,401);
+        const login=await send('/api/account/login',{email,password});
+        assert.equal(login.statusCode,200);
+        assert.equal(login.json().author.approvalStatus,'pending');
       }finally{await verifiedApp.close();}
       const closed=await buildApp(runtimePool,undefined,{pool:runtimePool,config:{...config,registration:false},mailer:async () => {}});
       try {assert.equal((await closed.inject({method:'POST',url:'/api/account/register',headers:{'x-openscroll-request':'1'},payload:{email:'closed@example.invalid',name:'Closed',password}})).statusCode,403);}

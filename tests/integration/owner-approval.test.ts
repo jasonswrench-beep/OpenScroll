@@ -44,7 +44,7 @@ test('an empty instance never treats its first registrant as an approved author 
     const account=(await pool.query('SELECT role,approval_status FROM authors')).rows[0];
     assert.deepEqual(account,{role:'author',approval_status:'pending'});
     const token=messages[0]!.text.match(/#verify=([a-f0-9]{64})/)![1]!;
-    assert.equal((await send('POST','/api/account/verify',{token})).statusCode,200);
+    assert.equal((await send('POST','/api/account/verify',{token,password})).statusCode,200);
     const login=await send('POST','/api/account/login',{email:'first@example.invalid',password});assert.equal(login.statusCode,200);
     assert.equal((await send('GET','/api/projects/sample',undefined,sessionOf(login))).statusCode,403);
     assert.equal((await send('GET','/api/owner/accounts',undefined,sessionOf(login))).statusCode,403);
@@ -72,8 +72,8 @@ test('approval gates every author API and owner decisions revoke stale credentia
       assert.equal(messages.filter(message=>message.to===config.accessRequestNotifyEmail).length,0);
       assert.equal((await send('POST','/api/account/login',{email:applicant,password})).statusCode,401);
       const verification=messages.find(message=>message.to===applicant)!.text.match(/#verify=([a-f0-9]{64})/)![1]!;
-      assert.equal((await send('POST','/api/account/verify',{token:verification})).statusCode,200);
-      assert.equal((await send('POST','/api/account/verify',{token:verification})).statusCode,400);
+      assert.equal((await send('POST','/api/account/verify',{token:verification,password})).statusCode,200);
+      assert.equal((await send('POST','/api/account/verify',{token:verification,password})).statusCode,400);
       const logins=await Promise.all([0,1].map(()=>send('POST','/api/account/login',{email:applicant,password})));
       for(const response of logins){assert.equal(response.statusCode,200);assert.equal(response.json().author.approvalStatus,'pending');assert.equal(response.json().author.role,'author');assert.equal(response.json().author.verified,true);}
       pending=sessionOf(logins[0]!);
@@ -255,7 +255,7 @@ test('owner notices retry failed delivery and mark success only after delivery w
   try {
     assert.equal((await send('POST','/api/account/register',{email,name:'Notice applicant',password})).statusCode,200);
     const raw=messages[0]!.text.match(/#verify=([a-f0-9]{64})/)![1]!;
-    assert.equal((await send('POST','/api/account/verify',{token:raw})).statusCode,200);
+    assert.equal((await send('POST','/api/account/verify',{token:raw,password})).statusCode,200);
     for(let n=0;n<2;n++)assert.equal((await send('POST','/api/account/login',{email,password})).statusCode,200);
     assert.equal(attempts,1);
     const account=(await pool.query('SELECT id,approval_status,role,access_notified_at FROM authors WHERE email=$1',[email])).rows[0];

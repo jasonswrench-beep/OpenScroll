@@ -26,6 +26,7 @@ x-runtime-environment: &runtime-environment
     SMTP_PASSWORD: ${SMTP_PASSWORD:-}
 services:
   db:
+    networks: [internal]
     image: postgres:17.11-bookworm@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
     command: [postgres, -c, hba_file=/etc/postgresql/openscroll-pg-hba.conf]
     restart: unless-stopped
@@ -41,6 +42,7 @@ services:
       retries: 20
     logging: *logging
   provision:
+    networks: [internal]
     <<: *image
     command: [node, dist/server/src/server/provision.js, --from-env]
     environment:
@@ -55,6 +57,7 @@ services:
     depends_on:
       db: {condition: service_healthy}
   migrate:
+    networks: [internal]
     <<: *image
     command: [node, dist/server/src/server/migrate.js]
     environment:
@@ -67,6 +70,7 @@ services:
       db: {condition: service_healthy}
       provision: {condition: service_completed_successfully}
   maintenance:
+    networks: [internal]
     <<: *image
     profiles: [operations]
     command: [node, dist/server/src/server/admin.js]
@@ -115,6 +119,7 @@ services:
     stop_grace_period: 5s
     logging: *logging
   app:
+    networks: [edge, internal]
     <<: *image
     environment: *runtime-environment
     restart: unless-stopped
@@ -139,11 +144,12 @@ services:
       renderer: {condition: service_healthy}
     stop_grace_period: 45s
   edge:
+    networks: [edge]
     image: caddy:2.10.2-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
     profiles: [edge]
     restart: unless-stopped
     environment:
-      NO_PROXY: "${NO_PROXY:-localhost,127.0.0.1,::1},app,db"
+      NO_PROXY: "${NO_PROXY:-localhost,127.0.0.1,::1},app"
       OPENSCROLL_HOST: ${OPENSCROLL_HOST:?Set the hostname}
       ACME_EMAIL: ${ACME_EMAIL:?Set certificate contact email}
     ports: ["${HTTPS_BIND:-0.0.0.0}:80:80", "${HTTPS_BIND:-0.0.0.0}:443:443"]
@@ -151,6 +157,10 @@ services:
     depends_on:
       app: {condition: service_healthy}
     logging: *logging
+networks:
+  edge:
+  internal:
+    internal: true
 volumes:
   renderer_socket:
   database:
