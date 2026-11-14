@@ -34,15 +34,28 @@ export async function accountRoutes(app:FastifyInstance,services:AccountServices
   const notify=async(id:string)=>{try{await enqueueAccessRequestNotification(services,id);}catch{console.error('An access request notification could not be queued. Review pending accounts.');}};
   const issueToken=async(author:Author,purpose:'reset'|'verify')=>{
     const raw=randomToken();
-    await pool.query("INSERT INTO account_tokens(token_hash,author_id,purpose,expires_at) VALUES ($1,$2,$3,now()+interval '30 minutes')",[tokenHash(raw),author.id,purpose]);
-    try{await mailer({to:author.email,subject:purpose==='reset'?'Reset your OpenScroll password':'Verify your OpenScroll email',text:`Open this link within 30 minutes:\n${config.origin}/account/#${purpose}=${raw}\nIf you did not request this, ignore this email.`});}
+    const client=await pool.connect();
+    try{
+      await client.query('BEGIN');
+      const current=(await client.query<Author>('SELECT * FROM authors WHERE id=$1 FOR UPDATE',[author.id])).rows[0];
+      if(!current||current.disabled_at||current.approval_status==='revoked'||current.verified!==(purpose==='reset')){
+        await client.query('ROLLBACK');
+        return;
+      }
+      await client.query("INSERT INTO account_tokens(token_hash,author_id,purpose,expires_at) VALUES ($1,$2,$3,now()+interval '30 minutes')",[tokenHash(raw),author.id,purpose]);
+      await client.query('COMMIT');
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    try{await mailer({to:author.email,subject:purpose==='reset'?'Reset your OpenScroll password':'Verify your OpenScroll email and choose a password',text:`Open this link within 30 minutes:\n${config.origin}/account/#${purpose}=${raw}\nIf you did not request this, ignore this email.`});}
     catch{await pool.query('DELETE FROM account_tokens WHERE token_hash=$1',[tokenHash(raw)]);console.error('An account email could not be delivered. Check mail configuration.');}
   };
   const authRate={config:{rateLimit:{max:10,timeWindow:'15 minutes',groupId:'account-auth'}}};
   app.get('/account/session',async request=>({author:request.author?accountView(request.author):null,csrf:request.author?.csrf??null,registrationEnabled:config.registration,verificationRequired:config.requireVerification}));
   app.post('/account/register',authRate,async request=>{
     if(!config.registration)throw new HttpError(403,'Access requests are closed on this instance.');
-    const data=body(z.strictObject({email,password,name:z.string().trim().min(1).max(100)}),request.body),hashed=await hashPassword(data.password);
+    const name=z.string().trim().min(1).max(100);
+    const data=body(z.strictObject({email,name,password:config.requireVerification?password.optional():password}),request.body);
+    // Verified signup stores an unusable placeholder until the inbox owner sets a password.
+    const hashed=config.requireVerification?'':await hashPassword(data.password!);
     const result=await pool.query<Author>('INSERT INTO authors(id,email,display_name,password_hash,verified) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(email) DO NOTHING RETURNING *',[randomUUID(),data.email,data.name,hashed,!config.requireVerification]);
     const author=result.rows[0];
     if(author){if(config.requireVerification)await issueToken(author,'verify');else await notify(author.id);}
@@ -51,7 +64,7 @@ export async function accountRoutes(app:FastifyInstance,services:AccountServices
   app.post('/account/login',authRate,async(request,reply)=>{
     const data=body(z.strictObject({email,password:z.string().min(1).max(128)}),request.body);
     const author=(await pool.query<Author>('SELECT * FROM authors WHERE email=$1',[data.email])).rows[0];
-    const valid=await verifyPassword(data.password,author?.password_hash??dummy);
+    const valid=await verifyPassword(data.password,author?.verified?author.password_hash:dummy);
     if(!valid||!author||!author.verified||author.disabled_at||author.approval_status==='revoked')throw new HttpError(401,'Sign-in failed. Check your details, verify your email, and contact this instance owner if access was revoked.');
     const raw=randomToken(),csrf=randomToken(),client=await pool.connect();let current:Author;
     try{
@@ -100,17 +113,19 @@ export async function accountRoutes(app:FastifyInstance,services:AccountServices
     clear(reply);return {message:'Password changed. Sign in with your new password. Approval and email verification are unchanged.'};
   });
   app.post('/account/verify',recoveryRate,async request=>{
-    const data=body(z.strictObject({token}),request.body),client=await pool.connect();let id:string;
+    const data=body(z.strictObject({token,password}),request.body),hashed=await hashPassword(data.password),client=await pool.connect();let id:string;
     try{
       await client.query('BEGIN');
       const found=(await client.query("SELECT author_id FROM account_tokens WHERE token_hash=$1 AND purpose='verify' AND expires_at>now()",[tokenHash(data.token)])).rows[0];
       if(!found)throw new HttpError(400,'This verification link is invalid or expired. Request another email.');
-      await client.query('SELECT id FROM authors WHERE id=$1 FOR UPDATE',[found.author_id]);
+      const author=(await client.query<Author>('SELECT * FROM authors WHERE id=$1 FOR UPDATE',[found.author_id])).rows[0];
+      if(!author||author.verified||author.disabled_at||author.approval_status==='revoked')throw new HttpError(400,'This verification link is invalid or expired. Request another email.');
       const consumed=await client.query("DELETE FROM account_tokens WHERE token_hash=$1 AND purpose='verify' AND expires_at>now() RETURNING author_id",[tokenHash(data.token)]);
       if(!consumed.rowCount)throw new HttpError(400,'This verification link is invalid or expired. Request another email.');
       id=found.author_id;
-      await client.query('UPDATE authors SET verified=true WHERE id=$1',[id]);
-      await client.query("DELETE FROM account_tokens WHERE author_id=$1 AND purpose='verify'",[id]);
+      await client.query('UPDATE authors SET verified=true,password_hash=$1 WHERE id=$2',[hashed,id]);
+      await client.query('DELETE FROM author_sessions WHERE author_id=$1',[id]);
+      await client.query('DELETE FROM account_tokens WHERE author_id=$1',[id]);
       await client.query('COMMIT');
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
     await notify(id);
