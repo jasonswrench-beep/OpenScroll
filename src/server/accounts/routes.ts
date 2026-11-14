@@ -38,7 +38,7 @@ export async function accountRoutes(app:FastifyInstance,services:AccountServices
     try{
       await client.query('BEGIN');
       const current=(await client.query<Author>('SELECT * FROM authors WHERE id=$1 FOR UPDATE',[author.id])).rows[0];
-      if(!current||current.disabled_at||current.approval_status==='revoked'||current.verified!==(purpose==='reset')){
+      if(!current||(purpose==='verify'&&(current.verified||current.disabled_at||current.approval_status==='revoked'))){
         await client.query('ROLLBACK');
         return;
       }
@@ -88,7 +88,7 @@ export async function accountRoutes(app:FastifyInstance,services:AccountServices
   const recoveryRate={config:{rateLimit:{max:5,timeWindow:'15 minutes',groupId:'account-recovery'}}};
   app.post('/account/request-reset',recoveryRate,async request=>{
     const data=body(z.strictObject({email}),request.body),author=(await pool.query<Author>('SELECT * FROM authors WHERE email=$1',[data.email])).rows[0];
-    if(author)await issueToken(author,'reset');
+    if(author?.verified)await issueToken(author,'reset');
     return {message:'If an account matches, a password reset email will arrive shortly.'};
   });
   app.post('/account/resend-verification',recoveryRate,async request=>{
