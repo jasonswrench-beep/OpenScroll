@@ -13,6 +13,7 @@ course file, the library, or the authoring database.
 | Checklist | Which items are ticked | Every item ticked |
 | Self-assessment | One rating per statement | Every statement rated |
 | Survey | A rating, choice or comment for each question | Every rating and choice question answered (comments are optional) |
+| Scenario | The steps passed and the option chosen at each choice, checked against the scenario's links | An ending reached |
 | Action plan | The rows the learner filled in (text, or dates as YYYY-MM-DD) | At least one row with every cell filled |
 | Software practice | Whether every step was practised, and in Test, whether each step was right the first time | The test finished (when Test is on), otherwise every step practised |
 

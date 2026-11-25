@@ -1,4 +1,4 @@
-import { parseCourse, relinkCheckpoints, type CourseDocument } from './course.js';
+import { parseCourse, relinkCheckpoints, renewBlockIds, type CourseDocument } from './course.js';
 export type Section=CourseDocument['course']['sections'][number];
 export type Lesson=Section['lessons'][number];
 export function newId() { return `item-${crypto.randomUUID()}`; }
@@ -8,7 +8,7 @@ export function copyLesson(source:Lesson):Lesson {
   const copy=structuredClone(source);copy.id=newId();copy.title=`Copy of ${source.title}`.slice(0,300);
   for(const objective of copy.objectives)objective.id=newId();
   const ids=new Map<string,string>();
-  for(const block of copy.blocks){const old=block.id;block.id=newId();ids.set(old,block.id);if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)child.id=newId();if(block.type==='objectives')for(const item of block.content.items)item.id=newId();}
+  for(const block of copy.blocks){const old=block.id;renewBlockIds(block,newId);ids.set(old,block.id);}
   relinkCheckpoints(copy.blocks,ids);
   return copy;
 }

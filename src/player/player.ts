@@ -8,6 +8,7 @@ import { renderBlock } from '../shared/block-renderer.js';
 import { CourseFlow,type LearnerSnapshot } from './state.js';
 import { renderResponse } from './response-player.js';
 import { renderPractice } from './practice-player.js';
+import { renderScenario } from './scenario-player.js';
 import { enhanceVideo,enhanceEmbed } from './media-player.js';
 import { renderDraw,renderResults,enhanceGlossary,linkGlossaryTerms } from './resources-player.js';
 import { renderWorkbook,workbookEntries } from './workbook.js';
@@ -57,6 +58,7 @@ export class CoursePlayer {
         }else{
           const rendered=renderBlock(block,this.project,undefined,id=>this.url(id),index=>{if(flow.visit(block.id,index)){this.persist();queueMicrotask(()=>this.refreshGates());}});
           if(isAssessment(block))rendered.replaceChildren(renderAssessment(block,flow,()=>this.persist(),focus=>this.render(focus),id=>this.url(id)));
+          else if(block.type==='scenario')rendered.replaceChildren(renderScenario(block,flow,()=>this.persist(),()=>this.refreshGates(),this.project,id=>this.url(id)));
           else if(block.type==='software-practice')rendered.replaceChildren(renderPractice(block,flow,()=>this.persist(),()=>this.refreshGates(),id=>this.url(id)));
           else if(isResponseBlock(block))rendered.replaceChildren(renderResponse(block,flow,()=>this.persist(),()=>this.refreshGates()));
           else if(block.type==='video')enhanceVideo(block,rendered,flow,id=>this.url(id),id=>{const target=this.root.querySelector<HTMLElement>(`[data-focus="question-${id}"]`);target?.scrollIntoView({block:'center'});target?.focus();});

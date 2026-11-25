@@ -74,10 +74,16 @@ but their settings are only in the studio.
 
 ## Course resources
 
-Course details, Open course resources has three tabs: the glossary (terms, other names, definitions, CSV import and
-term links), question banks (new bank, OpenAssess import, spreadsheet import, Edit questions) and the certificate.
+Course details, Open course resources has four tabs: the glossary (terms, other names, definitions, CSV import and
+term links), question banks (new bank, OpenAssess import, spreadsheet import, Edit questions), characters (for
+scenarios) and the certificate.
 Edit questions opens the bank in the lesson editor with the picker limited to questions. See
 [COURSE-RESOURCES.md](COURSE-RESOURCES.md).
+
+## Scenario editor
+
+A scenario block's settings open the scenario editor: scenes, the selected scene's steps as cards, links chosen
+from menus, and a route check beside it. See [SCENARIOS.md](SCENARIOS.md).
 
 ## Checks, preview, theme and export
 

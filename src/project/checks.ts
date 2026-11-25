@@ -108,6 +108,24 @@ export function courseChecks(project: PortableProject, options: CheckOptions = {
         if (!block.content.transcript.trim()) blocking('embed-transcript', 'Add a transcript to the embedded video before publishing.');
         review('external-content', `This video loads from ${block.content.provider === 'youtube' ? 'YouTube' : 'Vimeo'} when a learner presses play, so the course is not fully self-contained. Check that your learners' networks allow it.`, undefined, 'content');
         break;
+      case 'scenario': {
+        const c = block.content, steps = c.scenes.flatMap(s => s.nodes), byId = new Map(steps.map(n => [n.id, n])), number = (id: string) => steps.findIndex(n => n.id === id) + 1;
+        if (!byId.has(c.start)) blocking('scenario-start', 'Choose the step this scenario starts with.');
+        for (const node of steps) {
+          if (node.kind === 'choice') {
+            if (!node.choices.length) blocking('scenario-choice', `Step ${number(node.id)} is a choice with no options.`);
+            if (node.choices.some(ch => !ch.next || !byId.has(ch.next))) blocking('scenario-link', `An option in step ${number(node.id)} does not lead to a step.`);
+            if (node.choices.some(ch => !ch.text.trim())) warn('scenario-option-text', `An option in step ${number(node.id)} has no text.`);
+          } else if (node.kind !== 'ending' && (!node.next || !byId.has(node.next))) blocking('scenario-dead-end', `Step ${number(node.id)} leads nowhere. Point it at the next step or make it an ending.`);
+          if (node.kind === 'line' && (!node.characterId || !course.characters.some(ch => ch.id === node.characterId))) warn('scenario-speaker', `Step ${number(node.id)} is a line with no character. Choose who says it, or make it narration.`);
+        }
+        const reached = new Set<string>(), queue = byId.has(c.start) ? [c.start] : [];
+        while (queue.length) { const id = queue.shift()!; if (reached.has(id)) continue; reached.add(id); const node = byId.get(id); if (!node) continue; for (const target of node.kind === 'choice' ? node.choices.map(ch => ch.next) : [node.next]) if (target && byId.has(target) && !reached.has(target)) queue.push(target); }
+        const unreachable = steps.filter(n => !reached.has(n.id)).length;
+        if (byId.has(c.start) && unreachable) warn('scenario-unreachable', `${unreachable} ${unreachable === 1 ? 'step is' : 'steps are'} never reached from the start.`);
+        if (byId.has(c.start) && ![...reached].some(id => byId.get(id)?.kind === 'ending')) blocking('scenario-no-ending', 'No ending can be reached from the start of this scenario.');
+        break;
+      }
       case 'bank-draw': {
         const bank = course.banks.find(b => b.id === block.content.bankId);
         if (!bank) blocking('bank-missing', 'Choose a question bank for this block.');
@@ -124,6 +142,7 @@ export function courseChecks(project: PortableProject, options: CheckOptions = {
         break;
     }
   }
+  for (const character of course.characters) for (const pose of character.poses) if (!pose.alt.trim()) add({ effect: 'warning', code: 'pose-alt', message: `The pose “${pose.name || 'Untitled'}” of ${character.name || 'a character'} has no description.`, outputs: ALL, place: 'resources:characters' });
   for (const term of course.glossary) if (!term.term.trim() || !term.definition.trim()) add({ effect: 'warning', code: 'glossary-term', message: term.term.trim() ? `The glossary term “${term.term}” has no definition.` : 'A glossary entry has no term.', outputs: ALL, place: 'resources:glossary' });
   for (const bank of course.banks) for (const question of bank.questions) {
     const issue = assessmentIssue(question);

@@ -5,7 +5,7 @@
  */
 import type { CourseDocument } from '../shared/course.js';
 import { isAssessment, correctAnswer, parseNumeric, type AssessmentBlock, type Answer } from '../shared/assessment.js';
-import { isResponseBlock, selfAssessmentResult, type ResponseBlock, type LearnerResponse } from '../shared/responses.js';
+import { isResponseBlock, selfAssessmentResult, scenarioResult, type ResponseBlock, type LearnerResponse } from '../shared/responses.js';
 import { richToPlain } from '../shared/rich-text.js';
 import type { LearnerSnapshot } from './state.js';
 
@@ -53,6 +53,11 @@ function responseRecords(block: ResponseBlock, response: LearnerResponse, editio
     case 'self-assessment': {
       const result = selfAssessmentResult(block, response), ratings = (response.ratings ?? []).map(r => r === null ? '-' : String(r + 1)).join(' ');
       return [{ ...base, id: block.id, type: modern ? 'other' : 'fill-in', response: freeText(`${result.complete ? `Total ${result.total} of ${result.max}. ` : ''}Ratings ${ratings}`, limit), description: plain(block.content.title || 'Self-assessment', 250) }];
+    }
+    case 'scenario': {
+      const r = scenarioResult(block, response);
+      if (!r.ending) return [];
+      return [{ id: block.id, type: modern ? 'other' : 'performance', weighting: 0, result: block.content.scoring ? (r.passed ? 'correct' : 'incorrect') : 'neutral', response: freeText(`${r.choices.map(c => c.text).join(' > ')} > ${richToPlain(r.ending.text)}${block.content.scoring ? ` (${r.points} points)` : ''}`, limit), description: plain(block.content.title || 'Scenario', 250) }];
     }
     case 'action-plan': {
       const text = (response.rows ?? []).filter(row => row.some(cell => cell.trim())).map(row => row.join(' | ')).join(' / ');

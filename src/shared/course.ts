@@ -32,6 +32,10 @@ const percent = z.number().min(0).max(100);
 const seconds = z.number().min(0).max(86400);
 const region = z.strictObject({ x: percent, y: percent, w: percent, h: percent });
 const numericSchema = z.strictObject({ mode: z.enum(['exact', 'range']), value: z.number().min(-1e12).max(1e12), tolerance: z.number().min(0).max(1e12), min: z.number().min(-1e12).max(1e12), max: z.number().min(-1e12).max(1e12), unit: z.string().max(40) });
+/** One step of a branching scenario: a line spoken by a character, narration, a choice, or an ending. Node links are
+ * checked by Checks rather than the format, so deleting a step never makes a course unreadable. */
+const scenarioNode = z.strictObject({ id: idSchema, kind: z.enum(['line', 'narration', 'choice', 'ending']), characterId: idSchema.nullable().default(null), poseId: idSchema.nullable().default(null), text: rich, next: idSchema.nullable().default(null),
+  choices: z.array(z.strictObject({ text: label, next: idSchema.nullable(), feedback: rich, points: z.number().int().min(-100).max(100) })).max(6).default([]), outcome: z.enum(['positive', 'neutral', 'negative']).default('neutral') });
 /** Shared by blocks that collect a learner response: whether one is needed to finish, and whether it appears in My workbook. */
 const responseOptions = { required: z.boolean(), workbook: z.boolean() };
 export const OBJECTIVE_LEVELS = ['remember','understand','apply','analyze','evaluate','create'] as const;
@@ -83,6 +87,8 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.strictObject({...base,type:z.literal('action-plan'),variant:z.literal('table'),content:z.strictObject({title:label,intro:rich,columns:z.array(z.strictObject({label,kind:z.enum(['text','date'])})).min(1).max(6),starterRows:z.number().int().min(1).max(20),maxRows:z.number().int().min(1).max(50),...responseOptions})}),
   z.strictObject({...base,type:z.literal('results'),variant:z.literal('summary'),content:z.strictObject({title:label,showReview:z.boolean(),showCertificate:z.boolean()})}),
   z.strictObject({...base,type:z.literal('bank-draw'),variant:z.literal('random'),content:z.strictObject({title:label,bankId:idSchema,count:z.number().int().min(1).max(50)})}),
+  // Wave E (stage 8): a branching conversation with the course's characters.
+  z.strictObject({...base,type:z.literal('scenario'),variant:z.literal('conversation'),content:z.strictObject({title:label,intro:rich,scenes:z.array(z.strictObject({id:idSchema,title:label,backgroundId:idSchema.nullable(),nodes:z.array(scenarioNode).max(150)})).min(1).max(20),start:idSchema,allowTakeBack:z.boolean(),showPathReview:z.boolean(),scoring:z.boolean(),passPoints:z.number().int().min(-1000).max(1000),...responseOptions})}),
   z.strictObject({...base,type:z.literal('columns'),variant:z.enum(['1-1','1-1-1','2-1','1-2']),content:z.strictObject({columns:z.array(z.strictObject({blocks:z.array(columnChildSchema).max(20)})).min(2).max(3)})}),
 ]);
 export const assetSchema = z.strictObject({
@@ -108,6 +114,7 @@ export const courseSchema = z.strictObject({
     // Course resources (F6): one glossary, question banks, and the certificate the results block can print.
     glossary: z.array(z.strictObject({ id: idSchema, term: label, definition: rich, aliases: z.array(label).max(10) })).max(500).default([]),
     banks: z.array(z.strictObject({ id: idSchema, name: label, questions: z.array(assessmentBlock).max(500) })).max(50).default([]),
+    characters: z.array(z.strictObject({ id: idSchema, name: label, role: label, poses: z.array(z.strictObject({ id: idSchema, name: label, imageId: idSchema, alt: z.string().max(2000) })).max(20) })).max(30).default([]),
     certificate: z.strictObject({ title: label, issuer: label, signerName: label, signerTitle: label, logoId: idSchema.nullable(), signatureId: idSchema.nullable(), showScore: z.boolean() }).nullable().default(null),
     sections: z.array(z.strictObject({ id: idSchema, title: label, lessons: z.array(lessonSchema).max(200) })).max(100),
   }),
@@ -117,6 +124,26 @@ export type CourseDocument = z.infer<typeof courseSchema>;
 export type Asset = z.infer<typeof assetSchema>;
 export type Block = z.infer<typeof blockSchema>;
 export type ColumnChild = z.infer<typeof columnChildSchema>;
+/**
+ * Gives a block, and everything inside it that has an identifier, new identifiers from `next`: blocks in columns,
+ * objectives, survey questions, practice steps, video checkpoints, and scenario scenes and steps (with every link
+ * between steps mapped). Used for copies, so a copy can sit in the same course as its original.
+ */
+export function renewBlockIds<T extends Block>(block: T, next: () => string): T {
+  block.id = next();
+  if (block.type === 'columns') for (const column of block.content.columns) for (const child of column.blocks) child.id = next();
+  if (block.type === 'objectives' || block.type === 'survey') for (const item of block.content.items) item.id = next();
+  if (block.type === 'software-practice') for (const step of block.content.steps) step.id = next();
+  if (block.type === 'video') for (const checkpoint of block.content.checkpoints) checkpoint.id = next();
+  if (block.type === 'scenario') {
+    const ids = new Map<string, string>();
+    for (const scene of block.content.scenes) { scene.id = next(); for (const node of scene.nodes) { const fresh = next(); ids.set(node.id, fresh); node.id = fresh; } }
+    const map = (id: string | null) => id ? ids.get(id) ?? id : id;
+    for (const node of block.content.scenes.flatMap(s => s.nodes)) { node.next = map(node.next); for (const choice of node.choices) choice.next = map(choice.next); }
+    block.content.start = map(block.content.start) ?? block.content.start;
+  }
+  return block;
+}
 /** After blocks get new identifiers, points each interactive video checkpoint at its question's new identifier. */
 export function relinkCheckpoints(blocks: readonly Block[], ids: ReadonlyMap<string, string>) {
   for (const block of blocks) if (block.type === 'video') for (const checkpoint of block.content.checkpoints) if (checkpoint.questionId && ids.has(checkpoint.questionId)) checkpoint.questionId = ids.get(checkpoint.questionId)!;
@@ -168,7 +195,7 @@ export function migrateToCurrent(input: Loose): Loose {
   doc.schemaVersion = SCHEMA_VERSION;
   return doc;
 }
-const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey','embed-video','software-practice','glossary','action-plan','results','bank-draw']);
+const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey','embed-video','software-practice','glossary','action-plan','results','bank-draw','scenario']);
 /** Older versions migrate by copying; original archives and stored rows remain untouched until explicit save. */
 export function parseCourse(input: unknown): CourseDocument {
   if (input === null || typeof input !== 'object' || !('schemaVersion' in input)) throw new ProjectError('The course is missing its schema version.');
@@ -195,6 +222,7 @@ export function parseCourse(input: unknown): CourseDocument {
   if (doc.course.cover) checkImage(doc.course.cover.assetId);
   if (doc.course.authorImage) checkImage(doc.course.authorImage.assetId);
   for (const term of doc.course.glossary) claim(term.id);
+  for (const character of doc.course.characters) { claim(character.id); for (const pose of character.poses) { claim(pose.id); checkImage(pose.imageId); } }
   const certificate = doc.course.certificate;
   if (certificate?.logoId) checkImage(certificate.logoId);
   if (certificate?.signatureId) checkImage(certificate.signatureId);
@@ -236,6 +264,7 @@ export function parseCourse(input: unknown): CourseDocument {
         if(block.type==='assessment' && block.content.image)checkImage(block.content.image.assetId);
         if(block.type==='assessment' && block.content.areas.some(a=>a.x+a.w>100.001 || a.y+a.h>100.001))throw new ProjectError('Hotspot areas must stay inside the image.');
         if(block.type==='survey')for(const item of block.content.items)claim(item.id);
+        if(block.type==='scenario')for(const scene of block.content.scenes){claim(scene.id);if(scene.backgroundId)checkImage(scene.backgroundId);for(const node of scene.nodes)claim(node.id);}
         if(block.type==='video'){for(const checkpoint of block.content.checkpoints)claim(checkpoint.id);if(block.content.describedAssetId && assets.get(block.content.describedAssetId)?.mediaType!=='video/mp4')throw new ProjectError(`Missing or incompatible described video: ${block.content.describedAssetId}.`);}
         if(block.type==='embed-video' && block.content.videoId && !(block.content.provider==='youtube' ? /^[A-Za-z0-9_-]{11}$/ : /^\d{5,12}$/).test(block.content.videoId))throw new ProjectError('The embedded video address is not a YouTube or Vimeo video.');
         if(block.type==='software-practice'){for(const step of block.content.steps){claim(step.id);checkImage(step.imageId);if(step.target.x+step.target.w>100.001 || step.target.y+step.target.h>100.001)throw new ProjectError('A practice target must stay inside its screenshot.');}if(!block.content.modes.watch && !block.content.modes.try && !block.content.modes.test)throw new ProjectError('Turn on at least one software practice mode.');}

@@ -15,6 +15,9 @@ certificate and "Questions from a bank" blocks, glossary term links, bank editin
 `.openassess` import through `@openstage/bank` 0.1.0, installed from its GitHub release and checked against the
 release's SHA-256 (npm cannot install one package from a monorepo folder, so the release tarball replaced the Git
 dependency in decision 5's default).
+Stage 8 added characters (upload-only, pending the owner's decision on character packs), the scenario block,
+its editor with a route check and undo, the conversation player with "Your path", and scenario results reported
+to the LMS.
 
 ## Scope
 

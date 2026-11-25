@@ -141,6 +141,13 @@ export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich:
       root.append(list);
       return true;
     }
+    case 'scenario': {
+      const c = block.content, steps = c.scenes.flatMap(s => s.nodes), endings = steps.filter(n => n.kind === 'ending').length;
+      root.append(field('h3', c.title, 'title', 'Scenario title', 300, false));
+      if (editing || c.intro) root.append(rich('div', c.intro, 'intro', 'Scenario introduction'));
+      root.append(el('p', `${steps.length} ${steps.length === 1 ? 'step' : 'steps'} in ${c.scenes.length} ${c.scenes.length === 1 ? 'scene' : 'scenes'}, with ${endings} ${endings === 1 ? 'ending' : 'endings'}.${editing ? ' Open the scenario editor from the block settings.' : ''}`, 'os-response-note'));
+      return true;
+    }
     case 'glossary': {
       const c = block.content, terms = [...(course?.glossary ?? [])].sort((a, b) => a.term.localeCompare(b.term, course?.language));
       if (editing || c.title) root.append(field('h3', c.title, 'title', 'Glossary title', 300, false));

@@ -2,12 +2,13 @@ import type { Block } from './course.js';
 import { richToPlain } from './rich-text.js';
 
 /** Blocks that collect something from the learner. The answer lives in learner state, never in the course file. */
-export type ResponseBlock = Extract<Block, { type: 'reflection' | 'activity' | 'checklist' | 'self-assessment' | 'survey' | 'software-practice' | 'action-plan' }>;
-const RESPONSE_TYPES: ReadonlySet<string> = new Set(['reflection', 'activity', 'checklist', 'self-assessment', 'survey', 'software-practice', 'action-plan']);
+export type ResponseBlock = Extract<Block, { type: 'reflection' | 'activity' | 'checklist' | 'self-assessment' | 'survey' | 'software-practice' | 'action-plan' | 'scenario' }>;
+const RESPONSE_TYPES: ReadonlySet<string> = new Set(['reflection', 'activity', 'checklist', 'self-assessment', 'survey', 'software-practice', 'action-plan', 'scenario']);
+export const SCENARIO_TRAIL_MAX = 500;
 export function isResponseBlock(block: Block): block is ResponseBlock { return RESPONSE_TYPES.has(block.type); }
 
 /** What a learner has written, ticked or rated. Only the parts that apply to the block are kept. */
-export interface LearnerResponse { text?: string; ticks?: number[]; ratings?: (number | null)[]; done?: boolean; answers?: (number | string | null)[]; test?: number[]; rows?: string[][] }
+export interface LearnerResponse { text?: string; ticks?: number[]; ratings?: (number | null)[]; done?: boolean; answers?: (number | string | null)[]; test?: number[]; rows?: string[][]; trail?: string[]; picks?: number[] }
 export const SURVEY_COMMENT_MAX = 4000;
 export const RESPONSE_TEXT_MAX = 20_000;
 
@@ -21,7 +22,7 @@ const writes = (block: ResponseBlock) => block.type === 'reflection' || (block.t
 export function cleanResponse(block: ResponseBlock, input: unknown): LearnerResponse | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
   const value = input as Record<string, unknown>, result: LearnerResponse = {};
-  const allowed = new Set(block.type === 'checklist' ? ['ticks'] : block.type === 'self-assessment' ? ['ratings'] : block.type === 'survey' ? ['answers'] : block.type === 'software-practice' ? ['done', 'test'] : block.type === 'action-plan' ? ['rows'] : block.type === 'activity' ? ['text', 'done'] : ['text']);
+  const allowed = new Set(block.type === 'checklist' ? ['ticks'] : block.type === 'self-assessment' ? ['ratings'] : block.type === 'survey' ? ['answers'] : block.type === 'software-practice' ? ['done', 'test'] : block.type === 'action-plan' ? ['rows'] : block.type === 'scenario' ? ['trail', 'picks'] : block.type === 'activity' ? ['text', 'done'] : ['text']);
   if (Object.keys(value).some(key => !allowed.has(key))) return undefined;
   if (value.text !== undefined) {
     if (typeof value.text !== 'string' || value.text.length > RESPONSE_TEXT_MAX || !writes(block)) return undefined;
@@ -39,6 +40,29 @@ export function cleanResponse(block: ResponseBlock, input: unknown): LearnerResp
     const ratings = value.ratings as unknown[];
     if (!ratings.every(r => r === null || (Number.isInteger(r) && (r as number) >= 0 && (r as number) < block.content.scale.length))) return undefined;
     if (ratings.some(r => r !== null)) result.ratings = ratings as (number | null)[];
+  }
+  if (value.trail !== undefined || value.picks !== undefined) {
+    // A scenario path must follow the scenario's own links, from its start, one pick per choice passed.
+    if (block.type !== 'scenario' || !Array.isArray(value.trail) || !Array.isArray(value.picks ?? [])) return undefined;
+    const trail = value.trail as unknown[], picks = (value.picks ?? []) as unknown[];
+    if (!trail.length || trail.length > SCENARIO_TRAIL_MAX || !trail.every(id => typeof id === 'string') || !picks.every(i => Number.isInteger(i))) return undefined;
+    const nodes = new Map(block.content.scenes.flatMap(s => s.nodes).map(n => [n.id, n]));
+    if (trail[0] !== block.content.start) return undefined;
+    let pick = 0;
+    for (let i = 0; i < trail.length; i++) {
+      const node = nodes.get(trail[i] as string);
+      if (!node) return undefined;
+      const following = trail[i + 1] as string | undefined;
+      if (node.kind === 'choice') {
+        if (following === undefined) break;
+        const chosen = picks[pick] as number, choice = node.choices[chosen];
+        if (!choice || choice.next !== following) return undefined;
+        pick++;
+      } else if (node.kind === 'ending') { if (following !== undefined) return undefined; }
+      else if (following !== undefined && node.next !== following) return undefined;
+    }
+    if (pick !== picks.length) return undefined;
+    if (trail.length > 1 || picks.length) { result.trail = trail as string[]; result.picks = picks as number[]; }
   }
   if (value.rows !== undefined) {
     if (block.type !== 'action-plan' || !Array.isArray(value.rows) || value.rows.length > block.content.maxRows) return undefined;
@@ -84,6 +108,7 @@ export function responseMeets(block: ResponseBlock, response: LearnerResponse | 
     case 'survey': return block.content.items.every((item, i) => item.kind === 'comment' || (response?.answers?.[i] ?? null) !== null);
     case 'software-practice': return block.content.modes.test ? !!response?.test : !!response?.done;
     case 'action-plan': return !!response?.rows?.some(row => row.every(cell => cell.trim()));
+    case 'scenario': { const last = response?.trail?.at(-1); return !!last && block.content.scenes.some(s => s.nodes.some(n => n.id === last && n.kind === 'ending')); }
   }
 }
 
@@ -95,6 +120,21 @@ export function selfAssessmentResult(block: Extract<Block, { type: 'self-assessm
   return { total, complete, rated: rated.length, max: block.content.items.length * block.content.scale.length, band };
 }
 
+/** The choices a learner made in a scenario, with their feedback, the ending reached, and the points. */
+export function scenarioResult(block: Extract<Block, { type: 'scenario' }>, response: LearnerResponse | undefined) {
+  const nodes = new Map(block.content.scenes.flatMap(s => s.nodes).map(n => [n.id, n]));
+  const choices: { prompt: string; text: string; feedback: string; points: number }[] = [];
+  let pick = 0;
+  for (const id of response?.trail ?? []) {
+    const node = nodes.get(id);
+    if (node?.kind !== 'choice') continue;
+    const choice = node.choices[response?.picks?.[pick++] ?? -1];
+    if (choice) choices.push({ prompt: node.text, text: choice.text, feedback: choice.feedback, points: choice.points });
+  }
+  const last = nodes.get(response?.trail?.at(-1) ?? ''), ending = last?.kind === 'ending' ? last : undefined;
+  const points = choices.reduce((n, c) => n + c.points, 0);
+  return { choices, ending, points, passed: !block.content.scoring || points >= block.content.passPoints };
+}
 /** A readable summary of a response, used by My workbook and the LMS record. */
 export function responseText(block: ResponseBlock, response: LearnerResponse | undefined): string {
   switch (block.type) {
@@ -107,6 +147,7 @@ export function responseText(block: ResponseBlock, response: LearnerResponse | u
       if (result.complete) lines.push(`Total: ${result.total} of ${result.max}${result.band ? `. ${richToPlain(result.band.text)}` : ''}`);
       return lines.join('\n');
     }
+    case 'scenario': { const r = scenarioResult(block, response); return r.choices.map(c => `Chose: ${c.text}`).concat(r.ending ? [`Ending: ${richToPlain(r.ending.text).slice(0, 200)}`] : []).concat(block.content.scoring ? [`Points: ${r.points}`] : []).join('\n'); }
     case 'action-plan': return (response?.rows ?? []).filter(row => row.some(cell => cell.trim())).map(row => block.content.columns.map((column, i) => `${column.label}: ${row[i] || '—'}`).join('; ')).join('\n');
     case 'software-practice': return response?.test ? `Test: ${response.test.filter(Boolean).length} of ${response.test.length} steps right the first time` : response?.done ? 'Practised every step' : '';
     case 'survey': return block.content.items.map((item, i) => `${item.prompt} — ${surveyAnswer(block, i, response?.answers?.[i] ?? null) || 'no answer'}`).join('\n');
@@ -124,6 +165,6 @@ export function surveyAnswer(block: Extract<Block, { type: 'survey' }>, index: n
 
 /** The heading a response block shows in My workbook and in lists of things to finish. */
 export function responseTitle(block: ResponseBlock): string {
-  const text = block.type === 'reflection' ? richToPlain(block.content.prompt) : block.content.title || (block.type === 'checklist' ? 'Checklist' : block.type === 'activity' ? 'Activity' : block.type === 'survey' ? 'Survey' : block.type === 'software-practice' ? 'Software practice' : block.type === 'action-plan' ? 'Action plan' : 'Self-assessment');
+  const text = block.type === 'reflection' ? richToPlain(block.content.prompt) : block.content.title || (block.type === 'checklist' ? 'Checklist' : block.type === 'activity' ? 'Activity' : block.type === 'survey' ? 'Survey' : block.type === 'software-practice' ? 'Software practice' : block.type === 'action-plan' ? 'Action plan' : block.type === 'scenario' ? 'Scenario' : 'Self-assessment');
   return text.replace(/\s+/g, ' ').trim().slice(0, 160) || 'Reflection';
 }

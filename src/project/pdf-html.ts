@@ -100,6 +100,18 @@ export function pdfHtml(input:unknown,settings:unknown={}){
    case 'survey':{
     const c=block.content;body=(c.title?text('h4',c.title):'')+(richIsEmpty(c.intro)?'':rich(c.intro))+`<ol class="survey">${c.items.map(item=>`<li>${text('p',item.prompt)}${item.kind==='comment'?lines(3):item.kind==='differential'?`<p class="scale">${escapeHtml(item.options[0]??'')} ${c.scale.map((_,i)=>`<span class="box"></span>${i+1}`).join(' ')} ${escapeHtml(item.options[1]??'')}</p>`:`<ul class="boxes inline">${(item.kind==='choice'?item.options:c.scale).map(o=>text('li',o)).join('')}</ul>`}</li>`).join('')}</ol>`;break;
    }
+   case 'scenario':{
+    const c=block.content,steps=c.scenes.flatMap(s=>s.nodes),number=new Map(steps.map((n,i)=>[n.id,i+1])),go=(id:string|null)=>id&&number.has(id)?`go to ${number.get(id)}`:'the conversation ends';
+    const speaker=(id:string|null)=>course.characters.find(x=>x.id===id)?.name;
+    body=text('h4',c.title||'Scenario')+(richIsEmpty(c.intro)?'':rich(c.intro))+text('p',`Start at step ${number.get(c.start)??1}. Follow the step numbers.`);
+    for(const scene of c.scenes){body+=(scene.title?text('h5',scene.title):'')+`<ol class="script" start="${number.get(scene.nodes[0]?.id??'')??1}">${scene.nodes.map(n=>{
+     const who=speaker(n.characterId);
+     if(n.kind==='choice')return `<li value="${number.get(n.id)}">${rich(n.text)}<ul>${n.choices.map(ch=>`<li>${escapeHtml(`If you choose “${ch.text}”, ${go(ch.next)}.`)}</li>`).join('')}</ul></li>`;
+     if(n.kind==='ending')return `<li value="${number.get(n.id)}"><p><b>Ending (${n.outcome}).</b></p>${who?text('p',`${who}:`):''}${rich(n.text)}</li>`;
+     return `<li value="${number.get(n.id)}">${who?`<p><b>${escapeHtml(who)}:</b></p>`:''}${rich(n.text)}${text('p',`Then ${go(n.next)}.`)}</li>`;
+    }).join('')}</ol>`;}
+    break;
+   }
    case 'glossary':{
     const terms=[...course.glossary].sort((a,b)=>a.term.localeCompare(b.term,course.language));
     body=(block.content.title?text('h4',block.content.title):'')+(terms.length?`<dl class="glossary">${terms.map(t=>`<dt>${escapeHtml(t.term)}${t.aliases.length?` <span class="level">(also ${escapeHtml(t.aliases.join(', '))})</span>`:''}</dt><dd>${rich(t.definition)}</dd>`).join('')}</dl>`:text('p','The glossary is empty.'));break;

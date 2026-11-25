@@ -1,4 +1,4 @@
-import { type Block,type PortableProject,type Asset,assetPath,blockSchema } from './course.js';
+import { type Block,type PortableProject,type Asset,assetPath,blockSchema,renewBlockIds } from './course.js';
 import { newId } from './outline.js';
 import { STARTER_IMAGE_BASE64,STARTER_IMAGE_SHA256,STARTER_IMAGE_BYTES } from './starter-image.js';
 export interface BlockTemplate {key:string;label:string;category:'Text'|'Images'|'Structure'|'Media'|'Interactive'|'Activities'|'Assessment';type:Block['type'];variant:string;description:string;}
@@ -44,6 +44,7 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'process',label:'Process',category:'Interactive',type:'process',variant:'steps',description:'A sequence learners explore one step at a time.'},
   {key:'timeline',label:'Timeline',category:'Interactive',type:'timeline',variant:'vertical',description:'A readable sequence of events and explanations.'},
   {key:'software-practice',label:'Software practice',category:'Interactive',type:'software-practice',variant:'steps',description:'Watch, try and test a task on screenshots, step by step.'},
+  {key:'scenario',label:'Scenario',category:'Interactive',type:'scenario',variant:'conversation',description:'A branching conversation: learners make choices that lead to different endings.'},
   {key:'labeled-graphic',label:'Labeled graphic',category:'Interactive',type:'labeled-graphic',variant:'markers',description:'Keyboard accessible image markers and descriptions.'},
   {key:'reflection',label:'Reflection',category:'Activities',type:'reflection',variant:'plain',description:'Learners write a response and can compare it with a sample.'},
   {key:'journal',label:'Journal prompt',category:'Activities',type:'reflection',variant:'journal',description:'A reflection styled as a journal page.'},
@@ -66,6 +67,18 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'categorize',label:'Sort into groups',category:'Assessment',type:'assessment',variant:'categorize',description:'Place each card in its group without dragging.'},
   {key:'continue',label:'Continue button',category:'Structure',type:'continue',variant:'button',description:'Author the label and rule. Reveal the next section after the selected rule.'},
 ];
+/** A short starter conversation: a narration, a line, a choice with two routes, and two endings. */
+function scenarioStarter(project:PortableProject){
+  const ids=Array.from({length:6},()=>newId()),character=project.document.course.characters[0],speaker=character ? {characterId:character.id,poseId:character.poses[0]?.id ?? null} : {characterId:null,poseId:null};
+  return {title:'A conversation to practise',intro:'Choose what to say. Each choice leads somewhere different.',start:ids[0],allowTakeBack:true,showPathReview:true,scoring:false,passPoints:0,required:false,workbook:false,
+    scenes:[{id:newId(),title:'The request',backgroundId:null,nodes:[
+      {id:ids[0],kind:'narration',text:'A colleague stops by your desk with a question.',next:ids[1]},
+      {id:ids[1],kind:'line',...speaker,text:'Could you help me with the report before Friday?',next:ids[2]},
+      {id:ids[2],kind:'choice',text:'What do you say?',choices:[{text:'Ask what part of the report they need help with.',next:ids[3],feedback:'Asking first shows you want to understand.',points:2},{text:'Say you are too busy this week.',next:ids[4],feedback:'Saying no is fine, but offering another time keeps the door open.',points:0}]},
+      {id:ids[3],kind:'ending',...speaker,text:'They explain, and you agree on a plan together.',outcome:'positive'},
+      {id:ids[4],kind:'ending',...speaker,text:'They thank you and look for help elsewhere.',outcome:'neutral'},
+    ]}]};
+}
 export function templatesFor(block:Block){return BLOCK_TEMPLATES.filter(t=>t.type===block.type);}
 export function switchVariant(block:Block,variant:string):Block {
   if(!templatesFor(block).some(t=>t.variant===variant))throw new Error('Choose a compatible template for this block.');
@@ -77,15 +90,7 @@ export function switchVariant(block:Block,variant:string):Block {
 }
 /** A copy with new identifiers for the block, the blocks inside it, and its objectives. */
 export function duplicateBlock(block:Block):Block {return renewIds(structuredClone(block));}
-export function renewIds<T extends Block>(block:T):T {
-  block.id=newId();
-  if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)child.id=newId();
-  if(block.type==='objectives')for(const item of block.content.items)item.id=newId();
-  if(block.type==='survey')for(const item of block.content.items)item.id=newId();
-  if(block.type==='software-practice')for(const step of block.content.steps)step.id=newId();
-  if(block.type==='video')for(const checkpoint of block.content.checkpoints)checkpoint.id=newId();
-  return block;
-}
+export function renewIds<T extends Block>(block:T):T {return renewBlockIds(block,newId);}
 export function prepareBlock(key:string,project:PortableProject):{block:Block;asset?:Asset;data?:string} {
   const template=BLOCK_TEMPLATES.find(t=>t.key===key);if(!template)throw new Error('Unknown block template.');
   const appearance={width:'reading',padding:'medium',background:'page'};const base={id:newId(),type:template.type,variant:template.variant,appearance:template.type==='columns' ? {...appearance,width:'wide'} : appearance};
@@ -128,6 +133,7 @@ export function prepareBlock(key:string,project:PortableProject):{block:Block;as
     'action-plan':{title:'My action plan',intro:'Write down what you will do, who can help, and when.',columns:[{label:'What I will do',kind:'text'},{label:'Who can help',kind:'text'},{label:'By when',kind:'date'}],starterRows:3,maxRows:10,required:false,workbook:true},
     results:{title:'Your results',showReview:true,showCertificate:true},
     'bank-draw':{title:'',bankId:project.document.course.banks[0]?.id ?? 'bank-not-chosen',count:Math.min(5,project.document.course.banks[0]?.questions.length || 5)},
+    scenario:scenarioStarter(project),
     survey:{title:'Tell us what you think',intro:'Your answers help improve this course. There are no right or wrong answers.',scale:['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'],items:[{id:newId(),kind:'rating',prompt:'The examples were useful.',options:[]},{id:newId(),kind:'differential',prompt:'How did the pace feel?',options:['Too slow','Too fast']},{id:newId(),kind:'choice',prompt:'Which part did you use most?',options:['The reading','The activities','The questions']},{id:newId(),kind:'comment',prompt:'What one change would improve this lesson?',options:[]}],required:false,workbook:false},
     columns:{columns:Array.from({length:template.variant==='1-1-1' ? 3 : 2},(_,index)=>({blocks:[blockSchema.parse({id:newId(),type:'paragraph',variant:'with-heading',appearance,content:{heading:['First idea','Second idea','Third idea'][index],text:'Keep each column short. On a phone, columns stack in reading order.'}})]}))},
   };

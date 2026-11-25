@@ -14,7 +14,8 @@ Steps 1–12 are implemented; Step 13 production preparation is available, with 
 
 - [OpenScroll Studio, the redesigned workspace](docs/STUDIO.md)
 - [Learner responses and My workbook](docs/LEARNER-RESPONSES.md)
-- [Course resources: glossary, question banks, certificate](docs/COURSE-RESOURCES.md)
+- [Course resources: glossary, question banks, characters, certificate](docs/COURSE-RESOURCES.md)
+- [Scenarios: branching conversations](docs/SCENARIOS.md)
 - [Redesign plan](docs/REDESIGN-PLAN.md) and [block build plan](docs/BLOCK-BUILD-PLAN.md)
 - [Importing Rise 360 courses](docs/RISE-IMPORT.md)
 - [Spreadsheet assessment import: Excel and CSV templates](docs/QUESTION-IMPORT.md)

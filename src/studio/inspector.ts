@@ -228,6 +228,17 @@ function contentTab(ctx: InspectorContext): HTMLElement[] {
         note('Each marker opens its text for learners. Marker text is edited on the page.'));
       break;
     }
+    case 'scenario': {
+      const c = block.content, steps = c.scenes.flatMap(s => s.nodes);
+      out.push(note(`${steps.length} steps in ${c.scenes.length} ${c.scenes.length === 1 ? 'scene' : 'scenes'}, ${steps.filter(n => n.kind === 'ending').length} endings. Write and link the steps in the scenario editor.`),
+        button('Open the scenario editor', () => ctx.goTo?.(`scenario:${block.id}`), { icon: Pencil, class: 'btn btn-sm btn-primary' }),
+        checkField('Learners can take back their last choice', c.allowTakeBack, value => set<'scenario'>(b => { b.content.allowTakeBack = value; })),
+        checkField('Show "Your path" at the end', c.showPathReview, value => set<'scenario'>(b => { b.content.showPathReview = value; }), 'Lists each choice with its feedback.'),
+        checkField('Score the choices', c.scoring, value => set<'scenario'>(b => { b.content.scoring = value; }, true), 'Each option can add or take away points. The total is reported to the LMS.'),
+        ...(c.scoring ? [numberField('Points needed to pass', c.passPoints, -1000, 1000, value => set<'scenario'>(b => { b.content.passPoints = value; }))] : []),
+        button('Manage characters', () => ctx.goTo?.('resources:characters'), { class: 'btn btn-sm' }));
+      break;
+    }
     case 'glossary': {
       const terms = ctx.project.document.course.glossary.length;
       out.push(note(`The course glossary has ${terms} ${terms === 1 ? 'term' : 'terms'}. Terms are edited in Course resources so every glossary block and term link stays the same.`),
@@ -458,8 +469,8 @@ function styleTab(ctx: InspectorContext): HTMLElement[] {
 function behaviorTab(ctx: InspectorContext): HTMLElement[] {
   const { block, change } = ctx;
   switch (block.type) {
-    case 'reflection': case 'activity': case 'checklist': case 'self-assessment': case 'survey': case 'action-plan': {
-      const need = block.type === 'action-plan' ? 'fill in at least one complete row' : block.type === 'reflection' ? 'write at least the minimum number of words' : block.type === 'activity' ? (block.content.output ? 'write in the box' : 'mark it as done') : block.type === 'checklist' ? 'tick every item' : block.type === 'survey' ? 'answer every rating and choice' : 'rate every statement';
+    case 'reflection': case 'activity': case 'checklist': case 'self-assessment': case 'survey': case 'action-plan': case 'scenario': {
+      const need = block.type === 'scenario' ? 'reach an ending' : block.type === 'action-plan' ? 'fill in at least one complete row' : block.type === 'reflection' ? 'write at least the minimum number of words' : block.type === 'activity' ? (block.content.output ? 'write in the box' : 'mark it as done') : block.type === 'checklist' ? 'tick every item' : block.type === 'survey' ? 'answer every rating and choice' : 'rate every statement';
       return [
         checkField('Required to finish the lesson', block.content.required, value => change(b => { if ('required' in b.content) (b.content as { required: boolean }).required = value; }, { redraw: true }), `Learners must ${need}.`),
         checkField('Show in My workbook', block.content.workbook, value => change(b => { if ('workbook' in b.content) (b.content as { workbook: boolean }).workbook = value; }), 'My workbook gathers every response in one page learners can print or download.'),
@@ -502,6 +513,7 @@ const ANNOUNCES: Partial<Record<Block['type'], string>> = {
   'action-plan': 'A table whose cells are text and date fields, each named by its column and row.',
   results: 'Read as text, a progress bar and a table of scores by lesson; each missed question has a button that goes to it.',
   'bank-draw': 'Each drawn question is read like any other question.',
+  scenario: 'Read as a list of lines, each with the speaker\'s name and the pose description. Choices are buttons; focus moves to the newest line.',
 };
 function accessTab(ctx: InspectorContext): HTMLElement[] {
   const { block, change } = ctx;

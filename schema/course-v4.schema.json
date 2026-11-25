@@ -651,6 +651,67 @@
             "additionalProperties": false
           }
         },
+        "characters": {
+          "default": [],
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "role": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "poses": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                    },
+                    "name": {
+                      "type": "string",
+                      "maxLength": 300
+                    },
+                    "imageId": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                    },
+                    "alt": {
+                      "type": "string",
+                      "maxLength": 2000
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "imageId",
+                    "alt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "role",
+              "poses"
+            ],
+            "additionalProperties": false
+          }
+        },
         "certificate": {
           "default": null,
           "anyOf": [
@@ -5738,6 +5799,302 @@
                                   "title",
                                   "bankId",
                                   "count"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "scenario"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "const": "conversation"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "title": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "intro": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "scenes": {
+                                    "minItems": 1,
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                        },
+                                        "title": {
+                                          "type": "string",
+                                          "maxLength": 300
+                                        },
+                                        "backgroundId": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "nodes": {
+                                          "maxItems": 150,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "id": {
+                                                "type": "string",
+                                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                              },
+                                              "kind": {
+                                                "type": "string",
+                                                "enum": [
+                                                  "line",
+                                                  "narration",
+                                                  "choice",
+                                                  "ending"
+                                                ]
+                                              },
+                                              "characterId": {
+                                                "default": null,
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "poseId": {
+                                                "default": null,
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "text": {
+                                                "type": "string",
+                                                "maxLength": 100000
+                                              },
+                                              "next": {
+                                                "default": null,
+                                                "anyOf": [
+                                                  {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "choices": {
+                                                "default": [],
+                                                "maxItems": 6,
+                                                "type": "array",
+                                                "items": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "string",
+                                                      "maxLength": 300
+                                                    },
+                                                    "next": {
+                                                      "anyOf": [
+                                                        {
+                                                          "type": "string",
+                                                          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                        },
+                                                        {
+                                                          "type": "null"
+                                                        }
+                                                      ]
+                                                    },
+                                                    "feedback": {
+                                                      "type": "string",
+                                                      "maxLength": 100000
+                                                    },
+                                                    "points": {
+                                                      "type": "integer",
+                                                      "minimum": -100,
+                                                      "maximum": 100
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "text",
+                                                    "next",
+                                                    "feedback",
+                                                    "points"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              },
+                                              "outcome": {
+                                                "default": "neutral",
+                                                "type": "string",
+                                                "enum": [
+                                                  "positive",
+                                                  "neutral",
+                                                  "negative"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "id",
+                                              "kind",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "title",
+                                        "backgroundId",
+                                        "nodes"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "start": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                  },
+                                  "allowTakeBack": {
+                                    "type": "boolean"
+                                  },
+                                  "showPathReview": {
+                                    "type": "boolean"
+                                  },
+                                  "scoring": {
+                                    "type": "boolean"
+                                  },
+                                  "passPoints": {
+                                    "type": "integer",
+                                    "minimum": -1000,
+                                    "maximum": 1000
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "workbook": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "title",
+                                  "intro",
+                                  "scenes",
+                                  "start",
+                                  "allowTakeBack",
+                                  "showPathReview",
+                                  "scoring",
+                                  "passPoints",
+                                  "required",
+                                  "workbook"
                                 ],
                                 "additionalProperties": false
                               }

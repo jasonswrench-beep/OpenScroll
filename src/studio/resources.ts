@@ -14,9 +14,9 @@ import { projects } from './api.js';
 import { parseCsv } from '../shared/csv.js';
 import { h, button, openDialog, confirmAction, toast, announce, pickFile } from './dom.js';
 
-export type ResourceTab = 'glossary' | 'banks' | 'certificate';
+export type ResourceTab = 'glossary' | 'banks' | 'characters' | 'certificate';
 export interface ResourcesHost { project: () => PortableProject; edit: (change: (project: PortableProject) => void, assetsChanged?: boolean) => boolean; assetSource: (assetId: string) => string; goTo: (place?: string) => void; redraw: () => void }
-const TABS: [ResourceTab, string][] = [['glossary', 'Glossary'], ['banks', 'Question banks'], ['certificate', 'Certificate']];
+const TABS: [ResourceTab, string][] = [['glossary', 'Glossary'], ['banks', 'Question banks'], ['characters', 'Characters'], ['certificate', 'Certificate']];
 
 export function resourcesView(host: ResourcesHost, tab: ResourceTab): { canvas: HTMLElement; side: HTMLElement[] } {
   const course = () => host.project().document.course;
@@ -28,7 +28,7 @@ export function resourcesView(host: ResourcesHost, tab: ResourceTab): { canvas: 
     tablist.append(t);
   });
   const panel = h('div', { class: 'res-panel', attrs: { role: 'tabpanel', id: 'res-panel', 'aria-labelledby': `res-tab-${tab}` } });
-  panel.append(...(tab === 'glossary' ? glossaryTab(host) : tab === 'banks' ? banksTab(host) : certificateTab(host)));
+  panel.append(...(tab === 'glossary' ? glossaryTab(host) : tab === 'banks' ? banksTab(host) : tab === 'characters' ? charactersTab(host) : certificateTab(host)));
   const canvas = h('div', { class: 'lesson-pane res-pane' }, [
     h('div', { class: 'lesson-head' }, [button('Back to course', () => host.goTo(undefined), { icon: ArrowLeft, class: 'btn btn-ghost' }), h('h1', { class: 'res-title', text: 'Course resources', attrs: { id: 'lesson-title', tabindex: -1 } })]),
     h('section', { class: 'paper res-paper' }, [tablist, panel]),
@@ -131,6 +131,47 @@ function banksTab(host: ResourcesHost): HTMLElement[] {
     h('div', { class: 'row' }, [create, openassess]),
     course.banks.length ? list : h('p', { class: 'hint', text: 'No question banks yet.' }),
     h('p', { class: 'hint', text: 'OpenAssess banks (.openassess, format 1) keep each question\'s choices, answer key, points and feedback. Questions OpenScroll cannot show are listed before anything is added. Spreadsheets use the same columns as lesson question import.' }),
+  ];
+}
+
+/* ---------- characters ---------- */
+function charactersTab(host: ResourcesHost): HTMLElement[] {
+  const course = host.project().document.course;
+  const uses = (id: string) => course.sections.flatMap(s => s.lessons).flatMap(l => l.blocks).flatMap(b => b.type === 'scenario' ? b.content.scenes.flatMap(s => s.nodes) : []).filter(n => n.characterId === id).length;
+  const set = (id: string, change: (character: typeof course.characters[number]) => void, assets = false) => host.edit(p => { const target = p.document.course.characters.find(c => c.id === id); if (target) change(target); }, assets);
+  const addPose = async (id: string, poseId?: string) => {
+    const file = await pickFile('.png,.jpg,.jpeg,.webp'); if (!file) return;
+    try {
+      const { asset, data } = await readImage(file, host.project());
+      if (host.edit(p => { p.document.assets.push(asset); p.files[assetPath(asset)] = data; const target = p.document.course.characters.find(c => c.id === id); if (!target) return; const pose = poseId ? target.poses.find(x => x.id === poseId) : undefined; if (pose) pose.imageId = asset.id; else target.poses.push({ id: newId(), name: `Pose ${target.poses.length + 1}`, imageId: asset.id, alt: '' }); }, true)) { host.redraw(); toast(poseId ? 'Picture replaced.' : 'Pose added. Describe it for screen reader users.'); }
+    } catch (error) { toast(error instanceof Error ? error.message : 'The picture could not be added.'); }
+  };
+  const list = h('ul', { class: 'items char-list' }, course.characters.map((character, index) => {
+    const name = h('input', { class: 'inp', attrs: { id: `ch-name-${index}`, maxlength: 300, value: character.name } }); name.addEventListener('input', () => set(character.id, c => { c.name = name.value; })); name.addEventListener('change', () => { host.redraw(); document.getElementById(`ch-role-${index}`)?.focus(); });
+    const role = h('input', { class: 'inp', attrs: { id: `ch-role-${index}`, maxlength: 300, value: character.role } }); role.addEventListener('input', () => set(character.id, c => { c.role = role.value; }));
+    const poses = h('ul', { class: 'pose-list' }, character.poses.map((pose, p) => {
+      const poseName = h('input', { class: 'inp', attrs: { maxlength: 300, value: pose.name, 'aria-label': `${character.name || 'Character'}, pose ${p + 1} name` } }); poseName.addEventListener('input', () => set(character.id, c => { const x = c.poses.find(y => y.id === pose.id); if (x) x.name = poseName.value; }));
+      const alt = h('textarea', { class: 'inp', attrs: { rows: 2, maxlength: 2000, 'aria-label': `${character.name || 'Character'}, pose ${p + 1} description` } }); alt.value = pose.alt; alt.addEventListener('input', () => set(character.id, c => { const x = c.poses.find(y => y.id === pose.id); if (x) x.alt = alt.value; }));
+      return h('li', { class: 'pose' }, [h('img', { attrs: { src: host.assetSource(pose.imageId), alt: '' } }), h('div', { class: 'pose-fields' }, [poseName, alt,
+        h('div', { class: 'row' }, [button(`Replace the picture for pose ${p + 1}`, () => void addPose(character.id, pose.id), { iconOnly: true, icon: ImagePlus }),
+          button(`Remove pose ${p + 1}`, () => { if (set(character.id, c => { c.poses = c.poses.filter(x => x.id !== pose.id); })) host.redraw(); }, { iconOnly: true, icon: Trash2 })])])]);
+    }));
+    const used = uses(character.id);
+    return h('li', { class: 'item' }, [
+      h('div', { class: 'item-head' }, [h('span', { class: 'item-name', text: `${character.name || 'Unnamed character'}${used ? ` · speaks in ${used} ${used === 1 ? 'step' : 'steps'}` : ''}` }),
+        button(`Remove ${character.name || 'this character'}`, async event => {
+          if (!await confirmAction('Remove this character?', `${character.name || 'This character'} and their poses will be removed.${used ? ` ${used} scenario ${used === 1 ? 'step needs' : 'steps need'} another speaker afterwards.` : ''}`, 'Remove character', event.currentTarget as HTMLElement, true)) return;
+          if (host.edit(p => { p.document.course.characters = p.document.course.characters.filter(c => c.id !== character.id); })) host.redraw();
+        }, { iconOnly: true, icon: Trash2 })]),
+      h('div', { class: 'row gl-row' }, [h('div', { class: 'fld' }, [h('label', { text: 'Name', attrs: { for: `ch-name-${index}` } }), name]), h('div', { class: 'fld' }, [h('label', { text: 'Role (optional)', attrs: { for: `ch-role-${index}` } }), role])]),
+      poses,
+      button(`Add a pose for ${character.name || 'this character'}`, () => void addPose(character.id), { icon: ImagePlus, class: 'btn btn-sm', disabled: character.poses.length >= 20 }),
+    ]);
+  }));
+  return [
+    h('p', { text: 'Characters speak in scenarios. Each has poses: pictures you upload, such as calm, pleased or worried. Describe every pose; screen readers read the description when the character speaks.' }),
+    h('div', { class: 'row' }, [button('Add a character', () => { if (host.edit(p => { p.document.course.characters.push({ id: newId(), name: 'New character', role: '', poses: [] }); })) host.redraw(); }, { icon: Plus, class: 'btn btn-sm btn-primary', disabled: course.characters.length >= 30 })]),
+    course.characters.length ? list : h('p', { class: 'hint', text: 'No characters yet.' }),
   ];
 }
 

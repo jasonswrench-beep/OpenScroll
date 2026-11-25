@@ -6,6 +6,7 @@ export function blockAssetIds(block:Block):string[]{
  if(block.type==='columns')return block.content.columns.flatMap(column=>column.blocks.flatMap(blockAssetIds));
  if(block.type==='assessment')return block.content.image ? [block.content.image.assetId] : [];
  if(block.type==='software-practice')return block.content.steps.map(step=>step.imageId);
+ if(block.type==='scenario')return block.content.scenes.flatMap(scene=>scene.backgroundId ? [scene.backgroundId] : []);
  if(block.type==='video' && block.content.describedAssetId)return [...(block.content.assetId ? [block.content.assetId] : []),block.content.describedAssetId];
  if(block.type==='image'||block.type==='image-text'||block.type==='labeled-graphic')return [block.content.assetId];
  if(block.type==='gallery')return block.content.items.map(item=>item.assetId);
@@ -15,6 +16,7 @@ export function remapBlockAssets(block:Block,ids:Map<string,string>){
  if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)remapBlockAssets(child,ids);
  if(block.type==='assessment' && block.content.image)block.content.image.assetId=ids.get(block.content.image.assetId)!;
  if(block.type==='software-practice')for(const step of block.content.steps)step.imageId=ids.get(step.imageId)!;
+ if(block.type==='scenario')for(const scene of block.content.scenes)if(scene.backgroundId)scene.backgroundId=ids.get(scene.backgroundId)!;
  if(block.type==='video' && block.content.describedAssetId)block.content.describedAssetId=ids.get(block.content.describedAssetId)!;
  if(block.type==='image'||block.type==='image-text'||block.type==='labeled-graphic')block.content.assetId=ids.get(block.content.assetId)!;
  if(block.type==='gallery')for(const image of block.content.items)image.assetId=ids.get(image.assetId)!;
@@ -23,6 +25,7 @@ export function remapBlockAssets(block:Block,ids:Map<string,string>){
 /** Every asset the course document refers to: cover, author photo, lesson banners and blocks, including blocks in columns. */
 export function documentAssetIds(document:CourseDocument):Set<string>{
  const used=new Set<string>(),course=document.course;if(course.cover)used.add(course.cover.assetId);if(course.authorImage)used.add(course.authorImage.assetId);
+ for(const pose of course.characters.flatMap(c=>c.poses))used.add(pose.imageId);
  if(course.certificate?.logoId)used.add(course.certificate.logoId);if(course.certificate?.signatureId)used.add(course.certificate.signatureId);
  for(const question of course.banks.flatMap(b=>b.questions))for(const id of blockAssetIds(question))used.add(id);
  for(const lesson of course.sections.flatMap(s=>s.lessons)){if(lesson.banner?.assetId)used.add(lesson.banner.assetId);for(const block of lesson.blocks)for(const id of blockAssetIds(block))used.add(id);}
@@ -31,6 +34,7 @@ export function documentAssetIds(document:CourseDocument):Set<string>{
 /** Points every asset reference in the course at its new identifier. */
 export function remapDocumentAssets(course:CourseDocument['course'],ids:Map<string,string>){
  if(course.cover)course.cover.assetId=ids.get(course.cover.assetId)!;if(course.authorImage)course.authorImage.assetId=ids.get(course.authorImage.assetId)!;
+ for(const pose of course.characters.flatMap(c=>c.poses))pose.imageId=ids.get(pose.imageId)!;
  if(course.certificate?.logoId)course.certificate.logoId=ids.get(course.certificate.logoId)!;if(course.certificate?.signatureId)course.certificate.signatureId=ids.get(course.certificate.signatureId)!;
  for(const question of course.banks.flatMap(b=>b.questions))remapBlockAssets(question,ids);
  for(const lesson of course.sections.flatMap(s=>s.lessons)){if(lesson.banner?.assetId)lesson.banner.assetId=ids.get(lesson.banner.assetId)!;for(const block of lesson.blocks)remapBlockAssets(block,ids);}

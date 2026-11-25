@@ -1,7 +1,7 @@
 # Course resources, results and certificates
 
 Course resources belong to the whole course rather than to one lesson. Open them from the course page (Course
-details, Open course resources). They have three tabs.
+details, Open course resources). They have four tabs.
 
 ## Glossary
 
@@ -46,6 +46,10 @@ on the server and shows what can be imported before anything is added.
 Points, the prompt and correct or incorrect feedback carry over. Pictures are not carried over and equations stay
 as text; the report says how many. Questions can also be imported into a bank from a spreadsheet, with the same
 columns as lesson question import.
+
+## Characters
+
+The people who speak in scenarios, each with a name, a role and described poses. See [SCENARIOS.md](SCENARIOS.md).
 
 ## Certificate
 

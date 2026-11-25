@@ -24,6 +24,7 @@ import { features } from './features.js';
 import { previewDialog } from './preview.js';
 import { themeStudio, accentReport } from './theme-studio.js';
 import { resourcesView, type ResourceTab } from './resources.js';
+import { ScenarioEditor } from './scenario-editor.js';
 import { accentInk as inkFor, textAccent } from '../shared/contrast.js';
 import LOGO from '../assets/openscroll.svg';
 
@@ -36,7 +37,7 @@ const SAVE_TEXT = { saved: 'Saved', pending: 'Changes pending', saving: 'Savingâ
 export function courseView(root: HTMLElement, context: Context) {
   const owner = context.account.id, id = context.id;
   let controller: SaveController | undefined, candidate: RecoveryDraft | undefined, candidateConflict = false;
-  let lessonId = context.lessonId, editor: LessonEditor | undefined, disposed = false;
+  let lessonId = context.lessonId, editor: LessonEditor | undefined, scenarios: ScenarioEditor | undefined, disposed = false;
   root.replaceChildren(h('div', { class: 'studio-loading', attrs: { role: 'status' } }, ['Opening courseâ€¦']));
 
   const crumbs = h('nav', { class: 'crumbs', attrs: { 'aria-label': 'Location' } });
@@ -440,11 +441,21 @@ export function courseView(root: HTMLElement, context: Context) {
     drawCrumbs();
     // Course resources and question banks are places on the course page, like lessons.
     if (lessonId?.startsWith('resources:')) {
-      const tab = (['glossary', 'banks', 'certificate'].includes(lessonId.slice(10)) ? lessonId.slice(10) : 'glossary') as ResourceTab;
+      const tab = (['glossary', 'banks', 'characters', 'certificate'].includes(lessonId.slice(10)) ? lessonId.slice(10) : 'glossary') as ResourceTab;
       const view = resourcesView({ project: () => controller!.project, edit: (change, assets) => edit(change, assets), assetSource: assetId => assetSource(assetId), goTo: place => context.go(place), redraw: () => redraw() }, tab);
       body.classList.add('lesson-mode'); side.hidden = false; side.setAttribute('aria-label', 'About course resources');
       canvas.replaceChildren(view.canvas); side.replaceChildren(h('div', { class: 'lesson-side' }, view.side));
       if (pendingIssue?.place === lessonId) applyPendingIssue(); else canvas.querySelector<HTMLElement>('#lesson-title')?.focus();
+      paintSave(); return;
+    }
+    if (lessonId?.startsWith('scenario:')) {
+      const blockId = lessonId.slice(9);
+      if (!lessons().some(l => l.blocks.some(b => b.id === blockId && b.type === 'scenario'))) { toast('That scenario no longer exists.'); context.go(undefined); return; }
+      scenarios ??= new ScenarioEditor({ project: () => controller!.project, edit: (change, assets) => edit(change, assets), assetSource: assetId => assetSource(assetId), goTo: place => context.go(place), themeVars: element => themeVars(element) });
+      body.classList.add('lesson-mode'); side.hidden = false; side.setAttribute('aria-label', 'Scenario route check');
+      scenarios.show(blockId);
+      canvas.replaceChildren(scenarios.canvas); side.replaceChildren(scenarios.panel);
+      canvas.querySelector<HTMLElement>('#lesson-title')?.focus();
       paintSave(); return;
     }
     if (lessonId?.startsWith('bank:')) {
