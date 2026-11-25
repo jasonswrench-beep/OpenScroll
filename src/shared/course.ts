@@ -28,6 +28,8 @@ const buttonBlock = z.strictObject({...base,type:z.literal('button'),variant:z.l
 /** Blocks that may sit inside a column: text, pictures and links only, so tracking and phone reflow stay simple. */
 export const COLUMN_CHILD_TYPES = ['heading','paragraph','list','statement','quote','image','button'] as const;
 const columnChildSchema = z.discriminatedUnion('type', [headingBlock, paragraphBlock, listBlock, statementBlock, quoteBlock, imageBlock, buttonBlock]);
+const percent = z.number().min(0).max(100);
+const numericSchema = z.strictObject({ mode: z.enum(['exact', 'range']), value: z.number().min(-1e12).max(1e12), tolerance: z.number().min(0).max(1e12), min: z.number().min(-1e12).max(1e12), max: z.number().min(-1e12).max(1e12), unit: z.string().max(40) });
 /** Shared by blocks that collect a learner response: whether one is needed to finish, and whether it appears in My workbook. */
 const responseOptions = { required: z.boolean(), workbook: z.boolean() };
 export const OBJECTIVE_LEVELS = ['remember','understand','apply','analyze','evaluate','create'] as const;
@@ -47,9 +49,14 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.strictObject({...base,type:z.literal('process'),variant:z.literal('steps'),content:z.strictObject({intro:card.nullable().default(null),items:z.array(item).min(1).max(50),summary:card.nullable().default(null)})}),
   z.strictObject({...base,type:z.literal('timeline'),variant:z.literal('vertical'),content:z.strictObject({items:z.array(z.strictObject({title:label,text:rich,date:label.default('')})).min(1).max(50)})}),
   z.strictObject({...base,type:z.literal('labeled-graphic'),variant:z.literal('markers'),content:z.strictObject({...imageContent,markers:z.array(z.strictObject({label,text:rich,x:z.number().min(0).max(100),y:z.number().min(0).max(100)})).min(1).max(30)})}),
-  z.strictObject({...base,type:z.literal('assessment'),variant:z.enum(['single-choice','multiple-response','true-false','fill-blank','matching','ordering','categorize']),
+  z.strictObject({...base,type:z.literal('assessment'),variant:z.enum(['single-choice','multiple-response','true-false','fill-blank','short-answer','numeric','hotspot','matching','ordering','categorize']),
     content:z.strictObject({prompt:rich,options:z.array(label).max(20),correct:z.array(z.number().int().min(0).max(19)).max(20),accepted:z.array(label).max(20),caseSensitive:z.boolean(),pairs:z.array(z.strictObject({left:label,right:label})).max(20),items:z.array(label).max(20),feedbackCorrect:rich,feedbackIncorrect:rich,
-      feedbackMode:z.enum(['none','correct-incorrect','per-choice']).default('correct-incorrect'),choiceFeedback:z.array(rich).max(20).default([]),groups:z.array(label).max(10).default([]),placements:z.array(z.number().int().min(0).max(9)).max(20).default([])}),
+      feedbackMode:z.enum(['none','correct-incorrect','per-choice']).default('correct-incorrect'),choiceFeedback:z.array(rich).max(20).default([]),groups:z.array(label).max(10).default([]),placements:z.array(z.number().int().min(0).max(9)).max(20).default([]),
+      // Wave B: short answer (exact match or self-check against a model answer), numeric, and hotspot.
+      selfCheck:z.boolean().default(false),model:rich.default(''),
+      numeric:numericSchema.default({mode:'exact',value:0,tolerance:0,min:0,max:0,unit:''}),
+      image:z.strictObject({assetId:idSchema,altText:z.string().max(2000)}).nullable().default(null),
+      areas:z.array(z.strictObject({x:percent,y:percent,w:percent,h:percent,label})).max(20).default([])}),
     assessment:z.strictObject({graded:z.boolean(),points:z.number().int().min(1).max(100),required:z.boolean(),completion:z.enum(['submitted','correct']),maxAttempts:z.number().int().min(0).max(20)})}),
   z.strictObject({ ...base, type: z.literal('continue'), variant: z.literal('button'), content: z.strictObject({ label, hint: label.default('') }), completion: z.enum(['none', 'previous', 'all-previous']) }),
   // Wave A (stage 4). Learner responses to these blocks live in learner state, never in the document.
@@ -59,6 +66,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.strictObject({...base,type:z.literal('activity'),variant:z.literal('card'),content:z.strictObject({title:label,minutes:z.number().int().min(0).max(600),steps:z.array(rich).min(1).max(20),output:label,...responseOptions})}),
   z.strictObject({...base,type:z.literal('checklist'),variant:z.literal('ticks'),content:z.strictObject({title:label,items:z.array(label).min(1).max(50),...responseOptions})}),
   z.strictObject({...base,type:z.literal('self-assessment'),variant:z.literal('scale'),content:z.strictObject({title:label,intro:rich,scale:z.array(label).min(2).max(7),items:z.array(label).min(1).max(30),bands:z.array(z.strictObject({min:z.number().int().min(0).max(1000),max:z.number().int().min(0).max(1000),text:rich})).max(8),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('survey'),variant:z.literal('form'),content:z.strictObject({title:label,intro:rich,scale:z.array(label).min(2).max(7),items:z.array(z.strictObject({id:idSchema,kind:z.enum(['rating','differential','choice','comment']),prompt:label,options:z.array(label).max(10)})).min(1).max(30),...responseOptions})}),
   z.strictObject({...base,type:z.literal('columns'),variant:z.enum(['1-1','1-1-1','2-1','1-2']),content:z.strictObject({columns:z.array(z.strictObject({blocks:z.array(columnChildSchema).max(20)})).min(2).max(3)})}),
 ]);
 export const assetSchema = z.strictObject({
@@ -136,7 +144,7 @@ export function migrateToCurrent(input: Loose): Loose {
   doc.schemaVersion = SCHEMA_VERSION;
   return doc;
 }
-const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns']);
+const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey']);
 /** Older versions migrate by copying; original archives and stored rows remain untouched until explicit save. */
 export function parseCourse(input: unknown): CourseDocument {
   if (input === null || typeof input !== 'object' || !('schemaVersion' in input)) throw new ProjectError('The course is missing its schema version.');
@@ -184,8 +192,13 @@ export function parseCourse(input: unknown): CourseDocument {
         if(version===1 && !['heading','paragraph','list','statement','quote','image','image-text','divider','spacer','continue'].includes(block.type))throw new ProjectError('Version 1 does not support this block type. Use a version 2 project.');
         if(version<3 && (block.type==='assessment' || block.requiredInteraction!==undefined))throw new ProjectError('Assessment and interaction requirements need a version 3 project.');
         if(block.requiredInteraction && !['accordion','tabs','flashcards','process','labeled-graphic'].includes(block.type))throw new ProjectError('This block does not support required item exploration.');
-        if(block.type==='assessment' && (new Set(block.content.correct).size!==block.content.correct.length || block.content.correct.some(i=>i>=block.content.options.length)))throw new ProjectError('Assessment answer references must be unique and match existing choices.');
-        if(block.type==='assessment' && block.content.choiceFeedback.length>block.content.options.length)throw new ProjectError('Choice feedback must match existing choices.');
+        // A hotspot's choices are its areas; every other question's choices are its options.
+        const choices=block.type==='assessment' ? (block.variant==='hotspot' ? block.content.areas.length : block.content.options.length) : 0;
+        if(block.type==='assessment' && (new Set(block.content.correct).size!==block.content.correct.length || block.content.correct.some(i=>i>=choices)))throw new ProjectError('Assessment answer references must be unique and match existing choices.');
+        if(block.type==='assessment' && block.content.choiceFeedback.length>choices)throw new ProjectError('Choice feedback must match existing choices.');
+        if(block.type==='assessment' && block.content.image)checkImage(block.content.image.assetId);
+        if(block.type==='assessment' && block.content.areas.some(a=>a.x+a.w>100.001 || a.y+a.h>100.001))throw new ProjectError('Hotspot areas must stay inside the image.');
+        if(block.type==='survey')for(const item of block.content.items)claim(item.id);
         if(block.type==='assessment' && (block.content.placements.length>block.content.items.length || block.content.placements.some(i=>i>=Math.max(1,block.content.groups.length))))throw new ProjectError('Sorting placements must match existing cards and groups.');
         if (block.type === 'image' || block.type === 'image-text' || block.type==='labeled-graphic') checkImage(block.content.assetId);
         if(block.type==='gallery')for(const image of block.content.items)checkImage(image.assetId);

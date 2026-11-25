@@ -8,13 +8,39 @@ The trusted built player, canonical course/assets, license notices, root `imsman
 
 The adapter discovers the selected edition's API in the launch window, ancestors or opener, with bounded traversal and cross-origin exceptions. Missing API, initialization or resume-read failures show an error; they never launch an untracked course. Preview remains isolated. SCORM learner state never enters author records or browser local storage.
 
-Writes include aggregate percentage score (min 0/max 100, plus scaled score in 2004), completion/success, lesson bookmark, suspend data, elapsed session time, and exit intention. There is no per-question `cmi.interactions` report. No learner identity is needed. Outcomes use the same grading engine as preview and HTML. Score precision is seven decimal places; passing uses the authored threshold and exact earned/possible comparison.
+Writes include aggregate percentage score (min 0/max 100, plus scaled score in 2004), completion/success, lesson bookmark, suspend data, elapsed session time, and exit intention, and one interaction record per answered question or learner response (see Per-question reporting below). No learner identity is needed. Outcomes use the same grading engine as preview and HTML. Score precision is seven decimal places; passing uses the authored threshold and exact earned/possible comparison.
 
 SCORM 2004 reports completion and success separately, and progress as a fraction of lessons completed. Single-SCO delivery controls make completion/objective status content-owned. Success remains unknown until all graded questions have a submitted answer. Ungraded courses do not invent a passing score.
 
 SCORM 1.2 has a single lesson status. It stays incomplete until all lessons are completed. It then reports passed/failed when all graded questions have been answered, otherwise completed. This cannot express completion and success independently. A passing quiz before lesson completion still reports incomplete. No manifest mastery score is supplied to trigger implicit LMS overrides.
 
 Session time is elapsed wall time in this launch, including idle/background time, rather than active learning time. Every save reports the cumulative session duration, never writes total time, and uses the edition's time syntax. Normal exit is used only after completion with a pass or no graded questions; otherwise exit is suspend to allow continuation. LMS attempt/retake policy ultimately controls subsequent launches. Reset progress resets SCO state within the current attempt; it does not create a new LMS attempt or necessarily erase an LMS's retained grade.
+
+## Per-question reporting
+
+Each submitted question and each learner response becomes one `cmi.interactions` record, so the LMS can show how
+learners answered. Questions report their result as correct or incorrect (`wrong` in SCORM 1.2), with the correct
+pattern and a weight equal to their points when they count toward the score (0 for practice). Self-check short
+answers, reflections, activities, checklists, self-assessments and surveys report as `neutral`.
+
+| Content | SCORM 2004 type | SCORM 1.2 type | Learner response |
+| --- | --- | --- | --- |
+| Multiple choice, multiple response, hotspot | `choice` | `choice` | Letters for the chosen options or areas (`a[,]c`, or `a,c` in 1.2) |
+| True or false | `true-false` | `true-false` | `true`/`false` (`t`/`f` in 1.2) |
+| Fill in the blank, short answer (match) | `fill-in` | `fill-in` | The typed text, up to 250 characters |
+| Short answer (self-check), reflection, activity, survey comment | `long-fill-in` | `fill-in` | The text, up to 4,000 characters (255 in 1.2) |
+| Numeric | `numeric` | `numeric` | The number; 2004's pattern is the accepted range, `low[:]high` |
+| Matching, sort into groups | `matching` | `matching` | Pairs such as `1[.]a[,]2[.]b` (`1.a,2.b` in 1.2) |
+| Ordering | `sequencing` | `sequencing` | Item letters in the learner's order |
+| Checklist | `choice` | `choice` | Letters of the ticked items |
+| Self-assessment | `other` | `fill-in` | The total and each rating |
+| Survey rating | `likert` | `likert` | The rating's position on the scale, from 1 |
+
+Record ids are the block (or survey question) id, as `urn:openscroll:<id>` in SCORM 2004. SCORM 2004 updates a
+question's record in place when the answer changes; SCORM 1.2 records are write-only, so a changed answer adds a new
+record, as the 1.2 journal model expects. Answers restored from a saved attempt are not reported again. Free text has
+SCORM 2004 delimiters removed so the LMS reads it as one answer. An LMS that refuses interaction records never stops
+progress, score or completion from saving.
 
 ## Save and resume
 

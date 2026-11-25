@@ -155,6 +155,8 @@ The assessment variant `sorting` is renamed `ordering` so it cannot be confused 
 | `columns` | `1-1`, `1-1-1`, `2-1`, `1-2` | `columns` (2, or 3 for `1-1-1`), each `{ blocks }` with at most 20 heading, paragraph, list, statement, quote, image or button blocks |
 | `assessment` | adds `true-false` | exactly two `options` and one `correct` answer |
 
+**Wave B questions and survey.** Assessment content gains `selfCheck` (default `false`) and `model` (formatted, default empty) for `short-answer`; `numeric` `{ mode: exact | range, value, tolerance, min, max, unit }` for `numeric`; and `image` `{ assetId, altText } | null` with `areas` (up to 20 `{ x, y, w, h, label }` in percent of the image) for `hotspot`, where `correct` and `choiceFeedback` refer to areas instead of options. The `survey` block (variant `form`) has `title`, `intro` (formatted), `scale` (2–7 labels), `items` (1–30 `{ id, kind: rating | differential | choice | comment, prompt, options }`), `required` and `workbook`. Areas must stay inside the image, and a hotspot's image must be an image asset.
+
 Integrity checks: every table row has the same number of cells as the header; the column count matches the layout; a score band's `min` is not above its `max`; identifiers are unique across blocks inside columns and objective items; images inside columns must name image assets. Learner responses to reflection, activity, checklist and self-assessment blocks are learner state, never part of the course file (see [LEARNER-RESPONSES.md](LEARNER-RESPONSES.md)).
 
 ## Version and migration policy

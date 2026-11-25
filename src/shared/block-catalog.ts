@@ -45,10 +45,14 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'journal',label:'Journal prompt',category:'Activities',type:'reflection',variant:'journal',description:'A reflection styled as a journal page.'},
   {key:'activity',label:'Activity',category:'Activities',type:'activity',variant:'card',description:'Timed steps to follow, with a box to write in.'},
   {key:'interactive-checklist',label:'Checklist',category:'Activities',type:'checklist',variant:'ticks',description:'Items learners tick off. Their ticks are saved.'},
+  {key:'survey',label:'Survey',category:'Activities',type:'survey',variant:'form',description:'Unscored ratings, choices and comments about the course.'},
   {key:'self-assessment',label:'Self-assessment',category:'Activities',type:'self-assessment',variant:'scale',description:'Learners rate statements and see what their total means.'},
   {key:'single-choice',label:'Multiple choice',category:'Assessment',type:'assessment',variant:'single-choice',description:'Select one answer.'},
   {key:'multiple-response',label:'Multiple response',category:'Assessment',type:'assessment',variant:'multiple-response',description:'Select every correct answer.'},
   {key:'true-false',label:'True or false',category:'Assessment',type:'assessment',variant:'true-false',description:'Judge whether a statement is true.'},
+  {key:'short-answer',label:'Short answer',category:'Assessment',type:'assessment',variant:'short-answer',description:'Type an answer that matches, or compare it with a model answer.'},
+  {key:'numeric',label:'Numeric answer',category:'Assessment',type:'assessment',variant:'numeric',description:'Type a number; an exact value, a tolerance or a range counts.'},
+  {key:'hotspot',label:'Hotspot',category:'Assessment',type:'assessment',variant:'hotspot',description:'Select the right place on a picture, or choose it from a list.'},
   {key:'fill-blank',label:'Fill in the blank',category:'Assessment',type:'assessment',variant:'fill-blank',description:'Type an accepted answer.'},
   {key:'matching',label:'Matching',category:'Assessment',type:'assessment',variant:'matching',description:'Match related terms without dragging.'},
   {key:'ordering',label:'Ordering',category:'Assessment',type:'assessment',variant:'ordering',description:'Put items in order with keyboard controls.'},
@@ -70,13 +74,14 @@ export function renewIds<T extends Block>(block:T):T {
   block.id=newId();
   if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)child.id=newId();
   if(block.type==='objectives')for(const item of block.content.items)item.id=newId();
+  if(block.type==='survey')for(const item of block.content.items)item.id=newId();
   return block;
 }
 export function prepareBlock(key:string,project:PortableProject):{block:Block;asset?:Asset;data?:string} {
   const template=BLOCK_TEMPLATES.find(t=>t.key===key);if(!template)throw new Error('Unknown block template.');
   const appearance={width:'reading',padding:'medium',background:'page'};const base={id:newId(),type:template.type,variant:template.variant,appearance:template.type==='columns' ? {...appearance,width:'wide'} : appearance};
   let asset:Asset|undefined;let imageId='';
-  if(['image','image-text','gallery','labeled-graphic'].includes(template.type)){
+  if(['image','image-text','gallery','labeled-graphic'].includes(template.type) || template.variant==='hotspot'){
     const existing=project.document.assets.find(a=>a.mediaType==='image/png' && a.sha256===STARTER_IMAGE_SHA256 && project.files[assetPath(a)]===STARTER_IMAGE_BASE64);
     asset=existing ? undefined : {id:newId(),fileName:'openscroll-starter.png',mediaType:'image/png',byteLength:STARTER_IMAGE_BYTES,sha256:STARTER_IMAGE_SHA256};
     imageId=existing?.id ?? asset!.id;
@@ -108,9 +113,16 @@ export function prepareBlock(key:string,project:PortableProject):{block:Block;as
     activity:{title:'Try it now',minutes:10,steps:['Choose one task you do every week.','Write down one small change you could test.','Try the change once and note what happened.'],output:'What I noticed',required:false,workbook:true},
     checklist:{title:'Before you start',items:['I know what I want to try.','I have the materials I need.','I know who to ask for help.'],required:false,workbook:true},
     'self-assessment':{title:'How confident do you feel?',intro:'Rate each statement honestly. There are no wrong answers.',scale:['Not yet','Somewhat','Mostly','Fully'],items:['I can explain the main idea.','I can use it in my own work.','I can help a colleague use it.'],bands:[{min:3,max:6,text:'You are just getting started. Revisit the examples and try one small step.'},{min:7,max:9,text:'You are well on your way. Pick one area to practise next.'},{min:10,max:12,text:'You are confident. Consider sharing what you know with others.'}],required:false,workbook:true},
+    survey:{title:'Tell us what you think',intro:'Your answers help improve this course. There are no right or wrong answers.',scale:['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'],items:[{id:newId(),kind:'rating',prompt:'The examples were useful.',options:[]},{id:newId(),kind:'differential',prompt:'How did the pace feel?',options:['Too slow','Too fast']},{id:newId(),kind:'choice',prompt:'Which part did you use most?',options:['The reading','The activities','The questions']},{id:newId(),kind:'comment',prompt:'What one change would improve this lesson?',options:[]}],required:false,workbook:false},
     columns:{columns:Array.from({length:template.variant==='1-1-1' ? 3 : 2},(_,index)=>({blocks:[blockSchema.parse({id:newId(),type:'paragraph',variant:'with-heading',appearance,content:{heading:['First idea','Second idea','Third idea'][index],text:'Keep each column short. On a phone, columns stack in reading order.'}})]}))},
   };
-  const starter=template.variant==='true-false' ? {...(content.assessment as object),prompt:'Small, practical steps make new ideas easier to apply.',options:['True','False'],correct:[0],choiceFeedback:[]} : content[template.type];
+  const questions:Record<string,object>={
+    'true-false':{prompt:'Small, practical steps make new ideas easier to apply.',options:['True','False'],correct:[0],choiceFeedback:[]},
+    'short-answer':{prompt:'In one word, what turns an idea into a habit?',accepted:['practice','repetition'],model:'Practice: repeating a small action until it becomes routine.'},
+    numeric:{prompt:'How many days are in two weeks?',numeric:{mode:'exact',value:14,tolerance:0,min:10,max:20,unit:'days'}},
+    hotspot:{prompt:'Select the part of the picture that shows the person.',options:[],correct:[0],image:{assetId:imageId,altText:image.altText},areas:[{x:6,y:12,w:32,h:76,label:'The person'},{x:44,y:12,w:50,h:34,label:'The upper lines of text'},{x:44,y:54,w:50,h:34,label:'The lower lines of text'}]},
+  };
+  const starter=template.type==='assessment' && questions[template.variant] ? {...(content.assessment as object),...questions[template.variant]} : content[template.type];
   const block=blockSchema.parse({...base,content:starter,...(template.type==='assessment' ? {assessment:{graded:false,points:1,required:false,completion:'submitted',maxAttempts:0}} : {}),...(template.type==='continue' ? {completion:'none'} : {})});
   return {block,...(asset ? {asset,data:STARTER_IMAGE_BASE64} : {})};
 }

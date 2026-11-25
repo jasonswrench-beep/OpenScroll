@@ -1,5 +1,5 @@
 import { richToDom, richIsEmpty } from '../shared/rich-text.js';
-import { RESPONSE_TEXT_MAX, wordCount, selfAssessmentResult, responseMeets, type ResponseBlock, type LearnerResponse } from '../shared/responses.js';
+import { RESPONSE_TEXT_MAX, SURVEY_COMMENT_MAX, wordCount, selfAssessmentResult, responseMeets, type ResponseBlock, type LearnerResponse } from '../shared/responses.js';
 import type { CourseFlow } from './state.js';
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: string) {
@@ -28,7 +28,7 @@ export function renderResponse(block: ResponseBlock, flow: CourseFlow, persist: 
   const requirement = () => {
     if (!required) return;
     const met = responseMeets(block, saved);
-    required.textContent = met ? 'Required · Done' : block.type === 'reflection' ? `Required · Write at least ${Math.max(1, block.content.minWords)} ${Math.max(1, block.content.minWords) === 1 ? 'word' : 'words'}` : block.type === 'checklist' ? 'Required · Tick every item' : block.type === 'self-assessment' ? 'Required · Rate every statement' : block.content.output ? 'Required · Write your response' : 'Required · Mark the activity as done';
+    required.textContent = met ? 'Required · Done' : block.type === 'reflection' ? `Required · Write at least ${Math.max(1, block.content.minWords)} ${Math.max(1, block.content.minWords) === 1 ? 'word' : 'words'}` : block.type === 'checklist' ? 'Required · Tick every item' : block.type === 'self-assessment' ? 'Required · Rate every statement' : block.type === 'survey' ? 'Required · Answer every rating and choice' : block.content.output ? 'Required · Write your response' : 'Required · Mark the activity as done';
     required.classList.toggle('is-met', met);
   };
   /** A text box that keeps what is typed after a short pause, and immediately when focus leaves it. */
@@ -127,6 +127,38 @@ export function renderResponse(block: ResponseBlock, flow: CourseFlow, persist: 
         set.append(options); root.append(set);
       });
       show(); root.append(result);
+      break;
+    }
+    case 'survey': {
+      const c = block.content, blank = () => c.items.map(() => null as number | string | null);
+      if (c.title) root.append(node('h3', c.title));
+      if (!richIsEmpty(c.intro)) root.append(rich(c.intro));
+      if (required) root.append(required);
+      const answers = () => saved.answers ? [...saved.answers] : blank();
+      c.items.forEach((item, index) => {
+        if (item.kind === 'comment') {
+          const wrap = node('label', undefined, 'response-field'), area = node('textarea');
+          area.rows = 3; area.maxLength = SURVEY_COMMENT_MAX;
+          const current = saved.answers?.[index]; area.value = typeof current === 'string' ? current : '';
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const keep = (quiet: boolean) => { clearTimeout(timer); const next = answers(); if ((next[index] ?? '') === area.value) return; next[index] = area.value; store({ answers: next }, quiet); requirement(); };
+          area.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => keep(true), 700); });
+          area.addEventListener('blur', () => keep(false));
+          wrap.append(node('span', item.prompt), area); root.append(wrap);
+          return;
+        }
+        const set = node('fieldset', undefined, 'response-rating'); set.append(node('legend', item.prompt));
+        if (item.kind === 'differential') set.append(node('p', `1 means ${item.options[0] ?? 'the first end'}; ${c.scale.length} means ${item.options[1] ?? 'the other end'}.`, 'response-ends'));
+        const labels = item.kind === 'choice' ? item.options : item.kind === 'differential' ? c.scale.map((_, i) => String(i + 1)) : c.scale;
+        const options = node('div', undefined, 'response-scale');
+        labels.forEach((label, value) => {
+          const choice = node('label'), input = node('input'); input.type = 'radio'; input.name = `survey-${block.id}-${index}`; input.value = String(value);
+          input.checked = saved.answers?.[index] === value;
+          input.addEventListener('change', () => { const next = answers(); next[index] = value; store({ answers: next }, true); requirement(); });
+          choice.append(input, document.createTextNode(` ${label}`)); options.append(choice);
+        });
+        set.append(options); root.append(set);
+      });
       break;
     }
   }

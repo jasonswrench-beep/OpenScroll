@@ -2,12 +2,13 @@ import type { Block } from './course.js';
 import { richToPlain } from './rich-text.js';
 
 /** Blocks that collect something from the learner. The answer lives in learner state, never in the course file. */
-export type ResponseBlock = Extract<Block, { type: 'reflection' | 'activity' | 'checklist' | 'self-assessment' }>;
-const RESPONSE_TYPES: ReadonlySet<string> = new Set(['reflection', 'activity', 'checklist', 'self-assessment']);
+export type ResponseBlock = Extract<Block, { type: 'reflection' | 'activity' | 'checklist' | 'self-assessment' | 'survey' }>;
+const RESPONSE_TYPES: ReadonlySet<string> = new Set(['reflection', 'activity', 'checklist', 'self-assessment', 'survey']);
 export function isResponseBlock(block: Block): block is ResponseBlock { return RESPONSE_TYPES.has(block.type); }
 
 /** What a learner has written, ticked or rated. Only the parts that apply to the block are kept. */
-export interface LearnerResponse { text?: string; ticks?: number[]; ratings?: (number | null)[]; done?: boolean }
+export interface LearnerResponse { text?: string; ticks?: number[]; ratings?: (number | null)[]; done?: boolean; answers?: (number | string | null)[] }
+export const SURVEY_COMMENT_MAX = 4000;
 export const RESPONSE_TEXT_MAX = 20_000;
 
 export const wordCount = (text: string) => (text.trim().match(/\S+/g) ?? []).length;
@@ -20,7 +21,7 @@ const writes = (block: ResponseBlock) => block.type === 'reflection' || (block.t
 export function cleanResponse(block: ResponseBlock, input: unknown): LearnerResponse | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
   const value = input as Record<string, unknown>, result: LearnerResponse = {};
-  const allowed = new Set(block.type === 'checklist' ? ['ticks'] : block.type === 'self-assessment' ? ['ratings'] : block.type === 'activity' ? ['text', 'done'] : ['text']);
+  const allowed = new Set(block.type === 'checklist' ? ['ticks'] : block.type === 'self-assessment' ? ['ratings'] : block.type === 'survey' ? ['answers'] : block.type === 'activity' ? ['text', 'done'] : ['text']);
   if (Object.keys(value).some(key => !allowed.has(key))) return undefined;
   if (value.text !== undefined) {
     if (typeof value.text !== 'string' || value.text.length > RESPONSE_TEXT_MAX || !writes(block)) return undefined;
@@ -39,6 +40,19 @@ export function cleanResponse(block: ResponseBlock, input: unknown): LearnerResp
     if (!ratings.every(r => r === null || (Number.isInteger(r) && (r as number) >= 0 && (r as number) < block.content.scale.length))) return undefined;
     if (ratings.some(r => r !== null)) result.ratings = ratings as (number | null)[];
   }
+  if (value.answers !== undefined) {
+    if (block.type !== 'survey' || !Array.isArray(value.answers) || value.answers.length !== block.content.items.length) return undefined;
+    const answers: (number | string | null)[] = [];
+    for (const [index, answer] of (value.answers as unknown[]).entries()) {
+      const item = block.content.items[index]!;
+      if (answer === null || answer === '') { answers.push(null); continue; }
+      if (item.kind === 'comment') { if (typeof answer !== 'string' || answer.length > SURVEY_COMMENT_MAX) return undefined; answers.push(answer.trim() ? answer : null); continue; }
+      const limit = item.kind === 'choice' ? item.options.length : block.content.scale.length;
+      if (!Number.isInteger(answer) || (answer as number) < 0 || (answer as number) >= limit) return undefined;
+      answers.push(answer as number);
+    }
+    if (answers.some(a => a !== null)) result.answers = answers;
+  }
   return result;
 }
 export const isEmptyResponse = (response: LearnerResponse) => Object.keys(response).length === 0;
@@ -50,6 +64,7 @@ export function responseMeets(block: ResponseBlock, response: LearnerResponse | 
     case 'activity': return block.content.output ? !!response?.text?.trim() : !!response?.done;
     case 'checklist': return (response?.ticks?.length ?? 0) === block.content.items.length;
     case 'self-assessment': return !!response?.ratings && response.ratings.every(r => r !== null);
+    case 'survey': return block.content.items.every((item, i) => item.kind === 'comment' || (response?.answers?.[i] ?? null) !== null);
   }
 }
 
@@ -73,11 +88,21 @@ export function responseText(block: ResponseBlock, response: LearnerResponse | u
       if (result.complete) lines.push(`Total: ${result.total} of ${result.max}${result.band ? `. ${richToPlain(result.band.text)}` : ''}`);
       return lines.join('\n');
     }
+    case 'survey': return block.content.items.map((item, i) => `${item.prompt} — ${surveyAnswer(block, i, response?.answers?.[i] ?? null) || 'no answer'}`).join('\n');
   }
+}
+/** A survey answer as words: the rating label, the chosen option, or the comment. */
+export function surveyAnswer(block: Extract<Block, { type: 'survey' }>, index: number, answer: number | string | null): string {
+  const item = block.content.items[index];
+  if (!item || answer === null) return '';
+  if (typeof answer === 'string') return answer;
+  if (item.kind === 'choice') return item.options[answer] ?? '';
+  if (item.kind === 'differential') return `${answer + 1} of ${block.content.scale.length} (${item.options[0] ?? ''} to ${item.options[1] ?? ''})`;
+  return block.content.scale[answer] ?? '';
 }
 
 /** The heading a response block shows in My workbook and in lists of things to finish. */
 export function responseTitle(block: ResponseBlock): string {
-  const text = block.type === 'reflection' ? richToPlain(block.content.prompt) : block.content.title || (block.type === 'checklist' ? 'Checklist' : block.type === 'activity' ? 'Activity' : 'Self-assessment');
+  const text = block.type === 'reflection' ? richToPlain(block.content.prompt) : block.content.title || (block.type === 'checklist' ? 'Checklist' : block.type === 'activity' ? 'Activity' : block.type === 'survey' ? 'Survey' : 'Self-assessment');
   return text.replace(/\s+/g, ' ').trim().slice(0, 160) || 'Reflection';
 }

@@ -2798,6 +2798,9 @@
                                   "multiple-response",
                                   "true-false",
                                   "fill-blank",
+                                  "short-answer",
+                                  "numeric",
+                                  "hotspot",
                                   "matching",
                                   "ordering",
                                   "categorize"
@@ -2911,6 +2914,136 @@
                                       "type": "integer",
                                       "minimum": 0,
                                       "maximum": 9
+                                    }
+                                  },
+                                  "selfCheck": {
+                                    "default": false,
+                                    "type": "boolean"
+                                  },
+                                  "model": {
+                                    "default": "",
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "numeric": {
+                                    "default": {
+                                      "mode": "exact",
+                                      "value": 0,
+                                      "tolerance": 0,
+                                      "min": 0,
+                                      "max": 0,
+                                      "unit": ""
+                                    },
+                                    "type": "object",
+                                    "properties": {
+                                      "mode": {
+                                        "type": "string",
+                                        "enum": [
+                                          "exact",
+                                          "range"
+                                        ]
+                                      },
+                                      "value": {
+                                        "type": "number",
+                                        "minimum": -1000000000000,
+                                        "maximum": 1000000000000
+                                      },
+                                      "tolerance": {
+                                        "type": "number",
+                                        "minimum": 0,
+                                        "maximum": 1000000000000
+                                      },
+                                      "min": {
+                                        "type": "number",
+                                        "minimum": -1000000000000,
+                                        "maximum": 1000000000000
+                                      },
+                                      "max": {
+                                        "type": "number",
+                                        "minimum": -1000000000000,
+                                        "maximum": 1000000000000
+                                      },
+                                      "unit": {
+                                        "type": "string",
+                                        "maxLength": 40
+                                      }
+                                    },
+                                    "required": [
+                                      "mode",
+                                      "value",
+                                      "tolerance",
+                                      "min",
+                                      "max",
+                                      "unit"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "image": {
+                                    "default": null,
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "assetId": {
+                                            "type": "string",
+                                            "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                          },
+                                          "altText": {
+                                            "type": "string",
+                                            "maxLength": 2000
+                                          }
+                                        },
+                                        "required": [
+                                          "assetId",
+                                          "altText"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "areas": {
+                                    "default": [],
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "x": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 100
+                                        },
+                                        "y": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 100
+                                        },
+                                        "w": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 100
+                                        },
+                                        "h": {
+                                          "type": "number",
+                                          "minimum": 0,
+                                          "maximum": 100
+                                        },
+                                        "label": {
+                                          "type": "string",
+                                          "maxLength": 300
+                                        }
+                                      },
+                                      "required": [
+                                        "x",
+                                        "y",
+                                        "w",
+                                        "h",
+                                        "label"
+                                      ],
+                                      "additionalProperties": false
                                     }
                                   }
                                 },
@@ -3927,6 +4060,177 @@
                                   "scale",
                                   "items",
                                   "bands",
+                                  "required",
+                                  "workbook"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "survey"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "const": "form"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "title": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "intro": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "scale": {
+                                    "minItems": 2,
+                                    "maxItems": 7,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 300
+                                    }
+                                  },
+                                  "items": {
+                                    "minItems": 1,
+                                    "maxItems": 30,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "rating",
+                                            "differential",
+                                            "choice",
+                                            "comment"
+                                          ]
+                                        },
+                                        "prompt": {
+                                          "type": "string",
+                                          "maxLength": 300
+                                        },
+                                        "options": {
+                                          "maxItems": 10,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "maxLength": 300
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "prompt",
+                                        "options"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "workbook": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "title",
+                                  "intro",
+                                  "scale",
+                                  "items",
                                   "required",
                                   "workbook"
                                 ],

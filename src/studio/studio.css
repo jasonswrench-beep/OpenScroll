@@ -337,3 +337,51 @@ dialog.picker .dlg-body{display:grid;gap:12px}
 .blk-bar .blk-name{padding:4px 6px;min-width:0;overflow:hidden}.blk-bar .blk-name span{overflow:hidden;text-overflow:ellipsis}
 .blk-child>.blk-bar{flex-wrap:wrap;row-gap:0}.blk-child .blk-name{flex:1 1 100%;justify-content:flex-start}.blk-child .grow{display:none}
 .os-column .col-add{padding:.3rem .65rem;border-radius:var(--r-sm);font-size:13px;white-space:nowrap}
+/* ---------- Checks, export and preview (stage 5) ---------- */
+.checks-btn .badge{min-width:20px;height:20px;border-radius:10px;padding:0 6px;font-size:11.5px;font-weight:700;display:inline-grid;place-items:center;background:var(--warn-soft);color:var(--warn)}
+.checks-btn[data-state=blocks] .badge{background:var(--bad);color:#fff}
+.checks-dialog .dlg-body{display:grid;gap:14px}
+.checks-group{display:grid;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+.checks-group h3{display:flex;gap:8px;align-items:center;font-size:15px;margin:0}
+.checks-blocks h3{color:var(--bad)}.checks-warning h3{color:var(--warn)}
+.checks-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.checks-list li{border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 11px;display:grid;gap:5px;background:var(--panel-2)}
+.checks-list p{margin:0}
+.checks-where{font-size:12px;color:var(--muted);font-weight:600}
+.checks-clear{display:flex;gap:8px;align-items:center;color:var(--good);font-weight:600;margin:0}
+.start .next-step{color:var(--muted);font-size:12px;border-top:1px dashed var(--line);padding-top:6px}
+.start[disabled]{opacity:.55;cursor:not-allowed;box-shadow:none;border-color:var(--line)}
+.dlg-body .banner{margin:0}
+dialog.preview{border:0;border-radius:14px;box-shadow:var(--shadow);background:var(--panel);color:var(--fg);padding:0;width:calc(100vw - 24px);height:calc(100vh - 24px);max-width:none;max-height:none;display:grid;grid-template-rows:auto auto minmax(0,1fr)}
+dialog.preview:not([open]){display:none}
+dialog.preview::backdrop{background:rgba(7,14,26,.6)}
+.preview-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.preview-bar h2{font-size:16px;margin:0 8px 0 0}
+.preview-bar select{width:auto;max-width:260px}
+.preview-note{padding:6px 14px 0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+.seg-btn{display:inline-flex;align-items:center;gap:6px;border:0;border-right:1px solid var(--line);background:var(--panel);padding:.35rem .65rem;font-weight:600;font-size:13px}
+.seg-btn:last-child{border-right:0}.seg-btn[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
+.preview-stage{display:grid;justify-items:center;padding:12px;background:var(--desk);overflow:auto;min-height:0}
+.preview-frame{width:100%;height:100%;background:#fff;border-radius:8px;box-shadow:0 4px 18px rgba(0,0,0,.16);overflow:hidden}
+.preview-stage[data-device=tablet] .preview-frame{width:768px;max-width:100%}
+.preview-stage[data-device=phone] .preview-frame{width:375px;max-width:100%}
+.preview-frame iframe{display:block;width:100%;height:100%;border:0}
+@media (max-width:899px){.seg-text{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}}
+.checks-btn .badge[hidden]{display:none}
+/* Theme studio */
+dialog.theme-dialog{width:min(1200px,calc(100vw - 24px))}
+.theme-studio{display:grid;grid-template-columns:300px minmax(0,1fr);gap:18px;align-items:start}
+.theme-controls{display:grid;gap:14px;align-content:start}
+.theme-set{border:0;padding:0;margin:0;display:grid;gap:4px}
+.theme-set legend{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:4px;padding:0}
+.theme-opt{display:flex;gap:.5rem;align-items:center}.theme-opt input{accent-color:var(--accent);width:16px;height:16px}
+.theme-report{display:grid;gap:6px}.theme-report p{margin:0;font-size:12.5px}.theme-report .ok{color:var(--good);font-weight:600}
+#theme-accent{width:52px;height:34px;padding:2px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel)}
+#theme-accent-hex{width:110px;font-family:var(--mono)}
+.theme-preview{max-height:min(72vh,760px);overflow:auto;border-radius:8px;background:var(--desk);padding:12px}
+.theme-paper{max-width:none}
+.theme-paper .cover{min-height:220px}
+.theme-lesson{padding:0 0 24px}
+.theme-lesson .os-block{pointer-events:none}
+@media (max-width:899px){.theme-studio{grid-template-columns:1fr}}

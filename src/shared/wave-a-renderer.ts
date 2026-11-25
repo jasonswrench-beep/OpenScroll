@@ -109,6 +109,22 @@ export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich:
       }
       return true;
     }
+    case 'survey': {
+      const c = block.content;
+      if (editing || c.title) root.append(field('h3', c.title, 'title', 'Survey title', 300, false));
+      if (editing || c.intro) root.append(rich('div', c.intro, 'intro', 'Survey introduction'));
+      const list = el('ol', undefined, 'os-survey');
+      c.items.forEach((item, index) => {
+        const li = el('li');
+        li.append(field('p', item.prompt, `items.${index}.prompt`, `Survey question ${index + 1}`, 300, false));
+        if (item.kind === 'comment') li.append(el('div', undefined, 'os-response-box'));
+        else if (item.kind === 'differential') li.append(el('p', `${item.options[0] ?? ''} · 1 to ${c.scale.length} · ${item.options[1] ?? ''}`, 'os-scale-preview'));
+        else li.append(el('p', (item.kind === 'choice' ? item.options : c.scale).join(' · '), 'os-scale-preview'));
+        list.append(li);
+      });
+      root.append(list);
+      return true;
+    }
     case 'columns': {
       const grid = el('div', undefined, `os-columns os-cols-${block.variant}`);
       block.content.columns.forEach((column, c) => {

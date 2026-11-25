@@ -89,3 +89,20 @@ test('lesson settings set a banner from the course cover and lesson objectives',
   expect(lesson.banner.source).toBe('cover');
   expect(lesson.objectives[0]).toMatchObject({ text: 'Explain the idea in your own words.', level: 'understand' });
 });
+
+test('Checks lists an empty heading and Go to issue puts the cursor in it; Export recommends SCORM 2004 for written responses', async ({ page }) => {
+  await openLesson(page);
+  await addBlock(page, 'Heading', 'heading');
+  await page.keyboard.press('Control+A'); await page.keyboard.press('Delete');
+  await addBlock(page, 'Reflection', 'reflection');
+  await saved(page);
+  await page.getByRole('button', { name: /^Checks:/ }).click();
+  const checks = page.getByRole('dialog', { name: 'Checks' });
+  await expect(checks.getByText('This heading is empty.', { exact: false })).toBeVisible();
+  await checks.getByRole('button', { name: /^Go to issue: This heading is empty/ }).click();
+  await expect(checks).toBeHidden();
+  await expect(page.locator(':focus')).toHaveAttribute('data-field', 'text');
+  await page.getByRole('button', { name: 'Export' }).click();
+  const exporter = page.getByRole('dialog', { name: 'Export' });
+  await expect(exporter.getByRole('button', { name: /SCORM 2004 \(recommended for this course\)/ })).toBeVisible();
+});

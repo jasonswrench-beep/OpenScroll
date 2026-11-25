@@ -32,6 +32,17 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
       root.append(rich('div',block.content.prompt,'prompt','Question prompt'));
       if(['single-choice','multiple-response','true-false'].includes(block.variant))block.content.options.forEach((value,i)=>root.append(field('p',value,`options.${i}`,`Choice ${i+1}`,300,false)));
       if(block.variant==='fill-blank'){const note=document.createElement('p');note.textContent='Accepted answers are edited in question settings.';root.append(note);}
+      if(block.variant==='short-answer'){
+        const box=document.createElement('div');box.className='os-response-box';box.textContent=block.content.selfCheck ? 'Learners write their answer, then compare it with the model answer.' : 'Learners type an answer that must match an accepted answer.';root.append(box);
+        if(block.content.selfCheck){const label=document.createElement('h4');label.className='os-sample-label';label.textContent='Model answer';root.append(label,rich('div',block.content.model,'model','Model answer'));}
+      }
+      if(block.variant==='numeric'){const box=document.createElement('p');box.className='os-number-box';box.textContent=`Learners type a number${block.content.numeric.unit ? ` in ${block.content.numeric.unit}` : ''}.`;root.append(box);}
+      if(block.variant==='hotspot' && block.content.image){
+        const figure=document.createElement('figure'),stage=document.createElement('div');stage.className='os-hotspot-stage';stage.append(picture(block.content.image.assetId,block.content.image.altText,false));
+        block.content.areas.forEach((area,i)=>{const mark=document.createElement('span');mark.className='os-area';mark.setAttribute('aria-hidden','true');mark.textContent=String.fromCharCode(65+i);mark.style.left=`${area.x}%`;mark.style.top=`${area.y}%`;mark.style.width=`${area.w}%`;mark.style.height=`${area.h}%`;stage.append(mark);});
+        figure.append(stage);root.append(figure);
+        const list=document.createElement('ol');list.type='A';block.content.areas.forEach(area=>{const li=document.createElement('li');li.textContent=area.label;list.append(li);});root.append(list);
+      }
       if(block.variant==='matching')block.content.pairs.forEach((pair,i)=>root.append(field('h4',pair.left,`pairs.${i}.left`,`Pair ${i+1} term`,300,false),field('p',pair.right,`pairs.${i}.right`,`Pair ${i+1} match`,300,false)));
       if(block.variant==='ordering')block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Item ${i+1} to order`,300,false)));
       if(block.variant==='categorize'){

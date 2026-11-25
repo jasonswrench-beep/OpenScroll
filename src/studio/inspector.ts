@@ -215,6 +215,66 @@ function contentTab(ctx: InspectorContext): HTMLElement[] {
         note('Each marker opens its text for learners. Marker text is edited on the page.'));
       break;
     }
+    case 'survey': {
+      const c = block.content;
+      out.push(textField('Title', c.title, value => set<'survey'>(b => { b.content.title = value; }, false, 'title')),
+        note('Surveys are not scored. Answers are kept with the learner’s progress and reported to the LMS as unscored records.'),
+        itemList({ title: 'Rating scale', items: c.scale, noun: 'Rating', min: 2, max: 7, name: v => v,
+          row: (v, i) => [textField(`Rating ${i + 1}`, v, value => set<'survey'>(b => { b.content.scale[i] = value; }, false, `scale-${i}`))],
+          add: () => set<'survey'>(b => { b.content.scale.push('Another rating'); }, true), remove: i => set<'survey'>(b => { b.content.scale.splice(i, 1); }, true), move: (i, d) => set<'survey'>(b => moveIn(b.content.scale, i, d), true) }),
+        itemList({ title: 'Questions', items: c.items, noun: 'Question', min: 1, max: 30, name: item => item.prompt,
+          row: (item, i) => [
+            textField(`Question ${i + 1}`, item.prompt, value => set<'survey'>(b => { b.content.items[i]!.prompt = value; }, false, `prompt-${i}`)),
+            selectField(`Answer type for question ${i + 1}`, [['rating', 'Rating on the scale'], ['differential', 'Between two opposites'], ['choice', 'One choice from a list'], ['comment', 'Written comment']], item.kind, value => set<'survey'>(b => { const target = b.content.items[i]!; target.kind = value as typeof target.kind; target.options = value === 'differential' ? [target.options[0] ?? 'Not at all', target.options[1] ?? 'Completely'] : value === 'choice' ? (target.options.length ? target.options : ['First option', 'Second option']) : []; }, true)),
+            ...(item.kind === 'differential' ? [h('div', { class: 'row' }, [textField('Left end', item.options[0] ?? '', value => set<'survey'>(b => { b.content.items[i]!.options[0] = value; }, false, `left-${i}`)), textField('Right end', item.options[1] ?? '', value => set<'survey'>(b => { b.content.items[i]!.options[1] = value; }, false, `right-${i}`))])] : []),
+            ...(item.kind === 'choice' ? [...item.options.map((option, o) => textField(`Question ${i + 1}, option ${o + 1}`, option, value => set<'survey'>(b => { b.content.items[i]!.options[o] = value; }, false, `option-${i}-${o}`))),
+              h('div', { class: 'row' }, [button(`Add option to question ${i + 1}`, () => set<'survey'>(b => { b.content.items[i]!.options.push('Another option'); }, true), { icon: Plus, class: 'btn btn-sm', disabled: item.options.length >= 10 }),
+                button(`Remove last option from question ${i + 1}`, () => set<'survey'>(b => { b.content.items[i]!.options.pop(); }, true), { icon: Trash2, class: 'btn btn-sm', disabled: item.options.length <= 2 })])] : []),
+          ],
+          add: () => set<'survey'>(b => { b.content.items.push({ id: newId(), kind: 'rating', prompt: 'Another statement to rate.', options: [] }); }, true),
+          remove: i => set<'survey'>(b => { b.content.items.splice(i, 1); }, true), move: (i, d) => set<'survey'>(b => moveIn(b.content.items, i, d), true) }));
+      break;
+    }
+    case 'assessment': {
+      const c = block.content;
+      if (block.variant === 'short-answer') {
+        out.push(checkField('Self-check against a model answer', c.selfCheck, value => set<'assessment'>(b => { b.content.selfCheck = value; if (value) b.assessment.graded = false; }, true), 'Learners compare their own answer with yours. It is never scored.'));
+        if (c.selfCheck) out.push(note('Write the model answer on the page, under the question.'));
+        else out.push(checkField('Case-sensitive answers', c.caseSensitive, value => set<'assessment'>(b => { b.content.caseSensitive = value; })),
+          itemList({ title: 'Accepted answers', items: c.accepted, noun: 'Answer', min: 1, max: 20, name: v => v,
+            row: (v, i) => [textField(`Accepted answer ${i + 1}`, v, value => set<'assessment'>(b => { b.content.accepted[i] = value; }, false, `accepted-${i}`))],
+            add: () => set<'assessment'>(b => { b.content.accepted.push('Another answer'); }, true), remove: i => set<'assessment'>(b => { b.content.accepted.splice(i, 1); }, true), move: (i, d) => set<'assessment'>(b => moveIn(b.content.accepted, i, d), true) }),
+          note('Spaces and letter case are ignored unless case-sensitive answers is on.'));
+      }
+      if (block.variant === 'numeric') {
+        const q = c.numeric, decimal = (label: string, value: number, apply: (n: number) => void, hint?: string) => {
+          const id = `num-${label.replace(/\W+/g, '-').toLowerCase()}`, input = h('input', { class: 'inp', attrs: { id, type: 'text', inputmode: 'decimal', value: String(value) } });
+          input.addEventListener('change', () => { const n = Number(input.value.replace(',', '.')); if (Number.isFinite(n)) set<'assessment'>(b => apply(n)); else input.value = String(value); });
+          return h('div', { class: 'fld fld-num' }, [h('label', { text: label, attrs: { for: id } }), input, hint ? note(hint) : null]);
+        };
+        out.push(selectField('Accept', [['exact', 'A value, with an optional tolerance'], ['range', 'Any number in a range']], q.mode, value => set<'assessment'>(b => { b.content.numeric.mode = value as 'exact' | 'range'; }, true)));
+        if (q.mode === 'exact') out.push(decimal('Correct value', q.value, n => set<'assessment'>(b => { b.content.numeric.value = n; })), decimal('Tolerance (±)', q.tolerance, n => set<'assessment'>(b => { b.content.numeric.tolerance = Math.abs(n); }), '0 means the exact value only.'));
+        else out.push(decimal('Lowest accepted', q.min, n => set<'assessment'>(b => { b.content.numeric.min = n; })), decimal('Highest accepted', q.max, n => set<'assessment'>(b => { b.content.numeric.max = n; })));
+        out.push(textField('Unit (optional)', q.unit, value => set<'assessment'>(b => { b.content.numeric.unit = value; }, false, 'unit'), { max: 40, hint: 'Shown beside the answer box. Learners may type it after the number.' }));
+      }
+      if (block.variant === 'hotspot') {
+        out.push(imageChooser(ctx, c.image?.assetId ?? '', (b, id) => { if (b.type === 'assessment') b.content.image = { assetId: id, altText: b.content.image?.altText ?? '' }; }));
+        if (c.image) out.push(h('section', { class: 'insp-sec' }, [heading('Areas on the picture'), regionEditor({ src: ctx.assetSource(c.image.assetId), alt: '', name: block.id, shape: 'rect', selected: ctx.marker,
+          regions: c.areas.map(a => ({ x: a.x, y: a.y, w: a.w, h: a.h, label: a.label })), select: index => ctx.setMarker(index),
+          change: (index, region) => set<'assessment'>(b => { const a = b.content.areas[index]; if (a) { a.x = region.x; a.y = region.y; a.w = region.w ?? a.w; a.h = region.h ?? a.h; } }) })]));
+        out.push(itemList({ title: 'Areas', items: c.areas, noun: 'Area', min: 0, max: 20, name: a => a.label,
+          row: (a, i) => [textField(`Area ${i + 1} label`, a.label, value => set<'assessment'>(b => { b.content.areas[i]!.label = value; }, false, `area-${i}`)),
+            checkField(`Area ${i + 1} is correct`, c.correct.includes(i), on => set<'assessment'>(b => { b.content.correct = on ? [...new Set([...b.content.correct, i])].sort((x, y) => x - y) : b.content.correct.filter(x => x !== i); }, true))],
+          add: () => set<'assessment'>(b => { b.content.areas.push({ x: 40, y: 40, w: 20, h: 20, label: 'Another area' }); }, true),
+          remove: i => set<'assessment'>(b => { b.content.areas.splice(i, 1); b.content.correct = b.content.correct.filter(x => x !== i).map(x => x > i ? x - 1 : x); b.content.choiceFeedback = b.content.choiceFeedback.filter((_, x) => x !== i); }, true),
+          move: (i, d) => set<'assessment'>(b => { const to = i + d; moveIn(b.content.areas, i, d); b.content.correct = b.content.correct.map(x => x === i ? to : x === to ? i : x).sort((x, y) => x - y); }, true) }),
+          note('Every area needs a label: keyboard and screen reader users choose from the labeled list. Add at least two wrong areas so the list does not give the answer away.'));
+      }
+      const host = h('div', { class: 'classic-settings' });
+      extendedSettings(host, block, ctx.project, (mutate, key, redraw) => change(mutate, { ...(key ? { group: key } : {}), redraw: !!redraw }), (file, kind, assign, input) => ctx.upload(file, kind, assign, input));
+      out.push(h('section', { class: 'insp-sec' }, [heading('Scoring and feedback'), host]));
+      break;
+    }
     default: {
       // Media, interactions and questions keep their established settings until each gets a redesigned panel.
       const host = h('div', { class: 'classic-settings' });
@@ -264,8 +324,8 @@ function styleTab(ctx: InspectorContext): HTMLElement[] {
 function behaviorTab(ctx: InspectorContext): HTMLElement[] {
   const { block, change } = ctx;
   switch (block.type) {
-    case 'reflection': case 'activity': case 'checklist': case 'self-assessment': {
-      const need = block.type === 'reflection' ? 'write at least the minimum number of words' : block.type === 'activity' ? (block.content.output ? 'write in the box' : 'mark it as done') : block.type === 'checklist' ? 'tick every item' : 'rate every statement';
+    case 'reflection': case 'activity': case 'checklist': case 'self-assessment': case 'survey': {
+      const need = block.type === 'reflection' ? 'write at least the minimum number of words' : block.type === 'activity' ? (block.content.output ? 'write in the box' : 'mark it as done') : block.type === 'checklist' ? 'tick every item' : block.type === 'survey' ? 'answer every rating and choice' : 'rate every statement';
       return [
         checkField('Required to finish the lesson', block.content.required, value => change(b => { if ('required' in b.content) (b.content as { required: boolean }).required = value; }, { redraw: true }), `Learners must ${need}.`),
         checkField('Show in My workbook', block.content.workbook, value => change(b => { if ('workbook' in b.content) (b.content as { workbook: boolean }).workbook = value; }), 'My workbook gathers every response in one page learners can print or download.'),
@@ -303,6 +363,7 @@ const ANNOUNCES: Partial<Record<Block['type'], string>> = {
   'labeled-graphic': 'Each marker is a numbered button named by its label, and it opens the marker’s text.',
   assessment: 'Read as a group of answers with the question as its name. Feedback is announced after submitting.',
   continue: 'A button. When it is locked, the message explains what to finish first.',
+  survey: 'Each rating or choice is a group of radio buttons named by its question; comments are text boxes named by theirs.',
 };
 function accessTab(ctx: InspectorContext): HTMLElement[] {
   const { block, change } = ctx;

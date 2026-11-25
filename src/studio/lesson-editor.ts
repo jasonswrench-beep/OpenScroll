@@ -72,6 +72,25 @@ export class LessonEditor {
     this.render();
   }
   focusTitle() { this.canvas.querySelector<HTMLElement>('#lesson-title')?.focus(); }
+  /** Go to issue: selects the block, opens the right inspector tab and focuses the field the issue names. */
+  focusIssue(issue: { blockId?: string; field?: string; tab?: Tab }) {
+    if (!issue.blockId) {
+      this.select(undefined);
+      const target = issue.field === 'banner-alt' ? this.panel.querySelector<HTMLElement>('#banner-alt') : issue.field === 'lesson-title' ? this.canvas.querySelector<HTMLElement>('#lesson-title') : undefined;
+      (target ?? this.panel.querySelector<HTMLElement>('#lesson-panel-heading'))?.focus();
+      return;
+    }
+    if (!locate(this.blocks, issue.blockId)) return;
+    this.tab = issue.tab ?? 'content';
+    this.selected = undefined;
+    this.select(issue.blockId);
+    const frame = this.canvas.querySelector<HTMLElement>(`[data-frame="${CSS.escape(issue.blockId)}"]`);
+    frame?.scrollIntoView({ block: 'center' });
+    const field = issue.field && issue.field !== 'altText' ? frame?.querySelector<HTMLElement>(`[data-field="${CSS.escape(issue.field)}"]`) : null;
+    if (field) { field.focus(); caretAtEnd(field); return; }
+    if (issue.field === 'altText') { this.panel.querySelector<HTMLElement>('.tabpanel textarea')?.focus(); return; }
+    this.panel.querySelector<HTMLElement>('#insp-heading')?.focus();
+  }
 
   /* ---------- changes ---------- */
   private mutate(change: (blocks: Block[], project: PortableProject) => void, group?: string, assetsChanged = false) {
@@ -247,7 +266,7 @@ export class LessonEditor {
       element.addEventListener('blur', event => {
         const next = (event as FocusEvent).relatedTarget as Node | null;
         if (this.selected !== block.id || (next && this.panel.contains(next))) return;
-        requestAnimationFrame(() => { if (this.selected === block.id && !this.panel.contains(document.activeElement)) this.drawPanel(); });
+        window.setTimeout(() => { if (this.selected === block.id && !this.panel.contains(document.activeElement)) this.drawPanel(); }, 0);
       });
     };
   }
@@ -260,7 +279,7 @@ export class LessonEditor {
     if (block.type === 'spacer') body.append(h('p', { class: 'blk-note', text: `${block.variant[0]!.toUpperCase()}${block.variant.slice(1)} space` }));
     if (block.type === 'continue') body.append(h('p', { class: 'blk-note', text: block.completion === 'none' ? 'Learners can always continue.' : block.completion === 'previous' ? 'Unlocks when the block above is finished.' : 'Unlocks when every block above is finished.' }));
     const flags: HTMLElement[] = [];
-    if ((block.type === 'reflection' || block.type === 'activity' || block.type === 'checklist' || block.type === 'self-assessment') && block.content.required) flags.push(h('span', { class: 'chip', text: 'Required' }));
+    if ((block.type === 'reflection' || block.type === 'activity' || block.type === 'checklist' || block.type === 'self-assessment' || block.type === 'survey') && block.content.required) flags.push(h('span', { class: 'chip', text: 'Required' }));
     if (block.requiredInteraction) flags.push(h('span', { class: 'chip', text: 'Open every item' }));
     if (block.type === 'assessment' && block.assessment.graded) flags.push(h('span', { class: 'chip', text: `${block.assessment.points} pt` }));
     if ((block.type === 'image' || block.type === 'image-text' || block.type === 'labeled-graphic') && !block.content.decorative && !block.content.altText.trim()) flags.push(h('span', { class: 'chip chip-warn', text: 'No alt text' }));

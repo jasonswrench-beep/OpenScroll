@@ -1,4 +1,5 @@
 import { accentInk } from '../shared/course-templates.js';
+import { textAccent } from '../shared/contrast.js';
 import { renderAssessment } from './assessment-player.js';
 import { isAssessment,interactionCount,emptyAnswer,validAnswer,assessmentIssue } from '../shared/assessment.js';
 import { assetPath,type PortableProject,type Lesson } from '../shared/course.js';
@@ -20,7 +21,7 @@ export class CoursePlayer {
   private action(label:string,run:()=>void,key:string,disabled=false){const b=node('button',label);b.type='button';b.disabled=disabled;b.dataset.focus=key;b.addEventListener('click',run);return b;}
   private url(id:string){if(this.options.assetURL)return this.options.assetURL(id);const asset=this.project.document.assets.find(a=>a.id===id)!;return `data:${asset.mediaType};base64,${this.project.files[assetPath(asset)]}`;}
   private render(focus?:string){
-    this.root.replaceChildren();const course=this.project.document.course,flow=this.flow;document.documentElement.lang=course.language;document.title=course.title || 'Untitled course';this.root.style.fontFamily=course.theme.font==='serif'?'Georgia,serif':'system-ui,sans-serif';this.root.style.setProperty('--course-accent',accentInk(course.theme.accentColor)==='#000000'?'#193c35':course.theme.accentColor);this.root.style.setProperty('--course-accent-ink',accentInk(course.theme.accentColor));
+    this.root.replaceChildren();const course=this.project.document.course,flow=this.flow;document.documentElement.lang=course.language;document.title=course.title || 'Untitled course';this.root.style.fontFamily=course.theme.font==='serif'?'Georgia,serif':'system-ui,sans-serif';this.root.style.setProperty('--course-accent',textAccent(course.theme.accentColor));this.root.style.setProperty('--course-accent-ink',accentInk(course.theme.accentColor));
     const header=node('header',undefined,'player-header');header.append(node('p',this.options.preview ? 'Author preview · isolated practice progress' : 'OpenScroll course','player-brand'),node('h1',course.title || 'Untitled course'));
     if(course.author){const by=node('p',undefined,'player-author');if(course.authorImage){const photo=node('img');photo.src=this.url(course.authorImage.assetId);photo.alt='';photo.className='player-author-photo';by.append(photo);}by.append(document.createTextNode(`By ${course.author}`));header.append(by);}
     if(course.description){const description=node('div',undefined,'player-description os-rich');description.append(richToDom(course.description));header.append(description);}
@@ -52,7 +53,7 @@ export class CoursePlayer {
           const button=this.action(released ? `${block.content.label || 'Continue'} · Opened` : block.content.label || 'Continue',()=>{const visible=flow.visible().length;if(flow.continue(block.id)){this.message='More content is available.';this.persist();const next=flow.visible()[visible];this.render(next ? `block-${next.id}` : 'complete-lesson');}},`continue-${block.id}`,!enabled || released);button.setAttribute('aria-describedby',help.id);wrapper.append(help,button);
         }else{
           const rendered=renderBlock(block,this.project,undefined,id=>this.url(id),index=>{if(flow.visit(block.id,index)){this.persist();queueMicrotask(()=>this.refreshGates());}});
-          if(isAssessment(block))rendered.replaceChildren(renderAssessment(block,flow,()=>this.persist(),focus=>this.render(focus)));
+          if(isAssessment(block))rendered.replaceChildren(renderAssessment(block,flow,()=>this.persist(),focus=>this.render(focus),id=>this.url(id)));
           else if(isResponseBlock(block))rendered.replaceChildren(renderResponse(block,flow,()=>this.persist(),()=>this.refreshGates()));
           wrapper.append(rendered);
           if(block.requiredInteraction){const status=node('p');status.dataset.interactionProgress=block.id;status.setAttribute('role','status');status.textContent=`Explored ${flow.explored(block.id)} of ${interactionCount(block)} items.`;wrapper.append(status);}

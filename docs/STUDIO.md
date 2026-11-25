@@ -69,6 +69,23 @@ questions and columns. Learner responses to the activity blocks are described in
 [LEARNER-RESPONSES.md](LEARNER-RESPONSES.md). The classic workspace can show and edit the text of the new blocks,
 but their settings are only in the studio.
 
+## Checks, preview, theme and export
+
+- **Checks** (top bar) lists what blocks export, what deserves a fix, and what needs a person's judgment, each with
+  its lesson, block and the outputs it affects. The count on the button is the blocking issues, or the warnings
+  when nothing blocks. **Go to issue** opens the lesson, selects the block, opens the right inspector tab and puts
+  the cursor in the field. The server uses the same checks before building any export. Checks never stop saving.
+- **Preview** opens the real learner player at the lesson being edited, at desktop, tablet (768 px) or phone
+  (375 px) width, with a lesson menu and Restart. Practice progress stays in the preview; closing returns to the
+  editor where you were.
+- **Theme studio** (Course details, Open the theme studio) sets the accent colour, cover layout, lesson header,
+  body text, reading width and lesson order beside a live preview of the cover and a sample lesson. It reports the
+  accent's contrast: buttons use white or dark text, whichever reads better, and a light accent is darkened for
+  headings and links on white.
+- **Export** names how many issues block export (with a link to Checks), recommends SCORM 2004 for courses with
+  written responses, and gives the next step for each file: upload to the LMS (test in Package Doctor first), put
+  the website on a server, or check the PDF's tags in PDFRemediator. The editable project can always be downloaded.
+
 ## Addresses
 
 | Address | Shows |

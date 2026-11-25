@@ -4,12 +4,14 @@ import { newId } from './outline.js';
 export type ReusableKind='template'|'group'|'asset';
 export function blockAssetIds(block:Block):string[]{
  if(block.type==='columns')return block.content.columns.flatMap(column=>column.blocks.flatMap(blockAssetIds));
+ if(block.type==='assessment')return block.content.image ? [block.content.image.assetId] : [];
  if(block.type==='image'||block.type==='image-text'||block.type==='labeled-graphic')return [block.content.assetId];
  if(block.type==='gallery')return block.content.items.map(item=>item.assetId);
  if((block.type==='audio'||block.type==='video'||block.type==='attachment') && block.content.assetId)return [block.content.assetId];return [];
 }
 export function remapBlockAssets(block:Block,ids:Map<string,string>){
  if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)remapBlockAssets(child,ids);
+ if(block.type==='assessment' && block.content.image)block.content.image.assetId=ids.get(block.content.image.assetId)!;
  if(block.type==='image'||block.type==='image-text'||block.type==='labeled-graphic')block.content.assetId=ids.get(block.content.assetId)!;
  if(block.type==='gallery')for(const image of block.content.items)image.assetId=ids.get(image.assetId)!;
  if((block.type==='audio'||block.type==='video'||block.type==='attachment') && block.content.assetId)block.content.assetId=ids.get(block.content.assetId)!;

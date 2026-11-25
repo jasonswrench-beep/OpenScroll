@@ -3,14 +3,14 @@
  * saving with recovery and conflict handling, and the lesson editor. All saving goes through the shared
  * SaveController and revision-checked API.
  */
-import { ArrowUp, ArrowDown, ArrowLeft, Ellipsis, Pencil, Copy, Trash2, Plus, Eye, Package, CircleCheck, LoaderCircle, TriangleAlert, OctagonAlert, Camera, Download, RotateCcw, Settings2, ImagePlus, X as XIcon, Globe, GraduationCap, FileText, FileArchive, FolderInput } from 'lucide';
+import { Palette, ListChecks, ArrowUp, ArrowDown, ArrowLeft, Ellipsis, Pencil, Copy, Trash2, Plus, Eye, Package, CircleCheck, LoaderCircle, TriangleAlert, OctagonAlert, Camera, Download, RotateCcw, Settings2, ImagePlus, X as XIcon, Globe, GraduationCap, FileText, FileArchive, FolderInput } from 'lucide';
 import type { Account } from '../client/account-api.js';
 import { SaveController, type RecoveryDraft } from '../client/save-controller.js';
 import { readDraft, storeDraft } from '../client/recovery.js';
 import { bindInline, bindRich } from '../client/inline-text.js';
 import { readImage } from '../client/images.js';
 import { openSnapshots } from '../client/snapshots.js';
-import { previewCourse, publishHtml, publishPdf } from '../client/publishing.js';
+import { publishHtml, publishPdf } from '../client/publishing.js';
 import { assetPath, type PortableProject, type CourseDocument } from '../shared/course.js';
 import { newLesson, newSection, copyLesson, moveItem, moveLesson, type Lesson, type Section } from '../shared/outline.js';
 import { richToDom, RICH_TEXT_MAX } from '../shared/rich-text.js';
@@ -18,6 +18,11 @@ import { library, projects, fileName } from './api.js';
 import { h, icon, button, openDialog, confirmAction, openMenu, toast, announce, saveBlob, pickFile } from './dom.js';
 import { rememberOpened } from './memory.js';
 import { LessonEditor } from './lesson-editor.js';
+import { courseChecks, hasWrittenResponses, type CheckIssue } from '../project/checks.js';
+import { checksDialog, checksBadge } from './checks-panel.js';
+import { previewDialog } from './preview.js';
+import { themeStudio, accentReport } from './theme-studio.js';
+import { accentInk as inkFor, textAccent } from '../shared/contrast.js';
 import LOGO from '../assets/openscroll.svg';
 
 type Course = CourseDocument['course'];
@@ -36,11 +41,15 @@ export function courseView(root: HTMLElement, context: Context) {
   const saveButton = h('button', { class: 'savebtn', attrs: { type: 'button', 'data-state': 'saved', 'aria-label': 'Save status, snapshots, and recovery' } });
   saveButton.addEventListener('click', () => saveSheet());
   const live = h('span', { class: 'sr-only', attrs: { role: 'status' } });
-  const preview = button('Preview', () => { if (controller) previewCourse(controller.project, preview, lessonId); }, { icon: Eye, class: 'btn btn-ghost has-label' });
+  const preview = button('Preview', () => { if (controller) previewDialog(controller.project, preview, lessonId); }, { icon: Eye, class: 'btn btn-ghost has-label' });
+  const checksCount = h('span', { class: 'badge', attrs: { 'aria-hidden': 'true' } });
+  const checksButton = button('Checks', () => openChecks(), { icon: ListChecks, class: 'btn btn-ghost has-label checks-btn' });
+  checksButton.append(checksCount);
+  let issues: CheckIssue[] = [], checkTimer: number | undefined, pendingIssue: CheckIssue | undefined;
   const exporter = button('Export', () => exportDialog(exporter), { icon: Package, class: 'btn btn-primary has-label' });
   const top = h('header', { class: 'top' }, [
     h('div', { class: 'top-l' }, [h('button', { class: 'logo-btn', attrs: { type: 'button', 'aria-label': 'Back to library' }, on: { click: () => context.toLibrary() } }, [h('img', { attrs: { src: LOGO, alt: '' } })]), crumbs]),
-    h('div', { class: 'top-r' }, [saveButton, live, h('span', { class: 'vsep' }), preview, exporter]),
+    h('div', { class: 'top-r' }, [saveButton, live, h('span', { class: 'vsep' }), checksButton, preview, exporter]),
   ]);
   const banners = h('div');
   const canvas = h('div');
@@ -65,6 +74,40 @@ export function courseView(root: HTMLElement, context: Context) {
     saveButton.replaceChildren(icon(state === 'saved' ? CircleCheck : state === 'conflict' ? OctagonAlert : state === 'error' ? TriangleAlert : LoaderCircle), SAVE_TEXT[state]);
     if (live.textContent !== SAVE_TEXT[state] && (state === 'saved' || state === 'error' || state === 'conflict')) live.textContent = SAVE_TEXT[state];
     drawBanners();
+    window.clearTimeout(checkTimer); checkTimer = window.setTimeout(refreshChecks, 400);
+  }
+  /* ---------- checks ---------- */
+  function refreshChecks() {
+    if (!controller || disposed) return;
+    issues = courseChecks(controller.project);
+    const badge = checksBadge(issues);
+    checksCount.textContent = badge.blocking ? String(badge.blocking) : badge.warnings ? String(badge.warnings) : '';
+    checksCount.hidden = !checksCount.textContent;
+    checksButton.dataset.state = badge.blocking ? 'blocks' : badge.warnings ? 'warning' : 'clear';
+    checksButton.setAttribute('aria-label', badge.label);
+  }
+  function openChecks(opener: HTMLElement = checksButton) {
+    if (!controller) return;
+    refreshChecks();
+    checksDialog(opener, issues, controller.project, goToIssue);
+  }
+  /** Go to issue: opens the lesson (or the course page), selects the block, and focuses the field. */
+  function goToIssue(issue: CheckIssue) {
+    if (issue.code === 'scorm-12-responses') { exportDialog(exporter); return; }
+    pendingIssue = issue;
+    const target = issue.lessonId;
+    if (target === lessonId) applyPendingIssue();
+    else context.go(target);
+  }
+  function applyPendingIssue() {
+    const issue = pendingIssue;
+    if (!issue) return;
+    pendingIssue = undefined;
+    window.setTimeout(() => {
+      if (issue.lessonId) { editor?.focusIssue({ ...(issue.blockId ? { blockId: issue.blockId } : {}), ...(issue.field ? { field: issue.field } : {}), ...(issue.tab ? { tab: issue.tab } : {}) }); return; }
+      const field = issue.field === 'cover-alt' ? side.querySelector<HTMLElement>('#cover-alt') : issue.field === 'course-title' ? canvas.querySelector<HTMLElement>('.ctitle') : null;
+      (field ?? canvas.querySelector<HTMLElement>('.ctitle'))?.focus();
+    }, 0);
   }
   function drawBanners() {
     if (!controller) return;
@@ -156,13 +199,27 @@ export function courseView(root: HTMLElement, context: Context) {
       return element;
     };
     const snapshot = () => structuredClone(controller!.project);
-    openDialog({ title: 'Export', opener, body: [
-      h('p', { text: 'Exports use your current edits. Where will learners take this course?' }),
+    refreshChecks();
+    const blocking = issues.filter(i => i.effect === 'blocks').length, warnings = issues.filter(i => i.effect === 'warning').length;
+    // Decision pending with the owner: SCORM 2004 is recommended, not forced, for courses with written responses.
+    const written = hasWrittenResponses(controller.project);
+    const next = (text: string) => h('small', { class: 'next-step', text });
+    const scorm12 = option(GraduationCap, 'LMS package: SCORM 1.2', written ? 'Works in nearly every LMS. Long written responses may stay on the learner’s device.' : 'Works in nearly every LMS, including Brightspace. Upload the ZIP as it is.', b => void publishHtml(snapshot(), status, b, 'scorm-12'));
+    const scorm2004 = option(GraduationCap, `LMS package: SCORM 2004${written ? ' (recommended for this course)' : ''}`, written ? 'Keeps written responses with the learner’s progress (up to 64,000 characters). Reports completion and success separately.' : '4th edition. Reports completion and success separately where your LMS supports it.', b => void publishHtml(snapshot(), status, b, 'scorm-2004'));
+    const website = option(Globe, 'Website files', 'A ZIP you can put on any web server. No OpenScroll account needed to run it.', b => void publishHtml(snapshot(), status, b, 'html'));
+    const pdf = option(FileText, 'PDF document', 'A static reading copy, with an optional answer key.', b => publishPdf(snapshot(), status, b));
+    for (const built of [scorm12, scorm2004, website, pdf]) { built.disabled = blocking > 0; }
+    scorm12.append(next('Next: upload the ZIP to your LMS as it is. Test it first in Package Doctor if you can.'));
+    scorm2004.append(next('Next: upload the ZIP to your LMS as it is. Test it first in Package Doctor if you can.'));
+    website.append(next('Next: unzip it onto a web server and open index.html through the server.'));
+    pdf.append(next('Next: check the tags in PDFRemediator before you share it.'));
+    const review = button(blocking ? 'Fix the issues in Checks' : 'Review checks', () => { dialog.close(); openChecks(exporter); }, { class: 'btn btn-sm' });
+    const dialog = openDialog({ title: 'Export', opener, wide: true, body: [
+      blocking ? h('div', { class: 'banner bad', attrs: { role: 'alert' } }, [icon(OctagonAlert), h('p', { text: `${blocking} ${blocking === 1 ? 'issue blocks' : 'issues block'} export. You can still download the editable project.` }), review])
+        : h('div', { class: 'row' }, [h('p', { class: 'hint', text: warnings ? `${warnings} ${warnings === 1 ? 'warning' : 'warnings'} in Checks. Exports still work.` : 'Checks found no issues.' }), review]),
+      h('p', { text: `Exports use your current edits${controller.dirty ? ', including changes not saved yet' : ''}. Where will learners take this course?` }),
       h('div', { class: 'starts' }, [
-        option(GraduationCap, 'LMS package: SCORM 1.2', 'Works in nearly every LMS, including Brightspace. Upload the ZIP as it is.', b => void publishHtml(snapshot(), status, b, 'scorm-12')),
-        option(GraduationCap, 'LMS package: SCORM 2004', '4th edition. Reports completion and success separately where your LMS supports it.', b => void publishHtml(snapshot(), status, b, 'scorm-2004')),
-        option(Globe, 'Website files', 'A ZIP you can put on any web server. No OpenScroll account needed to run it.', b => void publishHtml(snapshot(), status, b, 'html')),
-        option(FileText, 'PDF document', 'A static reading copy, with an optional answer key.', b => publishPdf(snapshot(), status, b)),
+        ...(written ? [scorm2004, scorm12] : [scorm12, scorm2004]), website, pdf,
         option(FileArchive, 'Editable project', 'An .openscroll file for backup or another OpenScroll installation.', () => void (async () => { try { saveBlob(await projects.export(snapshot()), fileName(course().title, '.openscroll')); status.textContent = 'Project download started.'; } catch (error) { status.textContent = error instanceof Error ? error.message : 'The project could not be exported.'; } })()),
       ]),
       status,
@@ -172,11 +229,9 @@ export function courseView(root: HTMLElement, context: Context) {
   /* ---------- the cover ---------- */
   function themeVars(element: HTMLElement) {
     const theme = course().theme, accent = theme.accentColor;
-    const channel = (start: number) => { const c = parseInt(accent.slice(start, start + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-    const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
     element.style.setProperty('--c-accent', accent);
-    element.style.setProperty('--c-ink', luminance > 0.179 ? '#1B1A1F' : '#ffffff');
-    element.style.setProperty('--c-text-accent', luminance > 0.25 ? '#3d3d45' : accent);
+    element.style.setProperty('--c-ink', inkFor(accent));
+    element.style.setProperty('--c-text-accent', textAccent(accent));
     element.classList.toggle('serif', theme.font === 'serif');
   }
   function coverHtml(): HTMLElement {
@@ -345,7 +400,8 @@ export function courseView(root: HTMLElement, context: Context) {
           select('course-lesson-header', 'Lesson header', c.theme.lessonHeader, [['plain', 'Plain'], ['image', 'Image banner'], ['accent', 'Accent band']], (value, target) => { target.theme.lessonHeader = value; }),
           select('course-font', 'Body text', c.theme.font, [['sans', 'Sans serif'], ['serif', 'Serif']], (value, target) => { target.theme.font = value; }, redrawCover),
           select('course-width', 'Reading width', c.theme.pageWidth, [['standard', 'Standard'], ['wide', 'Wide']], (value, target) => { target.theme.pageWidth = value; }),
-          h('p', { class: 'hint', text: 'The full theme studio, with font pairings and live preview, arrives with the new lesson editor.' }),
+          h('p', { class: accentReport(c.theme.accentColor).ok ? 'hint' : 'warn-note', text: accentReport(c.theme.accentColor).buttons }),
+          button('Open the theme studio', event => themeStudio(event.currentTarget as HTMLElement, { project: () => controller!.project, edit: change => edit(change), themeVars: element => themeVars(element), assetSource: assetId => assetSource(assetId), changed: () => { redrawCover(); } }), { icon: Palette, class: 'btn btn-sm' }),
         ]),
       ]),
     ];
@@ -385,6 +441,7 @@ export function courseView(root: HTMLElement, context: Context) {
       lessons.show(lesson.id);
       canvas.replaceChildren(lessons.canvas);
       side.replaceChildren(lessons.panel);
+      if (pendingIssue?.lessonId === lesson.id) applyPendingIssue();
       rememberOpened(owner, { id, title: course().title, lessonId: lesson.id, lessonTitle: lesson.title });
     } else {
       body.classList.remove('lesson-mode'); side.hidden = false; side.setAttribute('aria-label', 'Course details');
@@ -392,6 +449,7 @@ export function courseView(root: HTMLElement, context: Context) {
       themeVars(paper);
       canvas.replaceChildren(paper);
       side.replaceChildren(...detailsHtml());
+      if (pendingIssue && !pendingIssue.lessonId) applyPendingIssue();
       rememberOpened(owner, { id, title: course().title });
     }
     paintSave();
@@ -435,7 +493,7 @@ export function courseView(root: HTMLElement, context: Context) {
         if (controller.dirty && !await confirmAction('Leave this course?', 'Some changes are not confirmed yet. A recovery copy stays in this browser and is offered the next time you open the course.', 'Leave course', saveButton)) return false;
         await controller.keepDraft();
       }
-      disposed = true; controller?.dispose();
+      disposed = true; window.clearTimeout(checkTimer); controller?.dispose();
       window.removeEventListener('beforeunload', beforeUnload);
       return true;
     },
