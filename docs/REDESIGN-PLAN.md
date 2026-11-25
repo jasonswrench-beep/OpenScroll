@@ -197,7 +197,9 @@ CC BY-NC-SA, which is not compatible with this Apache-licensed project unless th
 | 5. Delivery | Theme studio, learner preview with return to position, Checks, Export | AC-03 and AC-04 pass; both SCORM editions re-verified in Brightspace |
 | 6. Release | Compatibility fixtures, migration rehearsal on a copy of production data, accessibility and usability sessions, updated Quick Start, VPS cutover | Pilot targets met; zero accessibility blockers |
 
-This build now includes every block above, the seven new ones and all the "next" ones.
+Stages 1 to 9 are built on `feature/schema-4` up to what can be done in the repository; the
+[release checklist](RELEASE-0.2-CHECKLIST.md) lists the Brightspace, accessibility, usability and cutover steps
+that remain. This build now includes every block above, the seven new ones and all the "next" ones.
 [BLOCK-BUILD-PLAN.md](BLOCK-BUILD-PLAN.md) specifies each block, the shared foundations they need, and how
 they extend these stages to nine, with Release last. Later: charts and other Rise-only extras, graded quizzes
 as outline items, and the shared OpenStage accessibility rules (A11Y-1) for Checks.

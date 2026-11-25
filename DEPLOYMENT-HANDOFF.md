@@ -92,6 +92,9 @@ does not authorize live credential, role, configuration or account changes.
 2. Take a fresh consistent database backup; verify its checksum, successful
    restoration into an isolated empty target and encrypted off-host availability.
    Retain the protected configuration and compatible app/renderer image pair.
+   For the schema 4 release, run `npm run db:rehearse` against the restored copy
+   and continue only when every stored course, snapshot and reusable item opens
+   (see `docs/RELEASE-0.2-CHECKLIST.md`).
    Keep the current installation/volumes intact. Do not use `down --volumes`.
 3. Build or transfer the reviewed replacement image pair and verify its recorded
    identities. Preserve normal CA/TLS verification. Do not substitute a mutable

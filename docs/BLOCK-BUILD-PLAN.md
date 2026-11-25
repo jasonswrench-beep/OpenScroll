@@ -1,6 +1,6 @@
 # Block build plan
 
-Status: draft for review, 2026-11-25. Companion to [REDESIGN-PLAN.md](REDESIGN-PLAN.md). Stages 1, 3 and 4 are built
+Status: built through stage 9, 2026-11-25. Companion to [REDESIGN-PLAN.md](REDESIGN-PLAN.md). Stages 1, 3 and 4 are built
 on the `feature/schema-4` branch: schema 4, the studio shell, and the new lesson editor with Wave A, learner
 responses and My workbook (F2) and the region editor (F4). Because schema 4 is not yet released, Wave A's block
 shapes joined it instead of starting version 5; later waves do the same until the release stage. Stage 5 added the question engine
@@ -18,6 +18,10 @@ dependency in decision 5's default).
 Stage 8 added characters (upload-only, pending the owner's decision on character packs), the scenario block,
 its editor with a route check and undo, the conversation player with "Your path", and scenario results reported
 to the LMS.
+Stage 9 added the compatibility fixtures (the original version 1 to 3 starters and an every-block version 4 file),
+a read-only migration rehearsal (`npm run db:rehearse`), the [Quick Start](QUICK-START.md), draft release notes
+and the [release checklist](RELEASE-0.2-CHECKLIST.md). What remains needs the owner, Brightspace, people or the
+live server, and is listed there.
 
 ## Scope
 

@@ -22,6 +22,7 @@
     "schema": "tsx tools/schema.ts",
     "schema:check": "tsx tools/schema.ts --check",
     "db:migrate": "node --env-file-if-exists=.env --import tsx src/server/migrate.ts",
+    "db:rehearse": "node --env-file-if-exists=.env --import tsx tools/rehearse-migration.ts",
     "db:provision": "node --env-file-if-exists=.env --import tsx src/server/provision.ts --from-env"
   },
   "dependencies": {

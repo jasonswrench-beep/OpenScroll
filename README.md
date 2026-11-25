@@ -12,7 +12,9 @@ Authors will organize courses into sections and lessons, edit prebuilt blocks, p
 
 Steps 1–12 are implemented; Step 13 production preparation is available, with live VPS deployment pending access and configuration. Validation evidence and remaining external checks are documented below. Authors can manage a private library and organize course metadata, covers, sections, and lessons with autosave, conflict protection, and browser recovery drafts. Portable `.openscroll` projects retain course content and assets. The lesson editor now supports core blocks, in-place text editing, image settings, ordering, compatible templates, and undo/redo. Desktop/tablet/phone preview and standalone HTML ZIP publishing now use the shared learner player, with lesson progress and Continue behavior. Galleries, uploaded media with transcripts/captions, attachments, link buttons, and accessible interactive blocks are implemented. Assessments now support feedback, retries, weighted scoring, required interactions, and resumable learner state. SCORM 1.2 and SCORM 2004 4th Edition exports now include LMS tracking and resume; both editions passed user acceptance in Brightspace, while detailed gradebook/resume/retake evidence remains unrecorded. PDF publishing now includes cover, linked contents, page numbers, expanded static content and an optional answer key; tagged-output checks pass, with manual screen-reader validation still pending.
 
+- [Quick Start: building a course in OpenScroll Studio](docs/QUICK-START.md)
 - [OpenScroll Studio, the redesigned workspace](docs/STUDIO.md)
+- [Release checklist for v0.2.0-alpha.1](docs/RELEASE-0.2-CHECKLIST.md)
 - [Learner responses and My workbook](docs/LEARNER-RESPONSES.md)
 - [Course resources: glossary, question banks, characters, certificate](docs/COURSE-RESOURCES.md)
 - [Scenarios: branching conversations](docs/SCENARIOS.md)
