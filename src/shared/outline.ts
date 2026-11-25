@@ -3,7 +3,7 @@ export type Section=CourseDocument['course']['sections'][number];
 export type Lesson=Section['lessons'][number];
 export function newId() { return `item-${crypto.randomUUID()}`; }
 export function newSection():Section {return {id:newId(),title:'Untitled section',lessons:[]};}
-export function newLesson():Lesson {return {id:newId(),title:'Untitled lesson',blocks:[]};}
+export function newLesson():Lesson {return {id:newId(),title:'Untitled lesson',blocks:[],banner:null,objectives:[]};}
 export function copyLesson(source:Lesson):Lesson {
   const copy=structuredClone(source);copy.id=newId();copy.title=`Copy of ${source.title}`.slice(0,300);
   for(const block of copy.blocks)block.id=newId();

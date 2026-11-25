@@ -2,9 +2,12 @@ import { ThemeControls } from './theme-controls.js';
 import { previewCourse,publishHtml,publishPdf } from './publishing.js';
 import { api, account, authorizedFetch } from './account-api.js';
 import { parseCourse, type PortableProject } from '../shared/course.js';
+import type { RiseReport } from '../project/rise-import.js';
 const openSample = document.querySelector<HTMLButtonElement>('#open-sample')!;
 const downloadSample=document.querySelector<HTMLButtonElement>('#download-sample')!;
 const fileInput = document.querySelector<HTMLInputElement>('#project-file')!;
+const riseInput = document.querySelector<HTMLInputElement>('#rise-file')!;
+const riseReport = document.querySelector<HTMLElement>('#rise-report')!;
 const details = document.querySelector<HTMLDivElement>('#project-details')!;
 const title = document.querySelector<HTMLInputElement>('#course-title')!;
 const summary = document.querySelector<HTMLParagraphElement>('#project-summary')!;
@@ -16,7 +19,7 @@ let dirty = false;
 const saveLibrary=document.querySelector<HTMLButtonElement>('#save-library')!;
 let privateProject=false;
 function setBusy(value: boolean) {
-  for (const control of [openSample,downloadSample,fileInput,title,download,saveLibrary]) control.disabled=value;
+  for (const control of [openSample,downloadSample,fileInput,riseInput,title,download,saveLibrary]) control.disabled=value;
   details.setAttribute('aria-busy',String(value));
 }
 async function responseError(response: Response): Promise<never> {
@@ -65,6 +68,32 @@ openSample.addEventListener('click', async () => {
   finally { setBusy(false); }
 });
 fileInput.addEventListener('change', () => { const file=fileInput.files?.[0]; if (file) void openProject(file); });
+function showRiseReport(report:RiseReport){
+  const cell=(text:string,header=false)=>{const element=document.createElement(header ? 'th' : 'td');element.textContent=text;if(header)element.setAttribute('scope','row');return element;};
+  const results={exact:'Exact',adjusted:'Adjusted',review:'Needs review'} as const;
+  document.querySelector('#rise-report-summary')!.textContent=`${report.title}: ${report.importedBlocks} of ${report.sourceBlocks} blocks in ${report.lessons} lessons, with ${report.assets.count} files. ${report.review.length ? `${report.review.length} items need a person’s review.` : 'Nothing needs review.'}${report.notImported.length ? ` ${report.notImported.length} blocks could not be imported and are listed below.` : ''}`;
+  const rows=document.querySelector('#rise-report-rows')!;rows.replaceChildren();
+  for(const row of report.rows){const tr=document.createElement('tr');tr.append(cell(row.rise,true),cell(row.note ? `${row.openscroll}. ${row.note}` : row.openscroll),cell(String(row.count)),cell(results[row.result]));rows.append(tr);}
+  const review=document.querySelector('#rise-report-review')!;review.replaceChildren();
+  for(const item of [...report.notImported.map(n=>`Lesson ${n.lesson}, block ${n.block}: not imported (${n.rise}). Rebuild it in OpenScroll.`),...report.review.map(r=>r.lesson ? `Lesson ${r.lesson}, block ${r.block}: ${r.message}` : r.message)].slice(0,200)){const li=document.createElement('li');li.textContent=item;review.append(li);}
+  if(!review.children.length){const li=document.createElement('li');li.textContent='Nothing to review.';review.append(li);}
+  riseReport.hidden=false;
+}
+async function openRise(file: Blob) {
+  if (file.size > 64 * 1024 * 1024) { status.textContent='Choose a Rise export no larger than 64 MiB. Your current project is unchanged.'; return; }
+  if (dirty && !window.confirm('Replace the current project? Download it first if you want to keep your changes.')) { riseInput.value=''; return; }
+  setBusy(true); status.textContent='Importing the Rise course…';
+  try {
+    const response=await authorizedFetch('/api/projects/import-rise',{method:'POST',headers:{'Content-Type':'application/zip'},body:file,signal:AbortSignal.timeout(120_000)});
+    if (!response.ok) await responseError(response);
+    const data = await response.json() as {project:PortableProject;report:RiseReport};
+    showProject(data.project,false);showRiseReport(data.report);
+    status.textContent=`Imported ${data.report.importedBlocks} of ${data.report.sourceBlocks} blocks from Rise. Save a copy to your library to edit its lessons, or download the project.`;
+  } catch (error) {
+    status.textContent=`${error instanceof Error ? error.message : 'The Rise export could not be imported.'} Your current project is unchanged.`;
+  } finally { setBusy(false); riseInput.value=''; }
+}
+riseInput.addEventListener('change', () => { const file=riseInput.files?.[0]; if (file) void openRise(file); });
 downloadSample.addEventListener('click',async()=>{
   setBusy(true);status.textContent='Preparing the starter project…';
   try{

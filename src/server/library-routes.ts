@@ -109,7 +109,10 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
     const digestOf=(document:unknown)=>createHash('sha256').update(JSON.stringify({document,files:sortedFiles})).digest('hex');
     const digest=digestOf(document);
     // Preserve acknowledgements for exact v1 requests retained before the portable-v2 upgrade.
-    const legacyDigest=[1,2].includes((input.document as {schemaVersion:number}).schemaVersion) ? digestOf({...document,schemaVersion:(input.document as {schemaVersion:number}).schemaVersion}) : undefined;
+    // A v3 request saved by the previous release was stored and hashed as the v3 document itself; schema 4
+    // migration adds fields, so that retry is recognized by hashing the request as sent.
+    const sentVersion=(input.document as {schemaVersion:number}).schemaVersion;
+    const legacyDigest=[1,2].includes(sentVersion) ? digestOf({...document,schemaVersion:sentVersion}) : sentVersion===3 ? digestOf(input.document) : undefined;
     const client=await pool.connect();
     try {
       await client.query('BEGIN');

@@ -1,4 +1,25 @@
 import type { TextField } from '../shared/block-renderer.js';
+import { sanitizeRich,plainToRich,richToDom } from '../shared/rich-text.js';
+/**
+ * Formatted text. The browser's own editing produces the markup; every change is reduced to the canonical subset
+ * before it is stored, and pasted HTML is sanitized and rebuilt as DOM nodes rather than inserted as markup.
+ * Ctrl+B and Ctrl+I use the browser's built-in commands.
+ */
+export function bindRich(element:HTMLElement,field:TextField,commit:(html:string)=>void,selected:()=>void){
+  element.contentEditable='true';element.setAttribute('role','textbox');element.setAttribute('aria-label',field.label);element.setAttribute('aria-multiline','true');element.setAttribute('aria-placeholder',field.label);element.dataset.placeholder=field.label;element.spellcheck=true;
+  let composing=false;
+  const update=()=>{if(composing)return;const value=sanitizeRich(element.innerHTML);if(value.length<=field.max)commit(value);};
+  element.addEventListener('focus',selected);
+  element.addEventListener('compositionstart',()=>{composing=true;});element.addEventListener('compositionend',()=>{composing=false;update();});
+  element.addEventListener('input',update);
+  element.addEventListener('paste',event=>{
+    event.preventDefault();const html=event.clipboardData?.getData('text/html') ?? '';const value=html ? sanitizeRich(html) : plainToRich(event.clipboardData?.getData('text/plain') ?? '');
+    const selection=window.getSelection();let range=selection?.rangeCount ? selection.getRangeAt(0) : undefined;
+    if(!range || !element.contains(range.commonAncestorContainer)){range=document.createRange();range.selectNodeContents(element);range.collapse(false);}
+    range.deleteContents();const fragment=richToDom(value,document,{editable:true});const last=fragment.lastChild;range.insertNode(fragment);if(last){range.setStartAfter(last);range.collapse(true);selection?.removeAllRanges();selection?.addRange(range);}update();
+  });
+  element.addEventListener('drop',event=>{event.preventDefault();});
+}
 export function caretAtEnd(element:HTMLElement){
   const selection=window.getSelection();const range=document.createRange();range.selectNodeContents(element);range.collapse(false);selection?.removeAllRanges();selection?.addRange(range);
 }

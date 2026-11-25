@@ -3,12 +3,17 @@ import { z } from 'zod';
 import { assetPath,safeLink,ProjectError,type Block,type PortableProject } from '../shared/course.js';
 import { publicationProject } from './readiness.js';
 import { PDF_RENDER_REQUEST_LIMIT } from './pdf-protocol.js';
+import { richHtml,richIsEmpty } from '../shared/rich-text.js';
+import type { Lesson } from '../shared/course.js';
 export const pdfOptionsSchema=z.strictObject({paper:z.enum(['A4','Letter']).default('A4'),includeAnswers:z.boolean().default(false)});
 export type PdfOptions=z.output<typeof pdfOptionsSchema>;
 export function parsePdfOptions(input:unknown):PdfOptions{const parsed=pdfOptionsSchema.safeParse(input??{});if(!parsed.success)throw new ProjectError('Choose A4 or Letter and a valid answer-key option.');return parsed.data;}
 export const escapeHtml=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const text=(tag:string,value:string)=>`<${tag}>${escapeHtml(value)}</${tag}>`;
 const list=(values:string[],ordered=false)=>`<${ordered?'ol':'ul'}>${values.map(v=>text('li',v)).join('')}</${ordered?'ol':'ul'}>`;
+/** Rich text is canonical and escaped by construction; richHtml rebuilds it from the parsed tree. */
+const rich=(value:string)=>richHtml(value);
+const richList=(values:string[],ordered=false)=>`<${ordered?'ol':'ul'}>${values.map(v=>`<li>${richHtml(v,{paragraphTag:'span'})}</li>`).join('')}</${ordered?'ol':'ul'}>`;
 export function pdfHtml(input:unknown,settings:unknown={}){
  const project=publicationProject(input),options=parsePdfOptions(settings),{course}=project.document;let number=0;
  // Reserve for escaped text, repeated headings, fixed markup and JSON framing before joins.
@@ -20,16 +25,17 @@ export function pdfHtml(input:unknown,settings:unknown={}){
  const questions:{block:Extract<Block,{type:'assessment'}>;number:number}[]=[];
  const image=(id:string,alt:string,decorative:boolean)=>{const asset=project.document.assets.find(a=>a.id===id);if(!asset)return text('p','Image unavailable.');const encoded=project.files[assetPath(asset)]!;reserve(encoded.length);return `<img src="data:${asset.mediaType};base64,${encoded}" alt="${escapeHtml(decorative?'':alt)}">`;};
  const figure=(id:string,alt:string,decorative:boolean,caption:string)=>`<figure>${image(id,alt,decorative)}${caption?text('figcaption',caption):''}</figure>`;
- const items=(values:{title:string;text:string}[],ordered=false)=>`<${ordered?'ol':'div'}>${values.map(v=>`${ordered?'<li>':'<section>'}${text('h5',v.title)}${text('p',v.text)}${ordered?'</li>':'</section>'}`).join('')}</${ordered?'ol':'div'}>`;
+ const items=(values:{title:string;text:string;date?:string}[],ordered=false)=>`<${ordered?'ol':'div'}>${values.map(v=>`${ordered?'<li>':'<section>'}${v.date?`<p class="date">${escapeHtml(v.date)}</p>`:''}${text('h5',v.title)}${rich(v.text)}${ordered?'</li>':'</section>'}`).join('')}</${ordered?'ol':'div'}>`;
+ const card=(value:{title:string;text:string}|null)=>value?`<section>${text('h5',value.title)}${rich(value.text)}</section>`:'';
  const render=(block:Block):string=>{
   let body='';switch(block.type){
    case 'heading':body=text(block.variant==='subheading'?'h5':'h4',block.content.text);break;
-   case 'paragraph':body=(block.variant==='with-heading'?text('h4',block.content.heading):'')+text('p',block.content.text);break;
-   case 'statement':body=`<aside>${block.variant==='note'?'<h4>Note</h4>':''}${text('p',block.content.text)}</aside>`;break;
-   case 'quote':body=`<figure><blockquote>${text('p',block.content.text)}</blockquote>${text('figcaption',block.content.attribution)}</figure>`;break;
-   case 'list':body=(block.variant==='checklist'?'<p>Checklist</p>':'')+list(block.content.items,block.variant==='numbered');break;
+   case 'paragraph':body=(block.variant==='with-heading'?text('h4',block.content.heading):'')+rich(block.content.text);break;
+   case 'statement':body=`<aside>${block.variant==='note'?'<h4>Note</h4>':''}${rich(block.content.text)}</aside>`;break;
+   case 'quote':body=`<figure><blockquote>${rich(block.content.text)}</blockquote>${text('figcaption',block.content.attribution)}</figure>`;break;
+   case 'list':body=(block.variant==='checklist'?'<p>Checklist</p>':'')+richList(block.content.items,block.variant==='numbered');break;
    case 'image':body=figure(block.content.assetId,block.content.altText,block.content.decorative,block.content.caption);break;
-   case 'image-text':body=figure(block.content.assetId,block.content.altText,block.content.decorative,block.content.caption)+text('h4',block.content.heading)+text('p',block.content.text);break;
+   case 'image-text':body=figure(block.content.assetId,block.content.altText,block.content.decorative,block.content.caption)+text('h4',block.content.heading)+rich(block.content.text);break;
    case 'divider':body='<hr>'+text('p',block.content.label);break;
    case 'spacer':body='<div class="spacer" aria-hidden="true"></div>';break;
    case 'continue':body='<hr class="section-break" aria-hidden="true">';break;
@@ -43,14 +49,16 @@ export function pdfHtml(input:unknown,settings:unknown={}){
     if(asset?.mediaType==='text/plain'){const value=Buffer.from(project.files[assetPath(asset)]!,'base64').toString('utf8');reserve(2*escapedBytes(value));body+='<h5>Attachment text</h5>'+text('pre',value);}break;
    }
    case 'button':body=safeLink(block.content.url)?`<p><a href="${escapeHtml(block.content.url)}">${escapeHtml(block.content.label || 'Open resource')}</a><br><span class="url">${escapeHtml(block.content.url)}</span></p>`:text('p',`${block.content.label || 'Resource'}: link not configured.`);break;
-   case 'accordion':case 'tabs':case 'timeline':case 'process':body=items(block.content.items,['timeline','process'].includes(block.type));break;
-   case 'flashcards':body=block.content.cards.map((card,i)=>`<section>${text('h5',`Card ${i+1}`)}${text('p',card.front)}${text('p',card.back)}</section>`).join('');break;
-   case 'labeled-graphic':body=`<figure><div class="graphic">${image(block.content.assetId,block.content.altText,block.content.decorative)}${block.content.markers.map((m,i)=>`<span aria-hidden="true" class="marker" style="left:${m.x}%;top:${m.y}%">${i+1}</span>`).join('')}</div>${text('figcaption',block.content.caption)}</figure>`+`<ol>${block.content.markers.map(m=>`<li>${text('h5',m.label)}${text('p',m.text)}</li>`).join('')}</ol>`;break;
+   case 'accordion':case 'tabs':case 'timeline':body=items(block.content.items,block.type==='timeline');break;
+   case 'process':body=card(block.content.intro)+items(block.content.items,true)+card(block.content.summary);break;
+   case 'flashcards':body=block.content.cards.map((c,i)=>`<section>${text('h5',`Card ${i+1}`)}${rich(c.front)}${rich(c.back)}</section>`).join('');break;
+   case 'labeled-graphic':body=`<figure><div class="graphic">${image(block.content.assetId,block.content.altText,block.content.decorative)}${block.content.markers.map((m,i)=>`<span aria-hidden="true" class="marker" style="left:${m.x}%;top:${m.y}%">${i+1}</span>`).join('')}</div>${text('figcaption',block.content.caption)}</figure>`+`<ol>${block.content.markers.map(m=>`<li>${text('h5',m.label)}${rich(m.text)}</li>`).join('')}</ol>`;break;
    case 'assessment':{
-    const n=++number;questions.push({block,number:n});body=text('h4',`Question ${n}. ${block.content.prompt}`)+text('p',block.assessment.graded?`${block.assessment.points} ${block.assessment.points===1?'point':'points'}.`:'Practice exercise.');
+    const n=++number;questions.push({block,number:n});body=text('h4',`Question ${n}.`)+rich(block.content.prompt)+text('p',block.assessment.graded?`${block.assessment.points} ${block.assessment.points===1?'point':'points'}.`:'Practice exercise.');
     if(block.variant==='single-choice'||block.variant==='multiple-response')body+=text('p',block.variant==='single-choice'?'Select one answer.':'Select every correct answer.')+list(block.content.options,true);
     else if(block.variant==='fill-blank')body+='<p>Answer: ________________________________________</p>';
     else if(block.variant==='matching')body+='<h5>Terms</h5>'+list(block.content.pairs.map(p=>p.left),true)+'<h5>Matches</h5>'+list([...block.content.pairs].reverse().map(p=>p.right),true)+'<p>Write the matching number beside each term.</p>';
+    else if(block.variant==='categorize')body+='<h5>Groups</h5>'+list(block.content.groups)+'<p>Write the group beside each card.</p>'+list(block.content.items.map(v=>'____ '+v));
     else body+='<p>Number these items in the correct order.</p>'+list([...block.content.items].reverse().map(v=>'____ '+v));break;
    }
    default:{const unsupported:never=block;throw new ProjectError(`Unsupported PDF block: ${String(unsupported)}`);}
@@ -58,13 +66,16 @@ export function pdfHtml(input:unknown,settings:unknown={}){
   if(block.narration?.script)body+='<aside><h5>Narration script</h5>'+text('p',block.narration.script)+'</aside>';
   return `<div class="block" data-block-type="${block.type}" id="pdf-${block.id}">${body}</div>`;
  };
- const contents=`<section class="contents"><h2>Contents</h2><ol>${course.sections.map(section=>`<li><a href="#pdf-${section.id}">${escapeHtml(section.title || 'Untitled section')}</a><ol>${section.lessons.map(l=>`<li><a href="#pdf-${l.id}">${escapeHtml(l.title || 'Untitled lesson')}</a></li>`).join('')}</ol></li>`).join('')}${options.includeAnswers?'<li><a href="#answer-key">Answer key</a></li>':''}</ol></section>`;
- const lessons=course.sections.map(section=>`<section class="course-section" id="pdf-${section.id}">${text('h2',section.title || 'Untitled section')}${section.lessons.length?section.lessons.map(lesson=>`<article class="lesson" id="pdf-${lesson.id}">${text('h3',lesson.title || 'Untitled lesson')}${lesson.blocks.map(render).join('')}</article>`).join(''):'<p>No lessons in this section.</p>'}</section>`).join('');
+ const contents=`<section class="contents"><h2>Contents</h2><ol>${course.sections.map(section=>{const lessons=section.lessons.map(l=>`<li><a href="#pdf-${l.id}">${escapeHtml(l.title || 'Untitled lesson')}</a></li>`).join('');return section.title?`<li><a href="#pdf-${section.id}">${escapeHtml(section.title)}</a><ol>${lessons}</ol></li>`:lessons;}).join('')}${options.includeAnswers?'<li><a href="#answer-key">Answer key</a></li>':''}</ol></section>`;
+ const banner=(lesson:Lesson)=>{const b=lesson.banner;const id=b?(b.source==='cover'?course.cover?.assetId:b.assetId):undefined;return b && id?figure(id,b.altText,b.decorative,''):'';};
+ const objectives=(lesson:Lesson)=>lesson.objectives.length?`<section class="objectives"><h4>In this lesson, you will</h4>${list(lesson.objectives.map(o=>o.text))}</section>`:'';
+ const lessons=course.sections.map(section=>`<section class="course-section" id="pdf-${section.id}">${section.title?text('h2',section.title):''}${section.lessons.length?section.lessons.map(lesson=>`<article class="lesson" id="pdf-${lesson.id}">${banner(lesson)}${text('h3',lesson.title || 'Untitled lesson')}${objectives(lesson)}${lesson.blocks.map(render).join('')}</article>`).join(''):'<p>No lessons in this section.</p>'}</section>`).join('');
  const key=options.includeAnswers?`<section class="answer-key" id="answer-key"><h2>Answer key</h2>${questions.length?questions.map(({block,number:n})=>{
-  const c=block.content,answers=block.variant==='fill-blank'?c.accepted:block.variant==='matching'?c.pairs.map(p=>`${p.left} → ${p.right}`):block.variant==='sorting'?c.items:c.correct.map(i=>`${i+1}. ${c.options[i]}`);
-  return `<section>${text('h3',`Question ${n}. ${c.prompt}`)}${list(answers,block.variant==='sorting')}${block.variant==='fill-blank'?text('p',c.caseSensitive?'Case-sensitive.':'Case-insensitive.'):''}${c.feedbackCorrect?text('p',`Correct-answer feedback: ${c.feedbackCorrect}`):''}${c.feedbackIncorrect?text('p',`Incorrect-answer feedback: ${c.feedbackIncorrect}`):''}</section>`;
+  const c=block.content,answers=block.variant==='fill-blank'?c.accepted:block.variant==='matching'?c.pairs.map(p=>`${p.left} → ${p.right}`):block.variant==='ordering'?c.items:block.variant==='categorize'?c.items.map((v,i)=>`${v} → ${c.groups[c.placements[i] ?? -1] ?? '(no group)'}`):c.correct.map(i=>`${i+1}. ${c.options[i]}`);
+  const choiceFeedback=c.feedbackMode==='per-choice'?c.choiceFeedback.map((f,i)=>richIsEmpty(f)?'':`<p>Feedback for choice ${i+1}:</p>${rich(f)}`).join(''):'';
+  return `<section>${text('h3',`Question ${n}.`)}${rich(c.prompt)}${list(answers,block.variant==='ordering')}${block.variant==='fill-blank'?text('p',c.caseSensitive?'Case-sensitive.':'Case-insensitive.'):''}${c.feedbackMode==='none'?'':choiceFeedback+(richIsEmpty(c.feedbackCorrect)?'':'<p>Correct-answer feedback:</p>'+rich(c.feedbackCorrect))+(richIsEmpty(c.feedbackIncorrect)?'':'<p>Incorrect-answer feedback:</p>'+rich(c.feedbackIncorrect))}</section>`;
  }).join(''):'<p>This course contains no questions.</p>'}</section>`:'';
- const html=`<!doctype html><html lang="${escapeHtml(course.language)}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(course.title || 'Untitled course')}</title><style>${PDF_CSS}html{font-family:${course.theme.font==='serif'?'"Noto Serif","DejaVu Serif",serif':'"Noto Sans","DejaVu Sans",sans-serif'}}.cover .brand{background:${course.theme.accentColor};color:${accentInk(course.theme.accentColor)};padding:8pt}aside,blockquote{border-left-color:${course.theme.accentColor}}</style></head><body><main><section class="cover"><p class="brand">OpenScroll · Course edition</p>${text('h1',course.title || 'Untitled course')}${course.author?text('p',`By ${course.author}`):''}${course.description?text('p',course.description):''}${course.cover?figure(course.cover.assetId,course.cover.altText,course.cover.decorative,''):''}<p class="edition">${options.includeAnswers?'Includes answer key':'Learner copy · No answer key'}</p></section>${contents}${lessons||'<section class="course-section"><h2>Course content</h2><p>No lessons in this course.</p></section>'}${key}</main></body></html>`;
+ const html=`<!doctype html><html lang="${escapeHtml(course.language)}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>${escapeHtml(course.title || 'Untitled course')}</title><style>${PDF_CSS}html{font-family:${course.theme.font==='serif'?'"Noto Serif","DejaVu Serif",serif':'"Noto Sans","DejaVu Sans",sans-serif'}}.cover .brand{background:${course.theme.accentColor};color:${accentInk(course.theme.accentColor)};padding:8pt}aside,blockquote{border-left-color:${course.theme.accentColor}}</style></head><body><main><section class="cover"><p class="brand">OpenScroll · Course edition</p>${text('h1',course.title || 'Untitled course')}${course.author?text('p',`By ${course.author}`):''}${course.description?rich(course.description):''}${course.cover?figure(course.cover.assetId,course.cover.altText,course.cover.decorative,''):''}<p class="edition">${options.includeAnswers?'Includes answer key':'Learner copy · No answer key'}</p></section>${contents}${lessons||'<section class="course-section"><h2>Course content</h2><p>No lessons in this course.</p></section>'}${key}</main></body></html>`;
  if(Buffer.byteLength(html)>PDF_RENDER_REQUEST_LIMIT-128)throw new ProjectError('The PDF content exceeds the 32 MiB rendering budget. Reduce image sizes or split the course.');
  return {options,html};
 }

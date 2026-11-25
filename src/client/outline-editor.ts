@@ -1,3 +1,4 @@
+import { plainToRich,richToPlain } from '../shared/rich-text.js';
 import { saveReusable,action as reuseAction } from './reusable-content.js';
 import { compactProject } from '../shared/reuse.js';
 import { openSnapshots } from './snapshots.js';
@@ -51,7 +52,7 @@ function button(label:string,handler:()=>void,disabled=false) {
 function renderAll() {
   if(!controller)return;
   const document=controller.project.document;
-  for(const [id,field] of Object.entries(inputIds)) (window.document.getElementById(id) as HTMLInputElement).value=document.course[field as 'title'|'description'|'author'|'language'];
+  for(const [id,field] of Object.entries(inputIds)) (window.document.getElementById(id) as HTMLInputElement).value=field==='description' ? richToPlain(document.course.description) : document.course[field as 'title'|'author'|'language'];
   window.document.querySelector<HTMLSelectElement>('#outline-navigation')!.value=document.course.settings.navigation;
   window.document.querySelector<HTMLInputElement>('#outline-passing-score')!.value=String(document.course.settings.passingScore);
   const covers=window.document.querySelector<HTMLSelectElement>('#outline-cover')!;
@@ -150,7 +151,7 @@ async function openCourse(id:string,owner:string,discard=false) {
   }catch(error){tell(error);}finally{panel.inert=false;}
 }
 window.addEventListener('openscroll:edit-course',event=>{const data=(event as CustomEvent<{id:string;owner:string}>).detail;void openCourse(data.id,data.owner);});
-for(const [id,field] of Object.entries(inputIds))document.getElementById(id)!.addEventListener('input',event=>{const value=(event.target as HTMLInputElement).value;edit(p=>{p.document.course[field as 'title'|'description'|'author'|'language']=value;});});
+for(const [id,field] of Object.entries(inputIds))document.getElementById(id)!.addEventListener('input',event=>{const value=(event.target as HTMLInputElement).value;edit(p=>{if(field==='description')p.document.course.description=plainToRich(value);else p.document.course[field as 'title'|'author'|'language']=value;});});
 document.querySelector('#outline-add-section')!.addEventListener('click',()=>{edit(p=>{p.document.course.sections.push(newSection());},false,true);focusStructure();});
 document.querySelector('#outline-save-now')!.addEventListener('click',()=>{void controller?.save();});
 retry.addEventListener('click',()=>{void controller?.save();});

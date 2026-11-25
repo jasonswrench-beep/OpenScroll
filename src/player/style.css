@@ -6,3 +6,9 @@
 @media(max-height:800px){.player-header{padding:1rem 1.5rem}.player-header h1{font-size:1.75rem;line-height:1.2;margin:.3rem 0}.player-header p{margin:.35rem 0}.player-header .player-brand{margin:0}.player-header .player-description{font-size:.9rem;line-height:1.4}.player-header progress{height:.6rem;margin:.4rem 0}.player-header>button{padding:.4rem .65rem}.player-score{font-size:.9rem}.player-layout{gap:1rem;padding-inline:1rem}}
 
 .player-header progress{accent-color:var(--course-accent,#193c35)}.player-layout nav [aria-current]{border-color:var(--course-accent,#193c35)}
+
+.player-banner{margin:0 0 1rem}.player-banner img{display:block;width:100%;max-height:18rem;object-fit:cover;border-radius:.5rem}
+.player-lesson-accent{background:var(--course-accent,#193c35);color:var(--course-accent-ink,#fff);padding:.6rem .9rem;border-radius:.4rem}
+.player-objectives{border:1px solid currentColor;border-radius:.5rem;padding:.6rem 1rem;margin:.5rem 0 1rem}.player-objectives h3{margin:.2rem 0;font-size:1rem}
+.player-author{display:flex;align-items:center;gap:.5rem}.player-author-photo{width:2rem;height:2rem;border-radius:50%;object-fit:cover}
+.player-description>:first-child{margin-top:0}

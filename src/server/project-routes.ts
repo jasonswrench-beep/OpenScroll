@@ -7,12 +7,14 @@ import { exportHtml } from '../project/html-export.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { exportProject, importProject, LIMITS } from '../project/archive.js';
 import { sampleProject } from '../project/sample.js';
+import { importRiseExport, RISE_LIMITS } from '../project/rise-import.js';
 import { ProjectError } from '../shared/course.js';
 import { HttpError } from './accounts/access.js';
 
 export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:string}) {
   app.addContentTypeParser('application/octet-stream',{parseAs:'buffer',bodyLimit:QUESTION_FILE_LIMIT},(_request,body,done)=>done(null,body));
   app.addContentTypeParser('application/x-openscroll-project', { parseAs: 'buffer', bodyLimit: LIMITS.archive }, (_request,body,done) => done(null,body));
+  app.addContentTypeParser('application/zip', { parseAs: 'buffer', bodyLimit: RISE_LIMITS.upload }, (_request,body,done) => done(null,body));
   app.decorateRequest('projectProcessing', false);
   // One request owns the slot through body parsing and archive work.
   let activeRequest: string | undefined;
@@ -48,6 +50,11 @@ export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:st
   app.post('/import', { bodyLimit: LIMITS.archive }, async request => {
     if (!Buffer.isBuffer(request.body)) throw new ProjectError('Upload a binary .openscroll project file.');
     return processFile(request, () => importProject(request.body as Buffer));
+  });
+  // A Rise web export becomes an unsaved portable project plus a mapping report; nothing is stored.
+  app.post('/import-rise', { bodyLimit: RISE_LIMITS.upload }, async request => {
+    if (!Buffer.isBuffer(request.body)) throw new ProjectError('Upload a Rise web export ZIP.');
+    return processFile(request, () => importRiseExport(request.body as Buffer));
   });
   for(const [path,edition]of [['scorm-12','1.2'],['scorm-2004','2004']] as const)app.post('/'+path,{bodyLimit:90*1024*1024},async(request,reply)=>reply.type('application/zip').header('Content-Disposition',`attachment; filename="course-${path}.zip"`).send(await processFile(request,()=>exportScorm(request.body,options.playerRoot ?? resolve('dist/client'),edition))));
   app.post('/pdf',{bodyLimit:90*1024*1024},async(request,reply)=>{

@@ -1,6 +1,6 @@
 # OpenScroll editable project format
 
-Version: **3** (version 1/2 import supported). Extension: **`.openscroll`**. Content type: `application/x-openscroll-project`.
+Version: **4** (versions 1–3 import supported). Extension: **`.openscroll`**. Content type: `application/x-openscroll-project`.
 
 This is an editable authoring package, not a learner-facing HTML, SCORM, or PDF export. The format has no dependency on an OpenScroll server, account, database ID, domain, browser framework, or AI provider.
 
@@ -115,9 +115,36 @@ Import reads entries lazily and counts actual streamed bytes, not just declared 
 
 Exports use fixed ZIP metadata and stable entry ordering. Identical validated source produces identical bytes with the same pinned implementation; byte identity across future ZIP library changes is not a compatibility promise.
 
+## Version 4 additions
+
+Version 4 adds formatted text and the fields needed to recreate Rise 360 courses. [schema/course-v4.schema.json](../schema/course-v4.schema.json) is the generated structural schema; [src/shared/course.ts](../src/shared/course.ts) and [src/shared/rich-text.ts](../src/shared/rich-text.ts) are the runtime sources.
+
+**Rich text.** These fields hold formatted text: course `description`; paragraph, statement, quote and image-and-text `text`; list `items`; accordion, tabs, process and timeline item `text`; process `intro`/`summary` text; flashcard `front` and `back`; labeled-graphic marker `text`; assessment `prompt`, `feedbackCorrect`, `feedbackIncorrect` and `choiceFeedback`. Titles, labels, captions, transcripts, options and alternative text stay plain.
+
+Formatted text is a canonical subset of HTML: `<p>`, `<h3>`, `<h4>`, `<ul>`, `<ol>` (optionally `start="N"`), `<li>` (lists nest at most three deep), `<strong>`, `<em>`, `<br>`, and `<a href>` with a complete HTTP or HTTPS address. Text escapes `&`, `<` and `>`; attribute values also escape `"`; whitespace runs are single spaces. A value that is one paragraph is stored without its `<p>` wrapper, so ordinary plain text is already valid. A stored value must already be canonical: validation rejects anything else instead of rewriting it. Imported and pasted HTML passes through `sanitizeRich`, which drops scripts, styles, event attributes, unsafe links and unknown elements. Renderers build DOM nodes from the parsed tree and never assign authored HTML to `innerHTML`.
+
+**New fields.**
+
+| Where | Field | Default |
+| --- | --- | --- |
+| Course | `authorImage: { assetId } \| null` (an image asset) | `null` |
+| Theme | `coverLayout`: `stacked`, `split-left`, `split-right`, `two-thirds-left`, `overlay`, `centered` | `stacked` |
+| Theme | `lessonHeader`: `plain`, `image`, `accent` | `plain` |
+| Theme | `fontPairing`: `lato-merriweather`, `worksans-sourceserif`, `figtree-literata`, `atkinson` or `null` | `null` |
+| Lesson | `banner: { source: cover \| image, assetId, altText, decorative } \| null` | `null` |
+| Lesson | `objectives: [{ id, text, level }]`, level one of Bloom's six or `null` | `[]` |
+| Process | `intro`, `summary`: `{ title, text } \| null` | `null` |
+| Timeline item | `date` (a short label such as "Phase 1") | `""` |
+| Continue | `hint` (shown until learners can continue) | `""` |
+| Assessment | `feedbackMode`: `none`, `correct-incorrect`, `per-choice` | `correct-incorrect` |
+| Assessment | `choiceFeedback` (formatted, one per option, at most as many as options) | `[]` |
+| Assessment | variant `categorize` with `groups` (2–10 labels) and `placements` (each card's group) | `[]` |
+
+The assessment variant `sorting` is renamed `ordering` so it cannot be confused with sorting cards into groups. A banner that uses the course cover names no asset; one that uses its own image must name an image asset. Section titles may be empty, in which case learner outputs show no section heading.
+
 ## Version and migration policy
 
-Version 1 is the initial development format; version 2 adds the Step 8 media/interaction families; version 3 adds assessments and exploration requirements. `parseCourse` validates supported v1 input and copies it into v3 by changing only the version. It rejects new block types incorrectly labeled v1. The original archive and stored database row remain unchanged on read; an explicit save/download targets v3. The v1/v2 schemas and original starter fixtures are retained. Unknown properties/types are never silently stripped. Version 0 and newer unsupported versions fail explicitly and preserve their sources.
+Version 1 is the initial development format; version 2 adds the Step 8 media/interaction families; version 3 adds assessments and exploration requirements; version 4 adds formatted text and the fields above. Migration to version 4 runs on a copy: plain text is escaped and line breaks become paragraphs or `<br>`, `sorting` becomes `ordering`, and new fields take their defaults. `parseCourse` validates supported v1 input and copies it into v3 by changing only the version. It rejects new block types incorrectly labeled v1. The original archive and stored database row remain unchanged on read; an explicit save/download targets v3. The v1/v2 schemas and original starter fixtures are retained. Unknown properties/types are never silently stripped. Version 0 and newer unsupported versions fail explicitly and preserve their sources.
 
 Stored-course recovery retains exact legacy pending payloads. The server accepts either the current canonical digest or the matching legacy v1/v2 digest only for the latest unchanged acknowledged mutation/revision. This preserves lost-acknowledgement retry behavior without permitting stale overwrites.
 

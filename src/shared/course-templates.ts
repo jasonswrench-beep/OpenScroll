@@ -2,11 +2,13 @@ import { parseCourse,assetPath,type PortableProject } from './course.js';
 import { newId } from './outline.js';
 import { prepareBlock } from './block-catalog.js';
 import type { CourseTheme } from './reuse.js';
+/** Presets change colors, font and width; schema 4 layout settings keep their defaults. */
+const LAYOUT_DEFAULTS={coverLayout:'stacked',lessonHeader:'plain',fontPairing:null} as const;
 export const THEME_PRESETS:{name:string;theme:CourseTheme}[]=[
- {name:'Forest',theme:{accentColor:'#193c35',font:'sans',pageWidth:'standard'}},
- {name:'Ocean',theme:{accentColor:'#164e78',font:'sans',pageWidth:'wide'}},
- {name:'Plum',theme:{accentColor:'#613b67',font:'serif',pageWidth:'standard'}},
- {name:'Sunlight',theme:{accentColor:'#f4d87a',font:'sans',pageWidth:'wide'}},
+ {name:'Forest',theme:{accentColor:'#193c35',font:'sans',pageWidth:'standard',...LAYOUT_DEFAULTS}},
+ {name:'Ocean',theme:{accentColor:'#164e78',font:'sans',pageWidth:'wide',...LAYOUT_DEFAULTS}},
+ {name:'Plum',theme:{accentColor:'#613b67',font:'serif',pageWidth:'standard',...LAYOUT_DEFAULTS}},
+ {name:'Sunlight',theme:{accentColor:'#f4d87a',font:'sans',pageWidth:'wide',...LAYOUT_DEFAULTS}},
 ];
 export const COURSE_TEMPLATES=[{key:'short-course',name:'Focused short course',description:'An idea, an example and a practical reflection.'},{key:'onboarding',name:'Welcome and orientation',description:'Purpose, first steps and a useful knowledge check.'},{key:'workshop',name:'Guided workshop',description:'Explore a process, compare approaches and plan an action.'}];
 export const LEARNING_LAYOUTS=[{key:'concept',name:'Concept and example'},{key:'compare',name:'Compare two perspectives'},{key:'practice',name:'Process and practice'}];
@@ -28,6 +30,6 @@ export function learningLayout(key:string):PortableProject{
 export function courseTemplate(key:string,author=''):PortableProject{
  const entry=COURSE_TEMPLATES.find(t=>t.key===key);if(!entry)throw new Error('Choose a course template.');const layout=learningLayout(key==='workshop'?'practice':key==='onboarding'?'compare':'concept'),course=layout.document.course;
  course.title=entry.name;course.author=author;course.description=entry.description;const first=course.sections[0]!.lessons[0]!;first.title=key==='onboarding'?'Welcome and purpose':'Explore the idea';
- const next={id:newId(),title:'Apply what you learned',blocks:[prepareBlock('paragraph-heading',layout).block,prepareBlock('bulleted-list',layout).block]};if(next.blocks[0]?.type==='paragraph'){next.blocks[0].content.heading='Make a practical plan';next.blocks[0].content.text='Choose one action you can take, decide when you will try it, and identify how you will know it helped.';}if(next.blocks[1]?.type==='list')next.blocks[1].content.items=['Name one useful action.','Try it in a real situation.','Reflect and adjust your approach.'];course.sections[0]!.lessons.push(next);return layout;
+ const next={id:newId(),title:'Apply what you learned',blocks:[prepareBlock('paragraph-heading',layout).block,prepareBlock('bulleted-list',layout).block]};if(next.blocks[0]?.type==='paragraph'){next.blocks[0].content.heading='Make a practical plan';next.blocks[0].content.text='Choose one action you can take, decide when you will try it, and identify how you will know it helped.';}if(next.blocks[1]?.type==='list')next.blocks[1].content.items=['Name one useful action.','Try it in a real situation.','Reflect and adjust your approach.'];course.sections[0]!.lessons.push({...next,banner:null,objectives:[]});return layout;
 }
 export function accentInk(hex:string){const rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4);return .2126*rgb[0]!+.7152*rgb[1]!+.0722*rgb[2]!>.179?'#000000':'#ffffff';}

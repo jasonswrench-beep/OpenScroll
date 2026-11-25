@@ -1,6 +1,7 @@
 import { renderExtended } from './extended-renderer.js';
 import { assetPath,type Block,type PortableProject } from './course.js';
-export interface TextField {key:string;label:string;max:number;multiline:boolean;}
+import { richToDom,RICH_TEXT_MAX } from './rich-text.js';
+export interface TextField {key:string;label:string;max:number;multiline:boolean;rich?:boolean;}
 export type TextBinder=(element:HTMLElement,field:TextField)=>void;
 /** Same semantic content renderer is usable without any editor controls. All text is inert. */
 export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder,assetURL?:(id:string)=>string,explored?:(index:number)=>void):HTMLElement {
@@ -14,6 +15,11 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
     const node=document.createElement(tag);node.textContent=value;node.dataset.field=key;
     if(bind)bind(node,{key,label,max,multiline});return node;
   }
+  /** Formatted text: paragraphs, subheadings, lists, bold, italic and links, built as DOM nodes. */
+  function rich(tag:string,value:string,key:string,label:string){
+    const node=document.createElement(tag);node.className='os-rich';node.append(richToDom(value,document,{editable:!!bind}));node.dataset.field=key;
+    if(bind)bind(node,{key,label,max:RICH_TEXT_MAX,multiline:true,rich:true});return node;
+  }
   function picture(assetId:string,altText:string,decorative:boolean){
     const img=document.createElement('img');const asset=project.document.assets.find(a=>a.id===assetId);
     if(asset)img.src=assetURL ? assetURL(asset.id) : `data:${asset.mediaType};base64,${project.files[assetPath(asset)] ?? ''}`;
@@ -22,35 +28,40 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
   const src=(id:string)=>{const asset=project.document.assets.find(a=>a.id===id)!;return assetURL ? assetURL(id) : `data:${asset.mediaType};base64,${project.files[assetPath(asset)] ?? ''}`;};
   switch(block.type){
     case 'assessment':{
-      root.append(field('h3',block.content.prompt,'prompt','Question prompt'));
+      root.append(rich('div',block.content.prompt,'prompt','Question prompt'));
       if(['single-choice','multiple-response'].includes(block.variant))block.content.options.forEach((value,i)=>root.append(field('p',value,`options.${i}`,`Choice ${i+1}`,300,false)));
       if(block.variant==='fill-blank'){const note=document.createElement('p');note.textContent='Accepted answers are edited in question settings.';root.append(note);}
       if(block.variant==='matching')block.content.pairs.forEach((pair,i)=>root.append(field('h4',pair.left,`pairs.${i}.left`,`Pair ${i+1} term`,300,false),field('p',pair.right,`pairs.${i}.right`,`Pair ${i+1} match`,300,false)));
-      if(block.variant==='sorting')block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Sorting item ${i+1}`,300,false)));
+      if(block.variant==='ordering')block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Item ${i+1} to order`,300,false)));
+      if(block.variant==='categorize'){
+        block.content.groups.forEach((value,i)=>root.append(field('h4',value,`groups.${i}`,`Group ${i+1}`,300,false)));
+        block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Card ${i+1} to sort`,300,false)));
+        const note=document.createElement('p');note.textContent='Choose each card’s correct group in question settings.';root.append(note);
+      }
       break;
     }
     case 'heading':root.append(field(block.variant==='heading' ? 'h2' : 'h3',block.content.text,'text','Heading text'));break;
     case 'paragraph':
       if(block.variant==='with-heading')root.append(field('h3',block.content.heading,'heading','Paragraph heading',300,false));
-      root.append(field('p',block.content.text,'text','Paragraph text'));break;
+      root.append(rich('div',block.content.text,'text','Paragraph text'));break;
     case 'statement':{
       const body=block.variant==='note' ? document.createElement('aside') : document.createElement('div');
-      if(block.variant==='note')body.setAttribute('aria-label','Note');body.append(field('p',block.content.text,'text',block.variant==='note' ? 'Note text' : 'Statement text'));root.append(body);break;
+      if(block.variant==='note')body.setAttribute('aria-label','Note');body.append(rich('div',block.content.text,'text',block.variant==='note' ? 'Note text' : 'Statement text'));root.append(body);break;
     }
     case 'quote':{
-      const figure=document.createElement('figure');const quote=document.createElement('blockquote');quote.append(field('p',block.content.text,'text','Quotation text'));
+      const figure=document.createElement('figure');const quote=document.createElement('blockquote');quote.append(rich('div',block.content.text,'text','Quotation text'));
       figure.append(quote,field('figcaption',block.content.attribution,'attribution','Quotation attribution',300,false));root.append(figure);break;
     }
     case 'list':{
       const list=document.createElement(block.variant==='numbered' ? 'ol' : 'ul');list.className=block.variant==='checklist' ? 'os-checklist' : '';
-      block.content.items.forEach((item,index)=>{const li=document.createElement('li');li.append(field('span',item,`items-${index}`,`List item ${index+1}`));list.append(li);});root.append(list);break;
+      block.content.items.forEach((item,index)=>{const li=document.createElement('li');li.append(rich('div',item,`items-${index}`,`List item ${index+1}`));list.append(li);});root.append(list);break;
     }
     case 'image':{
       const figure=document.createElement('figure');figure.append(picture(block.content.assetId,block.content.altText,block.content.decorative),field('figcaption',block.content.caption,'caption','Image caption'));root.append(figure);break;
     }
     case 'image-text':{
       const figure=document.createElement('figure');figure.append(picture(block.content.assetId,block.content.altText,block.content.decorative),field('figcaption',block.content.caption,'caption','Image caption'));
-      const text=document.createElement('div');text.className='os-image-copy';text.append(field('h3',block.content.heading,'heading','Image text heading',300,false),field('p',block.content.text,'text','Image accompanying text'));
+      const text=document.createElement('div');text.className='os-image-copy';text.append(field('h3',block.content.heading,'heading','Image text heading',300,false),rich('div',block.content.text,'text','Image accompanying text'));
       root.append(figure,text);break;
     }
     case 'divider':{
@@ -59,9 +70,11 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
     case 'spacer':root.setAttribute('aria-hidden','true');break;
     case 'continue':{
       // An editor can author this now; gating and learner actions belong to the player.
-      const label=field('p',block.content.label,'label','Continue label',300,false);label.className='os-continue-label';root.append(label);break;
+      const label=field('p',block.content.label,'label','Continue label',300,false);label.className='os-continue-label';root.append(label);
+      if(bind || block.content.hint){const hint=field('p',block.content.hint,'hint','Message shown until learners can continue',300,false);hint.className='os-continue-hint';root.append(hint);}
+      break;
     }
   }
-  renderExtended(block,root,project,field,picture,src,!!bind,explored);
+  renderExtended(block,root,project,field,rich,picture,src,!!bind,explored);
   return root;
 }

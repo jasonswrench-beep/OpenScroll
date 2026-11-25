@@ -47,6 +47,6 @@ test('all template content and layout agree between preview and exported player;
 });
 
 test('empty lessons complete without deadlock and unavailable browser storage is reported',async({page})=>{
- const project=sampleProject();project.document.course.sections[0]!.lessons=[{id:'empty-lesson',title:'An empty draft',blocks:[]}];await openPortable(page,project);await publish(page);
+ const project=sampleProject();project.document.course.sections[0]!.lessons=[{id:'empty-lesson',title:'An empty draft',blocks:[],banner:null,objectives:[]}];await openPortable(page,project);await publish(page);
  await page.addInitScript(()=>Object.defineProperty(window,'localStorage',{get(){throw new Error('Storage disabled for this test');}}));await page.goto(`${origin}/nested/course/index.html`);await expect(page.getByText('Browser progress storage is unavailable.',{exact:false})).toBeVisible();await page.getByRole('button',{name:'Complete lesson',exact:true}).click();await expect(page.getByText('1 of 1 lessons complete · 100%',{exact:true})).toBeVisible();await expect(page.getByText('Progress could not be saved in this browser.',{exact:false})).toBeVisible();
 });

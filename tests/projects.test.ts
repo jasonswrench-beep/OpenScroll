@@ -46,7 +46,7 @@ test('editable package round trip preserves content, narration, settings, IDs, a
 });
 
 test('versions, unknown fields/types, duplicate IDs, and broken references fail without mutation', () => {
-  const future={...sampleProject().document,schemaVersion:4}; const before=structuredClone(future);
+  const future={...sampleProject().document,schemaVersion:5}; const before=structuredClone(future);
   assert.throws(() => parseCourse(future), /Unsupported project version/); assert.deepEqual(future,before);
   assert.throws(() => parseCourse({...future,schemaVersion:0}), /Unsupported/);
   assert.throws(() => parseCourse({...sampleProject().document,extra:'must not disappear'}), /Invalid/);

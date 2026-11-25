@@ -18,7 +18,7 @@ export function compactProject(source:PortableProject):PortableProject{
 export function groupPacket(source:PortableProject,ids:string[]):PortableProject{
  const wanted=new Set(ids),blocks=source.document.course.sections.flatMap(s=>s.lessons).flatMap(l=>l.blocks).filter(b=>wanted.has(b.id));
  if(!blocks.length || blocks.length!==wanted.size)throw new Error('Choose existing blocks to save as a group.');
- const project=structuredClone(source);project.document.course.cover=null;project.document.course.sections=[{id:newId(),title:'Reusable group',lessons:[{id:newId(),title:'Reusable blocks',blocks:structuredClone(blocks)}]}];return compactProject(project);
+ const project=structuredClone(source);project.document.course.cover=null;project.document.course.sections=[{id:newId(),title:'Reusable group',lessons:[{id:newId(),title:'Reusable blocks',blocks:structuredClone(blocks),banner:null,objectives:[]}]}];return compactProject(project);
 }
 export function assetPacket(source:PortableProject,id:string):PortableProject{
  const asset=source.document.assets.find(a=>a.id===id);if(!asset)throw new Error('Asset not found.');const document=structuredClone(source.document);document.course.cover=null;document.course.sections=[];document.assets=[structuredClone(asset)];return {document:parseCourse(document),files:{[assetPath(asset)]:source.files[assetPath(asset)]!}};
