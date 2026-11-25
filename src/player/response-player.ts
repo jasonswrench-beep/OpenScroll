@@ -28,7 +28,7 @@ export function renderResponse(block: ResponseBlock, flow: CourseFlow, persist: 
   const requirement = () => {
     if (!required) return;
     const met = responseMeets(block, saved);
-    required.textContent = met ? 'Required · Done' : block.type === 'reflection' ? `Required · Write at least ${Math.max(1, block.content.minWords)} ${Math.max(1, block.content.minWords) === 1 ? 'word' : 'words'}` : block.type === 'checklist' ? 'Required · Tick every item' : block.type === 'self-assessment' ? 'Required · Rate every statement' : block.type === 'survey' ? 'Required · Answer every rating and choice' : block.type === 'software-practice' ? (block.content.modes.test ? 'Required · Finish the test' : 'Required · Practise every step') : block.content.output ? 'Required · Write your response' : 'Required · Mark the activity as done';
+    required.textContent = met ? 'Required · Done' : block.type === 'reflection' ? `Required · Write at least ${Math.max(1, block.content.minWords)} ${Math.max(1, block.content.minWords) === 1 ? 'word' : 'words'}` : block.type === 'checklist' ? 'Required · Tick every item' : block.type === 'self-assessment' ? 'Required · Rate every statement' : block.type === 'survey' ? 'Required · Answer every rating and choice' : block.type === 'software-practice' ? (block.content.modes.test ? 'Required · Finish the test' : 'Required · Practise every step') : block.type === 'action-plan' ? 'Required · Fill in at least one complete row' : block.content.output ? 'Required · Write your response' : 'Required · Mark the activity as done';
     required.classList.toggle('is-met', met);
   };
   /** A text box that keeps what is typed after a short pause, and immediately when focus leaves it. */
@@ -127,6 +127,38 @@ export function renderResponse(block: ResponseBlock, flow: CourseFlow, persist: 
         set.append(options); root.append(set);
       });
       show(); root.append(result);
+      break;
+    }
+    case 'action-plan': {
+      const c = block.content, blank = () => c.columns.map(() => '');
+      if (c.title) root.append(node('h3', c.title));
+      if (!richIsEmpty(c.intro)) root.append(rich(c.intro));
+      if (required) root.append(required);
+      let rows = saved.rows ? saved.rows.map(r => [...r]) : [];
+      while (rows.length < c.starterRows) rows.push(blank());
+      const scroll = node('div', undefined, 'os-table-scroll'), table = node('table', undefined, 'plan-table'), head = node('tr'), body = node('tbody');
+      scroll.setAttribute('role', 'region'); scroll.tabIndex = 0; scroll.setAttribute('aria-label', c.title || 'Action plan');
+      for (const column of c.columns) { const th = node('th', column.label); th.scope = 'col'; head.append(th); }
+      const thead = node('thead'); thead.append(head); table.append(thead, body); scroll.append(table);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const keep = (quiet: boolean) => { clearTimeout(timer); store({ rows }, quiet); requirement(); };
+      const add = node('button', 'Add a row'); add.type = 'button';
+      const draw = () => {
+        body.replaceChildren(...rows.map((row, r) => {
+          const tr = node('tr');
+          c.columns.forEach((column, i) => {
+            const td = node('td'), input = node('input'); input.type = column.kind === 'date' ? 'date' : 'text'; input.maxLength = 1000; input.value = row[i] ?? '';
+            input.setAttribute('aria-label', `${column.label}, row ${r + 1}`);
+            input.addEventListener('input', () => { row[i] = input.value; clearTimeout(timer); timer = setTimeout(() => keep(true), 700); });
+            input.addEventListener('change', () => { row[i] = input.value; keep(false); });
+            td.append(input); tr.append(td);
+          });
+          return tr;
+        }));
+        add.disabled = rows.length >= c.maxRows;
+      };
+      add.addEventListener('click', () => { if (rows.length >= c.maxRows) return; rows.push(blank()); draw(); body.lastElementChild?.querySelector('input')?.focus(); status.textContent = `Row ${rows.length} added.`; });
+      draw(); root.append(scroll, add);
       break;
     }
     case 'survey': {

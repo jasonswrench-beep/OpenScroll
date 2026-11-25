@@ -1,6 +1,6 @@
 /** The studio's calls into this instance's existing API. Every request goes through the shared session and CSRF headers. */
 import { api, authorizedFetch } from '../client/account-api.js';
-import type { PortableProject } from '../shared/course.js';
+import type { PortableProject, Block } from '../shared/course.js';
 import type { SaveAck, SavePayload } from '../client/save-controller.js';
 import type { RiseReport } from '../project/rise-import.js';
 
@@ -34,6 +34,11 @@ export const projects = {
     const response = await authorizedFetch('/api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/x-openscroll-project' }, body: file, signal: AbortSignal.timeout(60_000) });
     if (!response.ok) await failure(response);
     return response.json() as Promise<PortableProject>;
+  },
+  async importOpenAssess(file: Blob) {
+    const response = await authorizedFetch('/api/projects/import-openassess', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file, signal: AbortSignal.timeout(120_000) });
+    if (!response.ok) await failure(response);
+    return response.json() as Promise<{ name: string; questions: Block[]; report: { title: string; total: number; imported: number; skipped: { title: string; reason: string }[]; notes: string[] } }>;
   },
   async importRise(file: Blob) {
     const response = await authorizedFetch('/api/projects/import-rise', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file, signal: AbortSignal.timeout(120_000) });

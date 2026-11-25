@@ -72,6 +72,13 @@ questions and columns. Learner responses to the activity blocks are described in
 [LEARNER-RESPONSES.md](LEARNER-RESPONSES.md). The classic workspace can show and edit the text of the new blocks,
 but their settings are only in the studio.
 
+## Course resources
+
+Course details, Open course resources has three tabs: the glossary (terms, other names, definitions, CSV import and
+term links), question banks (new bank, OpenAssess import, spreadsheet import, Edit questions) and the certificate.
+Edit questions opens the bank in the lesson editor with the picker limited to questions. See
+[COURSE-RESOURCES.md](COURSE-RESOURCES.md).
+
 ## Checks, preview, theme and export
 
 - **Checks** (top bar) lists what blocks export, what deserves a fix, and what needs a person's judgment, each with

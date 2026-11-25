@@ -13,6 +13,7 @@ course file, the library, or the authoring database.
 | Checklist | Which items are ticked | Every item ticked |
 | Self-assessment | One rating per statement | Every statement rated |
 | Survey | A rating, choice or comment for each question | Every rating and choice question answered (comments are optional) |
+| Action plan | The rows the learner filled in (text, or dates as YYYY-MM-DD) | At least one row with every cell filled |
 | Software practice | Whether every step was practised, and in Test, whether each step was right the first time | The test finished (when Test is on), otherwise every step practised |
 
 A block that is not required never holds up the lesson. A required block appears in the lesson's "To finish this
@@ -39,8 +40,9 @@ Every response is also sent to the LMS as an unscored interaction record (see
 resume data cannot hold the response. SCORM 1.2 records keep only the first 255 characters of written text; SCORM
 2004 keeps up to 4,000.
 
-Resume data from earlier exports (checkpoint version 2, without responses) still opens: the learner simply starts
-with no responses.
+Learner state also keeps, for each "Questions from a bank" block, which questions the learner was given (snapshot
+version 4, SCORM checkpoint 4). Resume data from earlier exports (checkpoints 2 and 3) still opens: the learner simply
+starts with no responses or draws.
 
 ## My workbook
 

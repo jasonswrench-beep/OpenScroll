@@ -1,4 +1,5 @@
-import type { Block } from './course.js';
+import type { Block, CourseDocument } from './course.js';
+import { richToDom } from './rich-text.js';
 import { OBJECTIVE_LEVEL_NAMES } from './objectives.js';
 
 type Field = (tag: string, value: string, key: string, label: string, max?: number, multiline?: boolean) => HTMLElement;
@@ -16,7 +17,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: 
  */
 type Picture = (assetId: string, alt: string, decorative: boolean) => HTMLImageElement;
 export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
-export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich: Field, editing: boolean, child: (block: Block, prefix: string) => HTMLElement, picture?: Picture): boolean {
+type Course = CourseDocument['course'];
+export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich: Field, editing: boolean, child: (block: Block, prefix: string) => HTMLElement, picture?: Picture, course?: Course): boolean {
   switch (block.type) {
     case 'objectives': {
       const c = block.content;
@@ -137,6 +139,57 @@ export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich:
         list.append(li);
       });
       root.append(list);
+      return true;
+    }
+    case 'glossary': {
+      const c = block.content, terms = [...(course?.glossary ?? [])].sort((a, b) => a.term.localeCompare(b.term, course?.language));
+      if (editing || c.title) root.append(field('h3', c.title, 'title', 'Glossary title', 300, false));
+      if (!terms.length) { root.append(el('p', editing ? 'The course glossary is empty. Add terms in Course resources.' : 'There are no terms yet.', 'os-glossary-empty')); return true; }
+      const letter = (term: string) => { const first = term.trim().charAt(0).toLocaleUpperCase(course?.language); return /\p{L}/u.test(first) ? first : '#'; };
+      const letters = [...new Set(terms.map(t => letter(t.term)))];
+      if (c.showLetters && block.variant === 'a-z') {
+        const nav = el('nav', undefined, 'os-glossary-letters'); nav.setAttribute('aria-label', 'Glossary letters');
+        for (const l of letters) { const a = el('a', l); a.href = `#gl-${block.id}-${l === '#' ? 'other' : l}`; nav.append(a); }
+        root.append(nav);
+      }
+      const body = el('div', undefined, 'os-glossary-body');
+      for (const l of letters) {
+        if (block.variant === 'a-z') { const heading = el('h4', l); heading.id = `gl-${block.id}-${l === '#' ? 'other' : l}`; heading.tabIndex = -1; body.append(heading); }
+        const list = el('dl', undefined, 'os-glossary');
+        for (const term of terms.filter(t => letter(t.term) === l)) {
+          const dt = el('dt', term.term); dt.dataset.term = `${term.term} ${term.aliases.join(' ')}`.toLowerCase();
+          if (term.aliases.length) dt.append(el('span', ` (also ${term.aliases.join(', ')})`, 'os-level-plain'));
+          const dd = el('dd'); const body2 = el('div', undefined, 'os-rich'); body2.append(richToDom(term.definition)); dd.append(body2);
+          list.append(dt, dd);
+        }
+        body.append(list);
+      }
+      root.append(body);
+      if (editing) root.append(el('p', 'Terms are edited in Course resources, Glossary.', 'os-response-note'));
+      return true;
+    }
+    case 'action-plan': {
+      const c = block.content;
+      if (editing || c.title) root.append(field('h3', c.title, 'title', 'Action plan title', 300, false));
+      if (editing || c.intro) root.append(rich('div', c.intro, 'intro', 'Action plan introduction'));
+      const scroll = el('div', undefined, 'os-table-scroll'), table = el('table', undefined, 'os-plan'), head = el('tr');
+      scroll.setAttribute('role', 'region'); scroll.tabIndex = 0; scroll.setAttribute('aria-label', c.title || 'Action plan');
+      c.columns.forEach((column, index) => { const th = el('th'); th.scope = 'col'; th.append(field('span', column.label, `columns.${index}.label`, `Column ${index + 1} heading`, 300, false)); head.append(th); });
+      const thead = el('thead'); thead.append(head); table.append(thead);
+      const tbody = el('tbody');
+      for (let r = 0; r < c.starterRows; r++) { const row = el('tr'); for (let i = 0; i < c.columns.length; i++) row.append(el('td')); tbody.append(row); }
+      table.append(tbody); scroll.append(table); root.append(scroll);
+      return true;
+    }
+    case 'results': {
+      root.append(field('h3', block.content.title, 'title', 'Results title', 300, false));
+      root.append(el('p', 'Learners see their progress, their scores by lesson, whether they passed' + (block.content.showReview ? ', the questions they missed' : '') + (block.content.showCertificate ? ', and a certificate to print once the course is complete' : '') + '.', 'os-response-note'));
+      return true;
+    }
+    case 'bank-draw': {
+      const bank = course?.banks.find(b => b.id === block.content.bankId);
+      if (editing || block.content.title) root.append(field('h3', block.content.title, 'title', 'Title above the questions (optional)', 300, false));
+      root.append(el('p', bank ? `${Math.min(block.content.count, bank.questions.length)} of the ${bank.questions.length} questions in “${bank.name || 'Untitled bank'}”, drawn at random for each learner.` : 'Choose a question bank in the block settings.', 'os-response-note'));
       return true;
     }
     case 'survey': {

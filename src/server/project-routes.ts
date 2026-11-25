@@ -1,3 +1,4 @@
+import { importOpenAssess, OPENASSESS_LIMIT } from '../project/openassess-import.js';
 import {readQuestionFile,questionCsvTemplate,questionXlsxTemplate,QUESTION_FILE_LIMIT} from '../project/question-spreadsheet.js';
 import { exportPdf } from '../project/pdf-export.js';
 import { z } from 'zod';
@@ -55,6 +56,11 @@ export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:st
   app.post('/import-rise', { bodyLimit: RISE_LIMITS.upload }, async request => {
     if (!Buffer.isBuffer(request.body)) throw new ProjectError('Upload a Rise web export ZIP.');
     return processFile(request, () => importRiseExport(request.body as Buffer));
+  });
+  // An OpenAssess bank becomes questions for a course question bank plus a report; nothing is stored.
+  app.post('/import-openassess', { bodyLimit: OPENASSESS_LIMIT }, async request => {
+    if (!Buffer.isBuffer(request.body)) throw new ProjectError('Upload an OpenAssess question bank (.openassess).');
+    return processFile(request, () => importOpenAssess(request.body as Buffer));
   });
   for(const [path,edition]of [['scorm-12','1.2'],['scorm-2004','2004']] as const)app.post('/'+path,{bodyLimit:90*1024*1024},async(request,reply)=>reply.type('application/zip').header('Content-Disposition',`attachment; filename="course-${path}.zip"`).send(await processFile(request,()=>exportScorm(request.body,options.playerRoot ?? resolve('dist/client'),edition))));
   app.post('/pdf',{bodyLimit:90*1024*1024},async(request,reply)=>{

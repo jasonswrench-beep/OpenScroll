@@ -36,7 +36,7 @@ answers, reflections, activities, checklists, self-assessments and surveys repor
 | Self-assessment | `other` | `fill-in` | The total and each rating |
 | Survey rating | `likert` | `likert` | The rating's position on the scale, from 1 |
 
-Record ids are the block (or survey question) id, as `urn:openscroll:<id>` in SCORM 2004. SCORM 2004 updates a
+Questions drawn from a course question bank are reported like lesson questions, once drawn and answered. Record ids are the block (or survey question) id, as `urn:openscroll:<id>` in SCORM 2004. SCORM 2004 updates a
 question's record in place when the answer changes; SCORM 1.2 records are write-only, so a changed answer adds a new
 record, as the 1.2 journal model expects. Answers restored from a saved attempt are not reported again. Free text has
 SCORM 2004 delimiters removed so the LMS reads it as one answer. An LMS that refuses interaction records never stops

@@ -10,6 +10,11 @@ they need the course resources panel (F6) that stage 7 builds. Stage 6 added the
 description, interactive video, embedded video behind an instance setting that is off by default (F7, pending the
 owner's decision), software practice with OpenStage Capture import, and test results reported as `performance`.
 Size-limit settings wait for the owner's decision and move to the release stage with the server work they need.
+Stage 7 added course resources (F6: glossary, question banks, certificate), the glossary, action plan, results and
+certificate and "Questions from a bank" blocks, glossary term links, bank editing in the lesson editor, and
+`.openassess` import through `@openstage/bank` 0.1.0, installed from its GitHub release and checked against the
+release's SHA-256 (npm cannot install one package from a monorepo folder, so the release tarball replaced the Git
+dependency in decision 5's default).
 
 ## Scope
 

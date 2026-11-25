@@ -3,7 +3,7 @@
  * saving with recovery and conflict handling, and the lesson editor. All saving goes through the shared
  * SaveController and revision-checked API.
  */
-import { Palette, ListChecks, ArrowUp, ArrowDown, ArrowLeft, Ellipsis, Pencil, Copy, Trash2, Plus, Eye, Package, CircleCheck, LoaderCircle, TriangleAlert, OctagonAlert, Camera, Download, RotateCcw, Settings2, ImagePlus, X as XIcon, Globe, GraduationCap, FileText, FileArchive, FolderInput } from 'lucide';
+import { Library, Palette, ListChecks, ArrowUp, ArrowDown, ArrowLeft, Ellipsis, Pencil, Copy, Trash2, Plus, Eye, Package, CircleCheck, LoaderCircle, TriangleAlert, OctagonAlert, Camera, Download, RotateCcw, Settings2, ImagePlus, X as XIcon, Globe, GraduationCap, FileText, FileArchive, FolderInput } from 'lucide';
 import type { Account } from '../client/account-api.js';
 import { SaveController, type RecoveryDraft } from '../client/save-controller.js';
 import { readDraft, storeDraft } from '../client/recovery.js';
@@ -23,6 +23,7 @@ import { checksDialog, checksBadge } from './checks-panel.js';
 import { features } from './features.js';
 import { previewDialog } from './preview.js';
 import { themeStudio, accentReport } from './theme-studio.js';
+import { resourcesView, type ResourceTab } from './resources.js';
 import { accentInk as inkFor, textAccent } from '../shared/contrast.js';
 import LOGO from '../assets/openscroll.svg';
 
@@ -42,7 +43,7 @@ export function courseView(root: HTMLElement, context: Context) {
   const saveButton = h('button', { class: 'savebtn', attrs: { type: 'button', 'data-state': 'saved', 'aria-label': 'Save status, snapshots, and recovery' } });
   saveButton.addEventListener('click', () => saveSheet());
   const live = h('span', { class: 'sr-only', attrs: { role: 'status' } });
-  const preview = button('Preview', () => { if (controller) previewDialog(controller.project, preview, lessonId); }, { icon: Eye, class: 'btn btn-ghost has-label' });
+  const preview = button('Preview', () => { if (controller) previewDialog(controller.project, preview, lessonId && !lessonId.includes(':') ? lessonId : undefined); }, { icon: Eye, class: 'btn btn-ghost has-label' });
   const checksCount = h('span', { class: 'badge', attrs: { 'aria-hidden': 'true' } });
   const checksButton = button('Checks', () => openChecks(), { icon: ListChecks, class: 'btn btn-ghost has-label checks-btn' });
   checksButton.append(checksCount);
@@ -96,7 +97,7 @@ export function courseView(root: HTMLElement, context: Context) {
   function goToIssue(issue: CheckIssue) {
     if (issue.code === 'scorm-12-responses') { exportDialog(exporter); return; }
     pendingIssue = issue;
-    const target = issue.lessonId;
+    const target = issue.bankId ? `bank:${issue.bankId}` : issue.place ?? issue.lessonId;
     if (target === lessonId) applyPendingIssue();
     else context.go(target);
   }
@@ -105,7 +106,8 @@ export function courseView(root: HTMLElement, context: Context) {
     if (!issue) return;
     pendingIssue = undefined;
     window.setTimeout(() => {
-      if (issue.lessonId) { editor?.focusIssue({ ...(issue.blockId ? { blockId: issue.blockId } : {}), ...(issue.field ? { field: issue.field } : {}), ...(issue.tab ? { tab: issue.tab } : {}) }); return; }
+      if (issue.lessonId || issue.bankId) { editor?.focusIssue({ ...(issue.blockId ? { blockId: issue.blockId } : {}), ...(issue.field ? { field: issue.field } : {}), ...(issue.tab ? { tab: issue.tab } : {}) }); return; }
+      if (issue.place) { canvas.querySelector<HTMLElement>('#lesson-title')?.focus(); return; }
       const field = issue.field === 'cover-alt' ? side.querySelector<HTMLElement>('#cover-alt') : issue.field === 'course-title' ? canvas.querySelector<HTMLElement>('.ctitle') : null;
       (field ?? canvas.querySelector<HTMLElement>('.ctitle'))?.focus();
     }, 0);
@@ -386,6 +388,7 @@ export function courseView(root: HTMLElement, context: Context) {
     return [
       h('div', { class: 'side-head' }, [h('span', { class: 'ico' }, [icon(Settings2)]), h('div', {}, [h('h2', { text: 'Course details' }), h('small', { text: 'Changes save automatically' })])]),
       h('div', { class: 'side-body' }, [
+        h('section', { class: 'side-sec' }, [h('h3', { text: 'Course resources' }), h('p', { class: 'hint', text: `Glossary: ${c.glossary.length} ${c.glossary.length === 1 ? 'term' : 'terms'} · Question banks: ${c.banks.length} · Certificate: ${c.certificate ? 'on' : 'off'}` }), button('Open course resources', () => context.go('resources:glossary'), { icon: Library, class: 'btn btn-sm' })]),
         text('author', 'Displayed author', 300), text('language', 'Language code (for example en or es)', 35),
         select('course-navigation', 'Lesson order', c.settings.navigation, [['free', 'Any order'], ['sequential', 'In sequence']], (value, target) => { target.settings.navigation = value; }),
         field('Pass mark for scored questions (%)', score),
@@ -425,6 +428,7 @@ export function courseView(root: HTMLElement, context: Context) {
       assetSource: assetId => assetSource(assetId),
       themeVars: element => themeVars(element),
       titleChanged: () => drawCrumbs(),
+      goTo: place => context.go(place),
     });
     return editor;
   }
@@ -434,6 +438,25 @@ export function courseView(root: HTMLElement, context: Context) {
   function redraw() {
     if (!controller || disposed) return;
     drawCrumbs();
+    // Course resources and question banks are places on the course page, like lessons.
+    if (lessonId?.startsWith('resources:')) {
+      const tab = (['glossary', 'banks', 'certificate'].includes(lessonId.slice(10)) ? lessonId.slice(10) : 'glossary') as ResourceTab;
+      const view = resourcesView({ project: () => controller!.project, edit: (change, assets) => edit(change, assets), assetSource: assetId => assetSource(assetId), goTo: place => context.go(place), redraw: () => redraw() }, tab);
+      body.classList.add('lesson-mode'); side.hidden = false; side.setAttribute('aria-label', 'About course resources');
+      canvas.replaceChildren(view.canvas); side.replaceChildren(h('div', { class: 'lesson-side' }, view.side));
+      if (pendingIssue?.place === lessonId) applyPendingIssue(); else canvas.querySelector<HTMLElement>('#lesson-title')?.focus();
+      paintSave(); return;
+    }
+    if (lessonId?.startsWith('bank:')) {
+      const bankId = lessonId.slice(5);
+      if (!course().banks.some(b => b.id === bankId)) { toast('That question bank no longer exists.'); context.go('resources:banks'); return; }
+      const editorView = lessonEditor();
+      body.classList.add('lesson-mode'); side.hidden = false; side.setAttribute('aria-label', 'Question bank and question settings');
+      editorView.show(bankId, 'bank');
+      canvas.replaceChildren(editorView.canvas); side.replaceChildren(editorView.panel);
+      if (pendingIssue?.bankId === bankId) applyPendingIssue();
+      paintSave(); return;
+    }
     const lesson = lessonId ? lessons().find(l => l.id === lessonId) : undefined;
     if (lessonId && !lesson) { toast('That lesson no longer exists.'); lessonId = undefined; context.go(undefined); return; }
     if (lesson) {

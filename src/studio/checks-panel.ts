@@ -15,6 +15,8 @@ const OUTPUT_NAMES = { website: 'Website', scorm: 'SCORM', pdf: 'PDF' } as const
 export function checksDialog(opener: HTMLElement | null, issues: CheckIssue[], project: PortableProject, go: (issue: CheckIssue) => void) {
   const lessons = project.document.course.sections.flatMap(s => s.lessons);
   const where = (issue: CheckIssue) => {
+    if (issue.bankId) { const bank = project.document.course.banks.find(b => b.id === issue.bankId); const at = bank?.questions.findIndex(q => q.id === issue.blockId) ?? -1; return `Question bank: ${bank?.name || 'Untitled bank'}${at >= 0 ? ` · Question ${at + 1}` : ''}`; }
+    if (issue.place === 'resources:glossary') return 'Course resources: Glossary';
     const index = lessons.findIndex(l => l.id === issue.lessonId), lesson = lessons[index];
     if (!lesson) return 'Course';
     const blocks = lesson.blocks, position = issue.blockId ? blocks.findIndex(b => b.id === issue.blockId || (b.type === 'columns' && b.content.columns.some(c => c.blocks.some(x => x.id === issue.blockId)))) : -1;

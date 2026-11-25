@@ -5,6 +5,8 @@ import { assetPath } from '../../src/shared/course.js';
 export async function pdfProject(){
  const project=await mediaProject(),course=project.document.course,lesson=course.sections[0]!.lessons[0]!;course.title='Learning that travels';course.description='A complete OpenScroll publication: readable content, meaningful images, expanded interactions, and practice.';course.author='OpenScroll';
  const existing=new Set(lesson.blocks.map(b=>b.type));for(const template of BLOCK_TEMPLATES.filter(t=>!existing.has(t.type))){const prepared=prepareBlock(template.key,project);lesson.blocks.push(prepared.block);if(prepared.asset){project.document.assets.push(prepared.asset);project.files[assetPath(prepared.asset)]=prepared.data!;}}
+ // A bank-draw block needs a course question bank with at least one question.
+ const bankQuestion=prepareBlock('true-false',project).block;if(bankQuestion.type==='assessment')bankQuestion.content.prompt=plainToRich('BANK-QUESTION-CONTENT: drawn questions are printed from their bank.');course.banks=[{id:'bank-pdf',name:'PDF bank',questions:[bankQuestion as never]}];const draw=lesson.blocks.find(b=>b.type==='bank-draw');if(draw?.type==='bank-draw'){draw.content.bankId='bank-pdf';draw.content.count=1;}
  // Embedded video publishes only where the server allows it; the PDF tests turn that on and give the video an address.
  process.env.OPENSCROLL_EXTERNAL_VIDEO='on';const embed=lesson.blocks.find(b=>b.type==='embed-video');if(embed?.type==='embed-video')embed.content.videoId='aqz-KE-bpKQ';
  const fill=lesson.blocks.find(b=>b.type==='assessment' && b.variant==='fill-blank');if(fill?.type==='assessment')fill.content.accepted=['PRIVATE-ANSWER-731'];

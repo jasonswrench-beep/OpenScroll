@@ -31,3 +31,18 @@
 .practice-stage{display:grid;gap:.6rem}.practice-instruction{font-weight:700;margin:0}.practice-picture{position:relative;display:inline-block;max-width:100%;cursor:crosshair}.practice-picture img{display:block;max-width:100%;height:auto;border:1px solid #c9d1cd}
 .practice-target{position:absolute;background:transparent;border:2px solid transparent;border-radius:.3rem;padding:0;cursor:pointer}.practice-target:focus-visible{outline:3px solid #9e4600;outline-offset:2px}.practice-target.is-shown{border-color:#d4351c;box-shadow:0 0 0 3px rgba(212,53,28,.35);background:rgba(255,255,255,.12)}
 .practice-hint{margin:0;font-weight:600;color:#7a3b00}.practice-controls{display:flex;flex-wrap:wrap;gap:.5rem;align-items:end}.practice-controls label{display:grid;gap:.3rem}.practice-done{font-weight:700}
+/* Wave D: bank questions, results, certificate, glossary, action plan */
+.bank-draw{display:grid;gap:1rem}.bank-question+.bank-question{border-top:1px solid #d5ddd9;padding-top:1rem}
+.results{display:grid;gap:.6rem}.results progress{width:100%;max-width:24rem}.results-score{font-weight:700}
+.results-table{border-collapse:collapse;width:100%;max-width:40rem}.results-table caption{text-align:left;font-weight:700;margin-bottom:.3rem}.results-table th,.results-table td{border:1px solid #c9d1cd;padding:.4rem .6rem;text-align:left}
+.results-missed{display:grid;gap:.4rem;padding-left:1.2rem}.results-note{font-size:.85rem;opacity:.8}
+.certificate-wrap{display:grid;gap:.6rem;justify-items:start;margin-top:.5rem}
+.certificate{width:100%;max-width:46rem;aspect-ratio:1.414;border:6px double var(--course-accent,#193c35);padding:2.5rem;display:grid;align-content:center;justify-items:center;text-align:center;gap:.35rem;background:#fff;color:#182d28}
+.certificate-logo{max-height:64px;max-width:200px}.certificate-title{font-size:1.9rem;font-weight:800;letter-spacing:.02em;margin:0;color:var(--course-accent,#193c35)}
+.certificate-name{font-size:1.6rem;font-weight:700;border-bottom:2px solid currentColor;padding:0 1.5rem .2rem;margin:.3rem 0}.certificate-course{font-size:1.25rem;font-weight:700;margin:0}
+.certificate-small{margin:0;font-size:.95rem}.certificate-date{margin:.6rem 0 0}.certificate-sign{margin-top:1rem;display:grid;justify-items:center;gap:.1rem}.certificate-signature{max-height:56px}.certificate-signer{margin:0;font-weight:700}
+@media print{body.print-certificate *{visibility:hidden!important}body.print-certificate .certificate,body.print-certificate .certificate *{visibility:visible!important}body.print-certificate .certificate{position:fixed;inset:0;margin:auto;border-width:6px;max-width:none;width:100%;height:auto}}
+.glossary-search{display:grid;gap:.3rem;max-width:24rem;font-weight:600}.glossary-search input{padding:.5rem .6rem;border:2px solid #5b6f68;border-radius:.4rem;font:inherit}
+.term{position:relative}.term-button{background:none;border:0;padding:0;font:inherit;color:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:help}
+.term-tip{display:block;margin:.3rem 0;padding:.5rem .7rem;border-left:4px solid var(--course-accent,#193c35);background:#f3f6f4;font-size:.95rem}
+.plan-table{border-collapse:collapse;width:100%}.plan-table th,.plan-table td{border:1px solid #c9d1cd;padding:.35rem;text-align:left;vertical-align:top}.plan-table input{width:100%;min-width:8rem;font:inherit;padding:.4rem .5rem;border:1px solid #5b6f68;border-radius:.3rem}

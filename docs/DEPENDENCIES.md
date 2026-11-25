@@ -20,6 +20,8 @@ Direct versions are exact in package.json; transitive versions and integrity has
 | Playwright | Browser test runner | Apache-2.0 |
 | axe-core, @axe-core/playwright | Development accessibility checks | MPL-2.0 |
 | Lightning CSS | Transitive Vite build tooling | MPL-2.0 |
+| @openstage/bank 0.1.0 | Reads OpenAssess question banks for import (server side); no dependencies. Installed from its GitHub release tarball, whose SHA-256 matches the release's published SHA256SUMS; the lockfile pins its integrity hash | Apache-2.0 |
+| lucide 1.70.0 | Icons in the studio | ISC |
 | PostgreSQL | Separate database service | PostgreSQL License |
 | Node.js | JavaScript runtime | MIT and bundled third-party notices |
 

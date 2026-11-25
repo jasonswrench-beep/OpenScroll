@@ -12,6 +12,10 @@ export type Output = 'website' | 'scorm' | 'pdf';
 export interface CheckIssue {
   effect: CheckEffect; code: string; message: string; outputs: Output[];
   lessonId?: string; blockId?: string;
+  /** For a question inside a course question bank. */
+  bankId?: string;
+  /** A course-page place to open, such as `resources:glossary`. */
+  place?: string;
   /** The field to focus: a block content path, or `altText`, `cover-alt`, `banner-alt`, `lesson-title`. */
   field?: string;
   /** Where the field lives in the inspector. */
@@ -104,11 +108,26 @@ export function courseChecks(project: PortableProject, options: CheckOptions = {
         if (!block.content.transcript.trim()) blocking('embed-transcript', 'Add a transcript to the embedded video before publishing.');
         review('external-content', `This video loads from ${block.content.provider === 'youtube' ? 'YouTube' : 'Vimeo'} when a learner presses play, so the course is not fully self-contained. Check that your learners' networks allow it.`, undefined, 'content');
         break;
+      case 'bank-draw': {
+        const bank = course.banks.find(b => b.id === block.content.bankId);
+        if (!bank) blocking('bank-missing', 'Choose a question bank for this block.');
+        else if (!bank.questions.length) blocking('bank-empty', `The question bank “${bank.name || 'Untitled bank'}” has no questions yet.`);
+        else if (block.content.count > bank.questions.length) warn('bank-small', `This block draws ${block.content.count} questions, but “${bank.name || 'Untitled bank'}” has ${bank.questions.length}. Learners get all ${bank.questions.length}.`);
+        break;
+      }
+      case 'results': if (block.content.showCertificate && !course.certificate) warn('certificate-missing', 'This results block offers a certificate, but the course has no certificate set up. Set one up in Course resources.'); break;
+      case 'glossary': if (!course.glossary.length) warn('glossary-empty', 'The course glossary is empty, so this block has nothing to show.'); break;
+      case 'action-plan': if (block.content.columns.some(c => !c.label.trim())) warn('plan-heading', 'Give every action plan column a heading.'); break;
       case 'software-practice':
         if (block.content.steps.some(step => !step.instruction.trim())) blocking('practice-instruction', 'Give every software practice step an instruction before publishing.');
         if (block.content.steps.some(step => !step.alt.trim())) warn('practice-alt', 'A software practice screenshot has no description. Describe what the screen shows.', undefined, 'content');
         break;
     }
+  }
+  for (const term of course.glossary) if (!term.term.trim() || !term.definition.trim()) add({ effect: 'warning', code: 'glossary-term', message: term.term.trim() ? `The glossary term “${term.term}” has no definition.` : 'A glossary entry has no term.', outputs: ALL, place: 'resources:glossary' });
+  for (const bank of course.banks) for (const question of bank.questions) {
+    const issue = assessmentIssue(question);
+    if (issue) add({ effect: 'blocks', code: 'bank-question', message: `A question in the bank “${bank.name || 'Untitled bank'}” is not ready: ${issue}`, outputs: ALL, bankId: bank.id, blockId: question.id, tab: 'content' });
   }
   if (written) add({ effect: 'warning', code: 'scorm-12-responses', message: 'This course has written responses. SCORM 1.2 can keep only about 4,000 characters of progress, so long answers may stay on the learner’s device. Choose SCORM 2004 when your LMS supports it.', outputs: ['scorm'] });
   return issues;

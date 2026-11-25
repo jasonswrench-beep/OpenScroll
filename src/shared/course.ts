@@ -36,6 +36,16 @@ const numericSchema = z.strictObject({ mode: z.enum(['exact', 'range']), value: 
 const responseOptions = { required: z.boolean(), workbook: z.boolean() };
 export const OBJECTIVE_LEVELS = ['remember','understand','apply','analyze','evaluate','create'] as const;
 const objectiveSchema = z.strictObject({ id: idSchema, text: label, level: z.enum(OBJECTIVE_LEVELS).nullable() });
+/** A question. Lessons and course question banks hold the same shape. */
+export const assessmentBlock = z.strictObject({...base,type:z.literal('assessment'),variant:z.enum(['single-choice','multiple-response','true-false','fill-blank','short-answer','numeric','hotspot','matching','ordering','categorize']),
+    content:z.strictObject({prompt:rich,options:z.array(label).max(20),correct:z.array(z.number().int().min(0).max(19)).max(20),accepted:z.array(label).max(20),caseSensitive:z.boolean(),pairs:z.array(z.strictObject({left:label,right:label})).max(20),items:z.array(label).max(20),feedbackCorrect:rich,feedbackIncorrect:rich,
+      feedbackMode:z.enum(['none','correct-incorrect','per-choice']).default('correct-incorrect'),choiceFeedback:z.array(rich).max(20).default([]),groups:z.array(label).max(10).default([]),placements:z.array(z.number().int().min(0).max(9)).max(20).default([]),
+      // Wave B: short answer (exact match or self-check against a model answer), numeric, and hotspot.
+      selfCheck:z.boolean().default(false),model:rich.default(''),
+      numeric:numericSchema.default({mode:'exact',value:0,tolerance:0,min:0,max:0,unit:''}),
+      image:z.strictObject({assetId:idSchema,altText:z.string().max(2000)}).nullable().default(null),
+      areas:z.array(z.strictObject({x:percent,y:percent,w:percent,h:percent,label})).max(20).default([])}),
+    assessment:z.strictObject({graded:z.boolean(),points:z.number().int().min(1).max(100),required:z.boolean(),completion:z.enum(['submitted','correct']),maxAttempts:z.number().int().min(0).max(20)})});
 export const blockSchema = z.discriminatedUnion('type', [
   headingBlock, paragraphBlock, listBlock, statementBlock, quoteBlock, imageBlock, buttonBlock,
   z.strictObject({ ...base, type: z.literal('image-text'), variant: z.enum(['image-left', 'image-right']), content: z.strictObject({ ...imageContent, heading: label, text: rich }) }),
@@ -56,15 +66,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.strictObject({...base,type:z.literal('process'),variant:z.literal('steps'),content:z.strictObject({intro:card.nullable().default(null),items:z.array(item).min(1).max(50),summary:card.nullable().default(null)})}),
   z.strictObject({...base,type:z.literal('timeline'),variant:z.literal('vertical'),content:z.strictObject({items:z.array(z.strictObject({title:label,text:rich,date:label.default('')})).min(1).max(50)})}),
   z.strictObject({...base,type:z.literal('labeled-graphic'),variant:z.literal('markers'),content:z.strictObject({...imageContent,markers:z.array(z.strictObject({label,text:rich,x:z.number().min(0).max(100),y:z.number().min(0).max(100)})).min(1).max(30)})}),
-  z.strictObject({...base,type:z.literal('assessment'),variant:z.enum(['single-choice','multiple-response','true-false','fill-blank','short-answer','numeric','hotspot','matching','ordering','categorize']),
-    content:z.strictObject({prompt:rich,options:z.array(label).max(20),correct:z.array(z.number().int().min(0).max(19)).max(20),accepted:z.array(label).max(20),caseSensitive:z.boolean(),pairs:z.array(z.strictObject({left:label,right:label})).max(20),items:z.array(label).max(20),feedbackCorrect:rich,feedbackIncorrect:rich,
-      feedbackMode:z.enum(['none','correct-incorrect','per-choice']).default('correct-incorrect'),choiceFeedback:z.array(rich).max(20).default([]),groups:z.array(label).max(10).default([]),placements:z.array(z.number().int().min(0).max(9)).max(20).default([]),
-      // Wave B: short answer (exact match or self-check against a model answer), numeric, and hotspot.
-      selfCheck:z.boolean().default(false),model:rich.default(''),
-      numeric:numericSchema.default({mode:'exact',value:0,tolerance:0,min:0,max:0,unit:''}),
-      image:z.strictObject({assetId:idSchema,altText:z.string().max(2000)}).nullable().default(null),
-      areas:z.array(z.strictObject({x:percent,y:percent,w:percent,h:percent,label})).max(20).default([])}),
-    assessment:z.strictObject({graded:z.boolean(),points:z.number().int().min(1).max(100),required:z.boolean(),completion:z.enum(['submitted','correct']),maxAttempts:z.number().int().min(0).max(20)})}),
+  assessmentBlock,
   z.strictObject({ ...base, type: z.literal('continue'), variant: z.literal('button'), content: z.strictObject({ label, hint: label.default('') }), completion: z.enum(['none', 'previous', 'all-previous']) }),
   // Wave A (stage 4). Learner responses to these blocks live in learner state, never in the document.
   z.strictObject({...base,type:z.literal('objectives'),variant:z.enum(['list','cards']),content:z.strictObject({heading:label,intro:rich,items:z.array(objectiveSchema).min(1).max(30)})}),
@@ -76,6 +78,11 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.strictObject({...base,type:z.literal('survey'),variant:z.literal('form'),content:z.strictObject({title:label,intro:rich,scale:z.array(label).min(2).max(7),items:z.array(z.strictObject({id:idSchema,kind:z.enum(['rating','differential','choice','comment']),prompt:label,options:z.array(label).max(10)})).min(1).max(30),...responseOptions})}),
   z.strictObject({...base,type:z.literal('embed-video'),variant:z.literal('facade'),content:z.strictObject({provider:z.enum(['youtube','vimeo']),videoId:z.string().max(40),title:label,transcript:text,start:z.number().int().min(0).max(86400)})}),
   z.strictObject({...base,type:z.literal('software-practice'),variant:z.literal('steps'),content:z.strictObject({title:label,intro:rich,steps:z.array(z.strictObject({id:idSchema,imageId:idSchema,alt:z.string().max(2000),instruction:label,target:region,typed:label,hint:label})).min(1).max(60),modes:z.strictObject({watch:z.boolean(),try:z.boolean(),test:z.boolean()}),...responseOptions})}),
+  // Wave D (stage 7): course-level resources in use, and the learner's own plan and results.
+  z.strictObject({...base,type:z.literal('glossary'),variant:z.enum(['a-z','list']),content:z.strictObject({title:label,showLetters:z.boolean(),search:z.boolean()})}),
+  z.strictObject({...base,type:z.literal('action-plan'),variant:z.literal('table'),content:z.strictObject({title:label,intro:rich,columns:z.array(z.strictObject({label,kind:z.enum(['text','date'])})).min(1).max(6),starterRows:z.number().int().min(1).max(20),maxRows:z.number().int().min(1).max(50),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('results'),variant:z.literal('summary'),content:z.strictObject({title:label,showReview:z.boolean(),showCertificate:z.boolean()})}),
+  z.strictObject({...base,type:z.literal('bank-draw'),variant:z.literal('random'),content:z.strictObject({title:label,bankId:idSchema,count:z.number().int().min(1).max(50)})}),
   z.strictObject({...base,type:z.literal('columns'),variant:z.enum(['1-1','1-1-1','2-1','1-2']),content:z.strictObject({columns:z.array(z.strictObject({blocks:z.array(columnChildSchema).max(20)})).min(2).max(3)})}),
 ]);
 export const assetSchema = z.strictObject({
@@ -97,7 +104,11 @@ export const courseSchema = z.strictObject({
     theme: z.strictObject({ accentColor: z.string().regex(/^#[a-fA-F0-9]{6}$/), font: z.enum(['sans', 'serif']), pageWidth: z.enum(['standard', 'wide']),
       coverLayout: z.enum(['stacked','split-left','split-right','two-thirds-left','overlay','centered']).default('stacked'), lessonHeader: z.enum(['plain','image','accent']).default('plain'),
       fontPairing: z.enum(['lato-merriweather','worksans-sourceserif','figtree-literata','atkinson']).nullable().default(null) }),
-    settings: z.strictObject({ navigation: z.enum(['free', 'sequential']), completion: z.literal('all-lessons'), passingScore: z.number().int().min(0).max(100) }),
+    settings: z.strictObject({ navigation: z.enum(['free', 'sequential']), completion: z.literal('all-lessons'), passingScore: z.number().int().min(0).max(100), glossaryLinks: z.boolean().default(false) }),
+    // Course resources (F6): one glossary, question banks, and the certificate the results block can print.
+    glossary: z.array(z.strictObject({ id: idSchema, term: label, definition: rich, aliases: z.array(label).max(10) })).max(500).default([]),
+    banks: z.array(z.strictObject({ id: idSchema, name: label, questions: z.array(assessmentBlock).max(500) })).max(50).default([]),
+    certificate: z.strictObject({ title: label, issuer: label, signerName: label, signerTitle: label, logoId: idSchema.nullable(), signatureId: idSchema.nullable(), showScore: z.boolean() }).nullable().default(null),
     sections: z.array(z.strictObject({ id: idSchema, title: label, lessons: z.array(lessonSchema).max(200) })).max(100),
   }),
   assets: z.array(assetSchema).max(255),
@@ -157,7 +168,7 @@ export function migrateToCurrent(input: Loose): Loose {
   doc.schemaVersion = SCHEMA_VERSION;
   return doc;
 }
-const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey','embed-video','software-practice']);
+const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey','embed-video','software-practice','glossary','action-plan','results','bank-draw']);
 /** Older versions migrate by copying; original archives and stored rows remain untouched until explicit save. */
 export function parseCourse(input: unknown): CourseDocument {
   if (input === null || typeof input !== 'object' || !('schemaVersion' in input)) throw new ProjectError('The course is missing its schema version.');
@@ -183,6 +194,19 @@ export function parseCourse(input: unknown): CourseDocument {
   };
   if (doc.course.cover) checkImage(doc.course.cover.assetId);
   if (doc.course.authorImage) checkImage(doc.course.authorImage.assetId);
+  for (const term of doc.course.glossary) claim(term.id);
+  const certificate = doc.course.certificate;
+  if (certificate?.logoId) checkImage(certificate.logoId);
+  if (certificate?.signatureId) checkImage(certificate.signatureId);
+  for (const bank of doc.course.banks) {
+    claim(bank.id);
+    for (const question of bank.questions) {
+      claim(question.id);
+      const choices = question.variant === 'hotspot' ? question.content.areas.length : question.content.options.length;
+      if (new Set(question.content.correct).size !== question.content.correct.length || question.content.correct.some(i => i >= choices) || question.content.choiceFeedback.length > choices) throw new ProjectError('Bank question answers must be unique and match existing choices.');
+      if (question.content.image) checkImage(question.content.image.assetId);
+    }
+  }
   let blockCount = 0;
   let lessonCount = 0;
   for (const section of doc.course.sections) {

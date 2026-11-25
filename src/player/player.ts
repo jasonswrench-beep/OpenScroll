@@ -9,6 +9,7 @@ import { CourseFlow,type LearnerSnapshot } from './state.js';
 import { renderResponse } from './response-player.js';
 import { renderPractice } from './practice-player.js';
 import { enhanceVideo,enhanceEmbed } from './media-player.js';
+import { renderDraw,renderResults,enhanceGlossary,linkGlossaryTerms } from './resources-player.js';
 import { renderWorkbook,workbookEntries } from './workbook.js';
 import { isResponseBlock,responseTitle } from '../shared/responses.js';
 export interface PlayerOptions {preview?:boolean;assetURL?:(id:string)=>string;restored?:unknown;changed?:(state:LearnerSnapshot)=>void;storageWarning?:string;}
@@ -60,14 +61,17 @@ export class CoursePlayer {
           else if(isResponseBlock(block))rendered.replaceChildren(renderResponse(block,flow,()=>this.persist(),()=>this.refreshGates()));
           else if(block.type==='video')enhanceVideo(block,rendered,flow,id=>this.url(id),id=>{const target=this.root.querySelector<HTMLElement>(`[data-focus="question-${id}"]`);target?.scrollIntoView({block:'center'});target?.focus();});
           else if(block.type==='embed-video')enhanceEmbed(block,rendered,!!this.options.preview);
+          else if(block.type==='bank-draw'){if(flow.draw(block.id))this.persist();rendered.replaceChildren(renderDraw(block,flow,()=>this.persist(),focus=>this.render(focus),id=>this.url(id)));}
+          else if(block.type==='results')rendered.replaceChildren(renderResults(block,flow,this.project,(lessonId,questionId)=>{if(flow.enter(lessonId)){this.message='';this.persist();this.render(`question-${questionId}`);}},id=>this.url(id)));
+          else if(block.type==='glossary')enhanceGlossary(block,rendered);
           wrapper.append(rendered);
           if(block.requiredInteraction){const status=node('p');status.dataset.interactionProgress=block.id;status.setAttribute('role','status');status.textContent=`Explored ${flow.explored(block.id)} of ${interactionCount(block)} items.`;wrapper.append(status);}
           if(required.has(block.id)){const reviewed=flow.reviewed.has(block.id);wrapper.append(this.action(reviewed ? 'Reviewed' : 'Mark as reviewed',()=>{flow.review(block.id);this.message='Content marked as reviewed.';this.persist();this.render(`review-${block.id}`);},`review-${block.id}`,false));const b=wrapper.querySelector<HTMLButtonElement>(`[data-focus="review-${block.id}"]`)!;b.setAttribute('aria-pressed',String(reviewed));b.setAttribute('aria-label',`${reviewed ? 'Reviewed' : 'Mark as reviewed'}: ${this.blockLabel(block.id)}`);}
         }
         content.append(wrapper);
-      }main.append(content);
+      }main.append(content);linkGlossaryTerms(content,this.project);
       const footer=node('div',undefined,'player-lesson-actions'),index=flow.lessons.findIndex(l=>l.id===flow.lessonId),done=flow.completed.has(flow.lessonId),next=flow.lessons[index+1];
-      const pending=flow.visible().filter(isAssessment).filter(block=>{const record=flow.record(block.id);return ((block.assessment.required || this.gated(block.id)) && !record?.last) || !!record?.draft;});
+      const pending=[...flow.visible().filter(isAssessment),...flow.visible().flatMap(b=>b.type==='bank-draw' ? flow.drawn(b.id) : [])].filter(block=>{const record=flow.record(block.id);return ((block.assessment.required || this.gated(block.id)) && !record?.last) || !!record?.draft;});
       if(pending.length)footer.append(this.action('Submit all answers',()=>{
         const responses=pending.map(block=>({block,answer:flow.record(block.id)?.draft ?? emptyAnswer(block)}));
         const missing=responses.find(({block,answer})=>assessmentIssue(block)||!validAnswer(block,answer));
@@ -100,11 +104,11 @@ export class CoursePlayer {
     root.replaceChildren();if(this.flow.canFinish())return;
     const items=this.flow.visible().filter(block=>{
       if(block.type==='continue')return block!==this.flow.lesson?.blocks.at(-1) && !this.flow.released.has(block.id);
-      return (isAssessment(block) && (block.assessment.required || this.gated(block.id)) || (isResponseBlock(block) && block.content.required) || block.requiredInteraction || this.flow.required().has(block.id)) && !this.flow.isComplete(block);
+      return (isAssessment(block) && (block.assessment.required || this.gated(block.id)) || (block.type==='bank-draw' && !this.flow.isComplete(block)) || (isResponseBlock(block) && block.content.required) || block.requiredInteraction || this.flow.required().has(block.id)) && !this.flow.isComplete(block);
     });
     if(!items.length)return;root.append(node('p','To finish this lesson:'));const list=node('ul');
     for(const block of items){
-      const label=isAssessment(block)?`${this.flow.record(block.id)?.last?'Answer correctly':'Submit answer'}: ${richToPlain(block.content.prompt).slice(0,120)}`:isResponseBlock(block)?`Respond: ${responseTitle(block).slice(0,120)}`:block.requiredInteraction?`Explore all items: ${this.blockLabel(block.id)}`:block.type==='continue'?'Open the next section':'Review: '+this.blockLabel(block.id);
+      const label=isAssessment(block)?`${this.flow.record(block.id)?.last?'Answer correctly':'Submit answer'}: ${richToPlain(block.content.prompt).slice(0,120)}`:block.type==='bank-draw'?`Answer the questions: ${block.content.title || 'questions from the bank'}`:isResponseBlock(block)?`Respond: ${responseTitle(block).slice(0,120)}`:block.requiredInteraction?`Explore all items: ${this.blockLabel(block.id)}`:block.type==='continue'?'Open the next section':'Review: '+this.blockLabel(block.id);
       const item=node('li');item.append(this.action(label,()=>{const target=this.root.querySelector<HTMLElement>(`[data-focus="${isAssessment(block)?'question-':'block-'}${block.id}"]`);target?.focus();target?.scrollIntoView({block:'center'});},'requirement-'+block.id));list.append(item);
     }root.append(list);
   }

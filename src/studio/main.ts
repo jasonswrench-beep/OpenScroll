@@ -18,10 +18,13 @@ let view: View | undefined, shownHash = '', changing = false;
 function parse(hash: string): Route {
   const params = new URLSearchParams(hash.replace(/^#/, ''));
   const id = params.get('course');
-  if (id && /^[0-9a-f-]{36}$/i.test(id)) return { kind: 'course', id, ...(params.get('lesson') ? { lessonId: params.get('lesson')! } : {}) };
+  // A course page shows one place: a lesson, course resources (resources=tab) or a question bank (bank=id).
+  const place = params.get('lesson') ?? (params.get('resources') !== null ? `resources:${params.get('resources') || 'glossary'}` : params.get('bank') ? `bank:${params.get('bank')}` : null);
+  if (id && /^[0-9a-f-]{36}$/i.test(id)) return { kind: 'course', id, ...(place ? { lessonId: place } : {}) };
   return { kind: 'library' };
 }
-const hashFor = (route: Route) => route.kind === 'library' ? '#library' : `#course=${route.id}${route.lessonId ? `&lesson=${encodeURIComponent(route.lessonId)}` : ''}`;
+const placeHash = (place?: string) => !place ? '' : place.startsWith('resources:') ? `&resources=${encodeURIComponent(place.slice(10))}` : place.startsWith('bank:') ? `&bank=${encodeURIComponent(place.slice(5))}` : `&lesson=${encodeURIComponent(place)}`;
+const hashFor = (route: Route) => route.kind === 'library' ? '#library' : `#course=${route.id}${placeHash(route.lessonId)}`;
 function go(route: Route) { const next = hashFor(route); if (location.hash !== next) location.hash = next; else void show(); }
 
 function rail(): HTMLElement {

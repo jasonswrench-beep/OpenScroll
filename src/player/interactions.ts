@@ -54,6 +54,10 @@ function responseRecords(block: ResponseBlock, response: LearnerResponse, editio
       const result = selfAssessmentResult(block, response), ratings = (response.ratings ?? []).map(r => r === null ? '-' : String(r + 1)).join(' ');
       return [{ ...base, id: block.id, type: modern ? 'other' : 'fill-in', response: freeText(`${result.complete ? `Total ${result.total} of ${result.max}. ` : ''}Ratings ${ratings}`, limit), description: plain(block.content.title || 'Self-assessment', 250) }];
     }
+    case 'action-plan': {
+      const text = (response.rows ?? []).filter(row => row.some(cell => cell.trim())).map(row => row.join(' | ')).join(' / ');
+      return text ? [{ ...base, id: block.id, type: long, response: freeText(text, limit), description: plain(block.content.title || 'Action plan', 250) }] : [];
+    }
     case 'software-practice': {
       if (!response.test && !response.done) return [];
       const right = response.test?.filter(Boolean).length ?? 0, all = response.test ? right === response.test.length : false;
@@ -74,8 +78,10 @@ function responseRecords(block: ResponseBlock, response: LearnerResponse, editio
 export function interactionsFor(document: CourseDocument, state: LearnerSnapshot, edition: Edition): Interaction[] {
   const records: Interaction[] = [];
   for (const block of document.course.sections.flatMap(s => s.lessons).flatMap(l => l.blocks)) {
-    if (isAssessment(block)) { const last = state.assessments[block.id]?.last; const record = last ? questionRecord(block, last, edition) : undefined; if (record) records.push(record); }
-    else if (isResponseBlock(block)) { const response = state.responses[block.id]; if (response) records.push(...responseRecords(block, response, edition)); }
+    const questions = isAssessment(block) ? [block] : block.type === 'bank-draw' ? (state.draws[block.id] ?? []).map(id => document.course.banks.flatMap(b => b.questions).find(q => q.id === id)).filter((q): q is AssessmentBlock => !!q) : [];
+    for (const question of questions) { const last = state.assessments[question.id]?.last; const record = last ? questionRecord(question, last, edition) : undefined; if (record) records.push(record); }
+    if (isAssessment(block) || block.type === 'bank-draw') continue;
+    if (isResponseBlock(block)) { const response = state.responses[block.id]; if (response) records.push(...responseRecords(block, response, edition)); }
   }
   return records;
 }

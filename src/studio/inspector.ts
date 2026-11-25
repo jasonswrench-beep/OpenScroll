@@ -3,7 +3,7 @@
  * tabs: Content (items, rows, images, answers), Style (template, width, spacing, background), Behavior (what
  * learners must do) and Access (alternative text, narration, and what assistive technology announces).
  */
-import { ArrowUp, ArrowDown, Trash2, Plus, ImagePlus } from 'lucide';
+import { ArrowUp, ArrowDown, Trash2, Plus, ImagePlus, Pencil } from 'lucide';
 import { OBJECTIVE_LEVELS, COLUMN_CHILD_TYPES, type Block, type PortableProject, type Asset } from '../shared/course.js';
 import { plainToRich } from '../shared/rich-text.js';
 import { cueEditor } from './cue-editor.js';
@@ -44,6 +44,8 @@ export interface InspectorContext {
   addQuestionAfter: (videoId: string) => string | undefined;
   /** Adds files to the course and changes this block in one step, for imports. */
   changeWithAssets: (assets: { asset: Asset; data: string }[], mutate: (block: Block) => void) => boolean;
+  /** Opens another place on the course page, such as `resources:glossary` or `bank:<id>`. */
+  goTo?: (place: string) => void;
 }
 
 const TABS: [Tab, string][] = [['content', 'Content'], ['style', 'Style'], ['behavior', 'Behavior'], ['access', 'Access']];
@@ -224,6 +226,45 @@ function contentTab(ctx: InspectorContext): HTMLElement[] {
           add: () => set<'labeled-graphic'>(b => { b.content.markers.push({ label: 'A new detail', text: 'Explain this part of the image.', x: 50, y: 50 }); }, true),
           remove: i => set<'labeled-graphic'>(b => { b.content.markers.splice(i, 1); }, true), move: (i, d) => set<'labeled-graphic'>(b => moveIn(b.content.markers, i, d), true) }),
         note('Each marker opens its text for learners. Marker text is edited on the page.'));
+      break;
+    }
+    case 'glossary': {
+      const terms = ctx.project.document.course.glossary.length;
+      out.push(note(`The course glossary has ${terms} ${terms === 1 ? 'term' : 'terms'}. Terms are edited in Course resources so every glossary block and term link stays the same.`),
+        button('Edit the glossary', () => ctx.goTo?.('resources:glossary'), { icon: Pencil, class: 'btn btn-sm' }),
+        checkField('Show letters to jump to', block.content.showLetters, value => set<'glossary'>(b => { b.content.showLetters = value; })),
+        checkField('Show a search box', block.content.search, value => set<'glossary'>(b => { b.content.search = value; })));
+      break;
+    }
+    case 'action-plan': {
+      const c = block.content;
+      out.push(note('Learners fill in the table and can add rows up to the limit. Their plan is kept with their progress and appears in My workbook.'),
+        itemList({ title: 'Columns', items: c.columns, noun: 'Column', min: 1, max: 6, name: col => col.label,
+          row: (col, i) => [textField(`Column ${i + 1} heading`, col.label, value => set<'action-plan'>(b => { b.content.columns[i]!.label = value; }, false, `col-${i}`)),
+            selectField(`Column ${i + 1} holds`, [['text', 'Text'], ['date', 'A date']], col.kind, value => set<'action-plan'>(b => { b.content.columns[i]!.kind = value as 'text' | 'date'; }))],
+          add: () => set<'action-plan'>(b => { b.content.columns.push({ label: 'Another column', kind: 'text' }); }, true), remove: i => set<'action-plan'>(b => { b.content.columns.splice(i, 1); }, true), move: (i, d) => set<'action-plan'>(b => moveIn(b.content.columns, i, d), true) }),
+        numberField('Rows to start with', c.starterRows, 1, 20, value => set<'action-plan'>(b => { b.content.starterRows = value; b.content.maxRows = Math.max(b.content.maxRows, value); }, true)),
+        numberField('Most rows learners can add', c.maxRows, 1, 50, value => set<'action-plan'>(b => { b.content.maxRows = Math.max(value, b.content.starterRows); }, true)));
+      break;
+    }
+    case 'results': {
+      const certificate = ctx.project.document.course.certificate;
+      out.push(textField('Title', block.content.title, value => set<'results'>(b => { b.content.title = value; }, false, 'title')),
+        checkField('List the questions learners missed', block.content.showReview, value => set<'results'>(b => { b.content.showReview = value; }), 'Each one links back to its question.'),
+        checkField('Offer the certificate', block.content.showCertificate, value => set<'results'>(b => { b.content.showCertificate = value; }, true)),
+        ...(block.content.showCertificate && !certificate ? [h('p', { class: 'warn-note', text: 'The course has no certificate yet. Set one up in Course resources.' })] : []),
+        button('Certificate settings', () => ctx.goTo?.('resources:certificate'), { icon: Pencil, class: 'btn btn-sm' }),
+        note('Learners always see their progress, their scores by lesson and whether they passed.'));
+      break;
+    }
+    case 'bank-draw': {
+      const banks = ctx.project.document.course.banks, bank = banks.find(b => b.id === block.content.bankId);
+      if (!banks.length) { out.push(note('There are no question banks yet.'), button('Create a question bank', () => ctx.goTo?.('resources:banks'), { icon: Plus, class: 'btn btn-sm' })); break; }
+      out.push(selectField('Question bank', [...(bank ? [] : [['', 'Choose a bank'] as [string, string]]), ...banks.map(b => [b.id, `${b.name || 'Untitled bank'} (${b.questions.length})`] as [string, string])], bank?.id ?? '', value => { if (value) set<'bank-draw'>(b => { b.content.bankId = value; const chosen = banks.find(x => x.id === value); if (chosen && chosen.questions.length) b.content.count = Math.min(b.content.count, chosen.questions.length); }, true); }),
+        numberField('Questions to draw', block.content.count, 1, Math.max(1, Math.min(50, bank?.questions.length ?? 50)), value => set<'bank-draw'>(b => { b.content.count = value; }), bank ? `Each learner gets ${Math.min(block.content.count, bank.questions.length)} of the ${bank.questions.length} questions, and keeps the same ones on resume.` : undefined),
+        textField('Title above the questions (optional)', block.content.title, value => set<'bank-draw'>(b => { b.content.title = value; }, false, 'title')),
+        ...(bank ? [button(`Edit the questions in ${bank.name || 'this bank'}`, () => ctx.goTo?.(`bank:${bank.id}`), { icon: Pencil, class: 'btn btn-sm' })] : []),
+        note('Scoring, attempts and feedback are set on each question in the bank.'));
       break;
     }
     case 'survey': {
@@ -417,8 +458,8 @@ function styleTab(ctx: InspectorContext): HTMLElement[] {
 function behaviorTab(ctx: InspectorContext): HTMLElement[] {
   const { block, change } = ctx;
   switch (block.type) {
-    case 'reflection': case 'activity': case 'checklist': case 'self-assessment': case 'survey': {
-      const need = block.type === 'reflection' ? 'write at least the minimum number of words' : block.type === 'activity' ? (block.content.output ? 'write in the box' : 'mark it as done') : block.type === 'checklist' ? 'tick every item' : block.type === 'survey' ? 'answer every rating and choice' : 'rate every statement';
+    case 'reflection': case 'activity': case 'checklist': case 'self-assessment': case 'survey': case 'action-plan': {
+      const need = block.type === 'action-plan' ? 'fill in at least one complete row' : block.type === 'reflection' ? 'write at least the minimum number of words' : block.type === 'activity' ? (block.content.output ? 'write in the box' : 'mark it as done') : block.type === 'checklist' ? 'tick every item' : block.type === 'survey' ? 'answer every rating and choice' : 'rate every statement';
       return [
         checkField('Required to finish the lesson', block.content.required, value => change(b => { if ('required' in b.content) (b.content as { required: boolean }).required = value; }, { redraw: true }), `Learners must ${need}.`),
         checkField('Show in My workbook', block.content.workbook, value => change(b => { if ('workbook' in b.content) (b.content as { workbook: boolean }).workbook = value; }), 'My workbook gathers every response in one page learners can print or download.'),
@@ -457,6 +498,10 @@ const ANNOUNCES: Partial<Record<Block['type'], string>> = {
   assessment: 'Read as a group of answers with the question as its name. Feedback is announced after submitting.',
   continue: 'A button. When it is locked, the message explains what to finish first.',
   survey: 'Each rating or choice is a group of radio buttons named by its question; comments are text boxes named by theirs.',
+  glossary: 'Read as headings by letter and a description list of terms. The search box filters terms and announces how many match.',
+  'action-plan': 'A table whose cells are text and date fields, each named by its column and row.',
+  results: 'Read as text, a progress bar and a table of scores by lesson; each missed question has a button that goes to it.',
+  'bank-draw': 'Each drawn question is read like any other question.',
 };
 function accessTab(ctx: InspectorContext): HTMLElement[] {
   const { block, change } = ctx;

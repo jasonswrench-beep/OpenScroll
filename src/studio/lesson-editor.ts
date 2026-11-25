@@ -26,6 +26,8 @@ export interface LessonEditorHost {
   assetSource: (assetId: string) => string;
   themeVars: (element: HTMLElement) => void;
   titleChanged: () => void;
+  /** Opens another place on the course page: a lesson, `resources:<tab>` or `bank:<id>`. */
+  goTo?: (place?: string) => void;
 }
 interface Located { block: Block; list: Block[]; index: number; parent?: Extract<Block, { type: 'columns' }>; column?: number }
 type Columns = Extract<Block, { type: 'columns' }>;
@@ -61,13 +63,18 @@ export class LessonEditor {
     this.panel.addEventListener('keydown', event => this.keys(event));
   }
   get busy() { return this.uploads > 0; }
-  private get lesson(): Lesson | undefined { return this.host.project().document.course.sections.flatMap(s => s.lessons).find(l => l.id === this.lessonId); }
-  private get blocks(): Block[] { return this.lesson?.blocks ?? []; }
+  /** The editor edits a lesson's blocks, or, in bank mode, a question bank's questions. */
+  private mode: 'lesson' | 'bank' = 'lesson';
+  private get lesson(): Lesson | undefined { return this.mode === 'lesson' ? this.host.project().document.course.sections.flatMap(s => s.lessons).find(l => l.id === this.lessonId) : undefined; }
+  private get bank() { return this.mode === 'bank' ? this.host.project().document.course.banks.find(b => b.id === this.lessonId) : undefined; }
+  private get blocks(): Block[] { return (this.mode === 'bank' ? this.bank?.questions : this.lesson?.blocks) ?? []; }
+  /** The list of blocks being edited, inside a given project. */
+  private list(project: PortableProject): Block[] | undefined { const course = project.document.course; return this.mode === 'bank' ? course.banks.find(b => b.id === this.lessonId)?.questions : course.sections.flatMap(s => s.lessons).find(l => l.id === this.lessonId)?.blocks; }
   private history() { let value = this.histories.get(this.lessonId); if (!value) { value = new LessonHistory(); this.histories.set(this.lessonId, value); } return value; }
   private say(message: string) { this.status.textContent = ''; window.setTimeout(() => { this.status.textContent = message; }, 30); }
 
-  show(lessonId: string) {
-    if (lessonId !== this.lessonId) { this.history().breakGroup(); this.selected = undefined; this.tab = 'content'; this.marker = 0; }
+  show(lessonId: string, mode: 'lesson' | 'bank' = 'lesson') {
+    if (lessonId !== this.lessonId || mode !== this.mode) { this.mode = mode; this.history().breakGroup(); this.selected = undefined; this.tab = 'content'; this.marker = 0; }
     this.lessonId = lessonId;
     this.render();
   }
@@ -94,11 +101,11 @@ export class LessonEditor {
 
   /* ---------- changes ---------- */
   private mutate(change: (blocks: Block[], project: PortableProject) => void, group?: string, assetsChanged = false) {
-    const before = structuredClone(this.blocks), lessonId = this.lessonId;
+    const before = structuredClone(this.blocks);
     const applied = this.host.edit(project => {
-      const lesson = project.document.course.sections.flatMap(s => s.lessons).find(l => l.id === lessonId);
-      if (!lesson) throw new Error('This lesson is no longer available.');
-      change(lesson.blocks, project);
+      const blocks = this.list(project);
+      if (!blocks) throw new Error(this.mode === 'bank' ? 'This question bank is no longer available.' : 'This lesson is no longer available.');
+      change(blocks, project);
     }, assetsChanged);
     if (applied) { this.history().record(before, this.blocks, group); this.paintHistory(); }
     return applied;
@@ -110,7 +117,7 @@ export class LessonEditor {
   private travel(direction: 'undo' | 'redo') {
     if (this.busy) { toast('Wait for the file to finish loading first.'); return; }
     const lessonId = this.lessonId;
-    const value = this.history()[direction](this.blocks, blocks => this.host.edit(project => { project.document.course.sections.flatMap(s => s.lessons).find(l => l.id === lessonId)!.blocks = blocks; }));
+    const value = this.history()[direction](this.blocks, blocks => this.host.edit(project => { const list = this.list(project); if (!list) throw new Error('This is no longer available.'); list.splice(0, list.length, ...blocks); }));
     if (!value) return;
     if (this.selected && !locate(this.blocks, this.selected)) this.selected = undefined;
     this.render(direction === 'undo' ? 'undo' : 'redo');
@@ -149,7 +156,7 @@ export class LessonEditor {
     this.render(); this.say('Question added after the video. Write it on the page.');
     return prepared.block.id;
   }
-  private openPicker(index: number, opener: HTMLElement) { chooseBlock(opener, { pick: key => this.insert(key, index) }); }
+  private openPicker(index: number, opener: HTMLElement) { chooseBlock(opener, this.mode === 'bank' ? { title: 'Add a question', allowed: t => t.type === 'assessment', pick: key => this.insert(key, index) } : { pick: key => this.insert(key, index) }); }
   private addToColumn(columnsId: string, column: number, opener: HTMLElement) {
     const parent = locate(this.blocks, columnsId)?.block as Columns | undefined;
     if (!parent) return;
@@ -209,11 +216,11 @@ export class LessonEditor {
 
   /* ---------- drawing ---------- */
   private render(focus?: string) {
-    const lesson = this.lesson;
-    if (!lesson) return;
+    const lesson = this.lesson, bank = this.bank;
+    if (!lesson && !bank) return;
     const scroller = this.canvas.closest('.desk');
     const top = scroller?.scrollTop ?? 0;
-    this.drawCanvas(lesson);
+    if (lesson) this.drawCanvas(lesson); else this.drawBankCanvas();
     this.drawPanel();
     this.paintHistory();
     if (scroller) scroller.scrollTop = top;
@@ -255,6 +262,39 @@ export class LessonEditor {
     if (!lesson.blocks.length) paper.append(h('div', { class: 'empty-lesson' }, [h('p', { text: 'This lesson is empty. Add a first block to start writing.' })]));
     paper.append(h('div', { class: 'add-end' }, [button('Add block', event => this.openPicker(this.blocks.length, event.currentTarget as HTMLElement), { icon: Plus, class: 'btn', attrs: { 'data-focus': 'add-end' } })]));
     this.canvas.replaceChildren(head, this.status, paper);
+  }
+  /** A question bank on the course paper: its questions, edited like lesson blocks. */
+  private drawBankCanvas() {
+    const project = this.host.project(), banks = project.document.course.banks, bank = this.bank!;
+    const name = h('input', { class: 'inp lesson-title-input', attrs: { id: 'lesson-title', value: bank.name, maxlength: 300, 'aria-label': 'Question bank name' } });
+    name.addEventListener('input', () => { if (this.host.edit(p => { const target = p.document.course.banks.find(b => b.id === bank.id); if (target) target.name = name.value; })) { this.host.titleChanged(); const shown = this.canvas.querySelector('.lesson-h1'); if (shown) shown.textContent = name.value || 'Untitled bank'; } });
+    const switcher = h('select', { class: 'inp', attrs: { id: 'lesson-switch', 'aria-label': 'Go to question bank' } });
+    banks.forEach((b, i) => switcher.add(new Option(`${i + 1}. ${b.name || 'Untitled bank'}`, b.id, false, b.id === bank.id)));
+    switcher.addEventListener('change', () => this.host.goTo?.(`bank:${switcher.value}`));
+    const head = h('div', { class: 'lesson-head' }, [
+      button('Back to course resources', () => this.host.goTo?.('resources:banks'), { icon: ArrowLeft, class: 'btn btn-ghost' }),
+      name, h('div', { class: 'lesson-nav' }, [switcher]),
+      h('div', { class: 'lesson-tools' }, [this.undoButton, this.redoButton, button('Add question', event => this.openPicker(this.blocks.length, event.currentTarget as HTMLElement), { icon: Plus, class: 'btn btn-primary' })]),
+    ]);
+    const paper = h('article', { class: 'paper lesson-paper', attrs: { 'aria-label': 'Question bank' } });
+    this.host.themeVars(paper);
+    paper.append(h('h1', { class: 'lesson-h1', text: bank.name || 'Untitled bank' }), h('p', { class: 'bank-note', text: 'Questions from a bank are drawn at random by the "Questions from a bank" block. Each learner keeps the set they were given.' }));
+    const list = h('ol', { class: 'blk-list', attrs: { 'aria-label': 'Questions in this bank' } });
+    bank.questions.forEach((question, index) => { list.append(this.insertPoint(index)); list.append(this.frame(question, index, bank.questions.length, project)); });
+    paper.append(list);
+    if (!bank.questions.length) paper.append(h('div', { class: 'empty-lesson' }, [h('p', { text: 'This bank has no questions yet. Add one, or import an OpenAssess bank or a spreadsheet from Course resources.' })]));
+    paper.append(h('div', { class: 'add-end' }, [button('Add question', event => this.openPicker(this.blocks.length, event.currentTarget as HTMLElement), { icon: Plus, class: 'btn', attrs: { 'data-focus': 'add-end' } })]));
+    this.canvas.replaceChildren(head, this.status, paper);
+  }
+  private bankPanel(): HTMLElement[] {
+    const bank = this.bank!, project = this.host.project();
+    const users = project.document.course.sections.flatMap(s => s.lessons).flatMap(l => l.blocks.filter(b => b.type === 'bank-draw' && b.content.bankId === bank.id).map(() => l.title || 'Untitled lesson'));
+    const graded = bank.questions.filter(q => q.assessment.graded).length;
+    return [
+      h('h2', { class: 'side-h', text: 'Question bank', attrs: { id: 'lesson-panel-heading', tabindex: -1 } }),
+      h('p', { class: 'hint', text: `${bank.questions.length} ${bank.questions.length === 1 ? 'question' : 'questions'}, ${graded} scored. Select a question's name to see its settings.` }),
+      h('section', { class: 'insp-sec' }, [h('h3', { class: 'insp-h', text: 'Used in' }), users.length ? h('ul', {}, users.map(title => h('li', { text: title }))) : h('p', { class: 'hint', text: 'No lesson draws from this bank yet. Add a "Questions from a bank" block to a lesson.' })]),
+    ];
   }
   private insertPoint(index: number) {
     return h('li', { class: 'ins' }, [button(`Add a block at position ${index + 1}`, event => this.openPicker(index, event.currentTarget as HTMLElement), { iconOnly: true, icon: Plus, class: 'ins-btn' })]);
@@ -325,7 +365,7 @@ export class LessonEditor {
   /* ---------- side panel ---------- */
   private drawPanel() {
     const found = this.selected ? locate(this.blocks, this.selected) : undefined;
-    if (!found) { this.selected = undefined; this.panel.replaceChildren(...this.lessonPanel()); return; }
+    if (!found) { this.selected = undefined; this.panel.replaceChildren(...(this.mode === 'bank' ? this.bankPanel() : this.lessonPanel())); return; }
     const id = found.block.id;
     this.panel.replaceChildren(
       h('div', { class: 'insp-back' }, [button('Lesson settings', () => { this.select(undefined); this.panel.querySelector<HTMLElement>('#lesson-panel-heading')?.focus(); }, { icon: XIcon, class: 'btn btn-ghost btn-sm', label: 'Close block settings and show lesson settings' })]),
@@ -343,6 +383,7 @@ export class LessonEditor {
         assetSource: assetId => this.host.assetSource(assetId),
         addToColumn: (column, opener) => this.addToColumn(id, column, opener),
         lesson: this.blocks,
+        goTo: place => this.host.goTo?.(place),
         addQuestionAfter: videoId => this.addQuestionAfter(videoId),
         changeWithAssets: (assets, mutate) => {
           const applied = this.mutate((blocks, target) => { for (const { asset, data } of assets) { target.document.assets.push(asset); target.files[assetPath(asset)] = data; } const found = locate(blocks, id); if (!found) throw new Error('This block is no longer available.'); mutate(found.block); }, undefined, true);

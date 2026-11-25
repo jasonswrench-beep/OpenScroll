@@ -29,3 +29,6 @@ li>.os-rich>p:only-child{margin:0}
 .os-embed{display:grid;place-items:center;min-height:12rem;border-radius:.4rem;background:color-mix(in srgb,var(--os-accent) 10%,#f4f4f4);padding:1rem;text-align:center}.os-embed-note{margin:0;font-size:.95rem}
 .os-practice-steps{padding-left:1.4rem;display:grid;gap:1rem}.os-practice-typed{font-family:ui-monospace,monospace;font-size:.9rem}
 .os-video-marks{padding-left:1.4rem}
+.os-glossary-letters{display:flex;flex-wrap:wrap;gap:.35rem;margin:.5rem 0 1rem}.os-glossary-letters a{min-width:2rem;text-align:center;padding:.2rem .45rem;border:1px solid color-mix(in srgb,currentColor 35%,transparent);border-radius:.3rem;font-weight:700}
+.os-glossary-body h4{margin:1rem 0 .3rem;font-size:1.2rem}.os-glossary dt{font-weight:700;margin-top:.6rem}.os-glossary dd{margin:0 0 .4rem 1rem}.os-level-plain{font-weight:400;opacity:.8;font-size:.9rem}
+.os-plan{min-width:28rem}.os-plan td{height:2.4rem}

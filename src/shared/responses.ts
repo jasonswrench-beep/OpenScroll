@@ -2,12 +2,12 @@ import type { Block } from './course.js';
 import { richToPlain } from './rich-text.js';
 
 /** Blocks that collect something from the learner. The answer lives in learner state, never in the course file. */
-export type ResponseBlock = Extract<Block, { type: 'reflection' | 'activity' | 'checklist' | 'self-assessment' | 'survey' | 'software-practice' }>;
-const RESPONSE_TYPES: ReadonlySet<string> = new Set(['reflection', 'activity', 'checklist', 'self-assessment', 'survey', 'software-practice']);
+export type ResponseBlock = Extract<Block, { type: 'reflection' | 'activity' | 'checklist' | 'self-assessment' | 'survey' | 'software-practice' | 'action-plan' }>;
+const RESPONSE_TYPES: ReadonlySet<string> = new Set(['reflection', 'activity', 'checklist', 'self-assessment', 'survey', 'software-practice', 'action-plan']);
 export function isResponseBlock(block: Block): block is ResponseBlock { return RESPONSE_TYPES.has(block.type); }
 
 /** What a learner has written, ticked or rated. Only the parts that apply to the block are kept. */
-export interface LearnerResponse { text?: string; ticks?: number[]; ratings?: (number | null)[]; done?: boolean; answers?: (number | string | null)[]; test?: number[] }
+export interface LearnerResponse { text?: string; ticks?: number[]; ratings?: (number | null)[]; done?: boolean; answers?: (number | string | null)[]; test?: number[]; rows?: string[][] }
 export const SURVEY_COMMENT_MAX = 4000;
 export const RESPONSE_TEXT_MAX = 20_000;
 
@@ -21,7 +21,7 @@ const writes = (block: ResponseBlock) => block.type === 'reflection' || (block.t
 export function cleanResponse(block: ResponseBlock, input: unknown): LearnerResponse | undefined {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
   const value = input as Record<string, unknown>, result: LearnerResponse = {};
-  const allowed = new Set(block.type === 'checklist' ? ['ticks'] : block.type === 'self-assessment' ? ['ratings'] : block.type === 'survey' ? ['answers'] : block.type === 'software-practice' ? ['done', 'test'] : block.type === 'activity' ? ['text', 'done'] : ['text']);
+  const allowed = new Set(block.type === 'checklist' ? ['ticks'] : block.type === 'self-assessment' ? ['ratings'] : block.type === 'survey' ? ['answers'] : block.type === 'software-practice' ? ['done', 'test'] : block.type === 'action-plan' ? ['rows'] : block.type === 'activity' ? ['text', 'done'] : ['text']);
   if (Object.keys(value).some(key => !allowed.has(key))) return undefined;
   if (value.text !== undefined) {
     if (typeof value.text !== 'string' || value.text.length > RESPONSE_TEXT_MAX || !writes(block)) return undefined;
@@ -39,6 +39,18 @@ export function cleanResponse(block: ResponseBlock, input: unknown): LearnerResp
     const ratings = value.ratings as unknown[];
     if (!ratings.every(r => r === null || (Number.isInteger(r) && (r as number) >= 0 && (r as number) < block.content.scale.length))) return undefined;
     if (ratings.some(r => r !== null)) result.ratings = ratings as (number | null)[];
+  }
+  if (value.rows !== undefined) {
+    if (block.type !== 'action-plan' || !Array.isArray(value.rows) || value.rows.length > block.content.maxRows) return undefined;
+    const rows: string[][] = [];
+    for (const row of value.rows as unknown[]) {
+      if (!Array.isArray(row) || row.length !== block.content.columns.length) return undefined;
+      const cells = row as unknown[];
+      if (!cells.every((cell, i) => typeof cell === 'string' && cell.length <= 1000 && (block.content.columns[i]!.kind !== 'date' || cell === '' || /^\d{4}-\d{2}-\d{2}$/.test(cell)))) return undefined;
+      rows.push(cells as string[]);
+    }
+    const kept = rows.filter(row => row.some(cell => cell.trim()));
+    if (kept.length) result.rows = rows.slice(0, rows.length - [...rows].reverse().findIndex(row => row.some(cell => cell.trim())));
   }
   if (value.test !== undefined) {
     // One entry per step: 1 when the step was done right the first time in Test, else 0.
@@ -71,6 +83,7 @@ export function responseMeets(block: ResponseBlock, response: LearnerResponse | 
     case 'self-assessment': return !!response?.ratings && response.ratings.every(r => r !== null);
     case 'survey': return block.content.items.every((item, i) => item.kind === 'comment' || (response?.answers?.[i] ?? null) !== null);
     case 'software-practice': return block.content.modes.test ? !!response?.test : !!response?.done;
+    case 'action-plan': return !!response?.rows?.some(row => row.every(cell => cell.trim()));
   }
 }
 
@@ -94,6 +107,7 @@ export function responseText(block: ResponseBlock, response: LearnerResponse | u
       if (result.complete) lines.push(`Total: ${result.total} of ${result.max}${result.band ? `. ${richToPlain(result.band.text)}` : ''}`);
       return lines.join('\n');
     }
+    case 'action-plan': return (response?.rows ?? []).filter(row => row.some(cell => cell.trim())).map(row => block.content.columns.map((column, i) => `${column.label}: ${row[i] || '—'}`).join('; ')).join('\n');
     case 'software-practice': return response?.test ? `Test: ${response.test.filter(Boolean).length} of ${response.test.length} steps right the first time` : response?.done ? 'Practised every step' : '';
     case 'survey': return block.content.items.map((item, i) => `${item.prompt} — ${surveyAnswer(block, i, response?.answers?.[i] ?? null) || 'no answer'}`).join('\n');
   }
@@ -110,6 +124,6 @@ export function surveyAnswer(block: Extract<Block, { type: 'survey' }>, index: n
 
 /** The heading a response block shows in My workbook and in lists of things to finish. */
 export function responseTitle(block: ResponseBlock): string {
-  const text = block.type === 'reflection' ? richToPlain(block.content.prompt) : block.content.title || (block.type === 'checklist' ? 'Checklist' : block.type === 'activity' ? 'Activity' : block.type === 'survey' ? 'Survey' : block.type === 'software-practice' ? 'Software practice' : 'Self-assessment');
+  const text = block.type === 'reflection' ? richToPlain(block.content.prompt) : block.content.title || (block.type === 'checklist' ? 'Checklist' : block.type === 'activity' ? 'Activity' : block.type === 'survey' ? 'Survey' : block.type === 'software-practice' ? 'Software practice' : block.type === 'action-plan' ? 'Action plan' : 'Self-assessment');
   return text.replace(/\s+/g, ' ').trim().slice(0, 160) || 'Reflection';
 }

@@ -23,12 +23,16 @@ export function remapBlockAssets(block:Block,ids:Map<string,string>){
 /** Every asset the course document refers to: cover, author photo, lesson banners and blocks, including blocks in columns. */
 export function documentAssetIds(document:CourseDocument):Set<string>{
  const used=new Set<string>(),course=document.course;if(course.cover)used.add(course.cover.assetId);if(course.authorImage)used.add(course.authorImage.assetId);
+ if(course.certificate?.logoId)used.add(course.certificate.logoId);if(course.certificate?.signatureId)used.add(course.certificate.signatureId);
+ for(const question of course.banks.flatMap(b=>b.questions))for(const id of blockAssetIds(question))used.add(id);
  for(const lesson of course.sections.flatMap(s=>s.lessons)){if(lesson.banner?.assetId)used.add(lesson.banner.assetId);for(const block of lesson.blocks)for(const id of blockAssetIds(block))used.add(id);}
  return used;
 }
 /** Points every asset reference in the course at its new identifier. */
 export function remapDocumentAssets(course:CourseDocument['course'],ids:Map<string,string>){
  if(course.cover)course.cover.assetId=ids.get(course.cover.assetId)!;if(course.authorImage)course.authorImage.assetId=ids.get(course.authorImage.assetId)!;
+ if(course.certificate?.logoId)course.certificate.logoId=ids.get(course.certificate.logoId)!;if(course.certificate?.signatureId)course.certificate.signatureId=ids.get(course.certificate.signatureId)!;
+ for(const question of course.banks.flatMap(b=>b.questions))remapBlockAssets(question,ids);
  for(const lesson of course.sections.flatMap(s=>s.lessons)){if(lesson.banner?.assetId)lesson.banner.assetId=ids.get(lesson.banner.assetId)!;for(const block of lesson.blocks)remapBlockAssets(block,ids);}
 }
 export function compactProject(source:PortableProject):PortableProject{
