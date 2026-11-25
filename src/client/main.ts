@@ -51,10 +51,20 @@ async function start(){
     await loadSession();
     if(!hasAuthoringAccess(account)){showAccess();location.replace('/account/');return;}
     ready=true;showAccess();
-    if(hasAuthoringAccess(account))void checkConnection();
+    if(hasAuthoringAccess(account)){void checkConnection();void offerStudio();}
   }catch{
     content.hidden=true;content.inert=true;help.hidden=false;logout.disabled=!account;
     status.textContent='Authoring access could not be checked. Return to your account and try again.';
   }
+}
+// The redesigned studio is offered only where the instance has turned it on.
+async function offerStudio(){
+  try{
+    const response=await fetch('/api/features',{credentials:'same-origin'});if(!response.ok)return;
+    if(!(await response.json() as {studio?:boolean}).studio)return;
+    const nav=document.querySelector('header nav');if(!nav||nav.querySelector('.studio-link'))return;
+    const link=document.createElement('a');link.className='studio-link';link.href='/studio/';link.textContent='Open the new studio';
+    nav.prepend(link,' ');
+  }catch{/* the classic workspace works without it */}
 }
 void start();

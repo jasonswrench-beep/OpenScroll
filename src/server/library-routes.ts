@@ -84,7 +84,8 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
   app.get('/courses',async request => {
     const query=parse(z.strictObject({search:z.string().max(200).default(''),sort:z.enum(['updated','created','title']).default('updated'),offset:z.coerce.number().int().min(0).max(10000).default(0)}),request.query);
     const ordering={updated:'updated_at DESC, id',created:'created_at DESC, id',title:"lower(document->'course'->>'title'), id"}[query.sort];
-    const result=await pool.query(`SELECT id,revision,document->'course'->>'title' AS title,created_at,updated_at,jsonb_array_length(document->'course'->'sections') AS sections FROM courses WHERE owner_id=$1 AND strpos(lower(document->'course'->>'title'),lower($2))>0 ORDER BY ${ordering} LIMIT 100 OFFSET $3`,[request.author!.id,query.search,query.offset]);
+    // Card details for the library: cover, accent, and lesson and block counts read from the stored document.
+    const result=await pool.query(`SELECT id,revision,document->'course'->>'title' AS title,created_at,updated_at,jsonb_array_length(document->'course'->'sections') AS sections,document->'course'->'cover'->>'assetId' AS cover_asset,document->'course'->'theme'->>'accentColor' AS accent,(SELECT count(*)::int FROM jsonb_array_elements(document->'course'->'sections') s,jsonb_array_elements(s->'lessons') l) AS lessons,(SELECT COALESCE(sum(jsonb_array_length(l->'blocks')),0)::int FROM jsonb_array_elements(document->'course'->'sections') s,jsonb_array_elements(s->'lessons') l) AS blocks FROM courses WHERE owner_id=$1 AND strpos(lower(document->'course'->>'title'),lower($2))>0 ORDER BY ${ordering} LIMIT 100 OFFSET $3`,[request.author!.id,query.search,query.offset]);
     return {courses:result.rows};
   });
   app.post('/courses',async request => {

@@ -60,6 +60,8 @@ These commands run through the separate `maintenance` service (`operations` prof
 
 State-changing operator commands create database audit records in `admin_events` containing operation, target ID and time, with no password/token. Host access logs identify the actual operator; the application does not invent an identity for a shared shell. Audit records are part of database backups.
 
+The redesigned authoring workspace is controlled by `OPENSCROLL_STUDIO` (`on` or `off`, default `off` in production); see [OpenScroll Studio](STUDIO.md). The classic workspace stays available either way.
+
 Registration is controlled by `REGISTRATION_ENABLED`. Active course assets are capped at **1 GiB per author**, configurable with `AUTHOR_ASSET_LIMIT_MIB` (1–65536); the server serializes imports and saves per owner and rejects over-budget writes before changing content. Current document limits, 100 courses/author, 100 reusable items/author, 10 snapshots/course and 256 MiB encoded saved-content/snapshot budget also apply. The asset quota excludes document JSON, snapshots and reusable packets. Existing accounts above a lowered limit must remove assets or receive a higher limit before saving. Quotas are limits, not reserved disk capacity; keep registration closed until overall host capacity is established.
 
 ## Backups and disaster recovery

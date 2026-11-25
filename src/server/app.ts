@@ -1,4 +1,4 @@
-import { trustedProxyHops } from './config.js';
+import { trustedProxyHops, studioEnabled } from './config.js';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { projectRoutes } from './project-routes.js';
@@ -10,6 +10,7 @@ import { resolve, basename } from 'node:path';
 export interface Database { query: (text: string) => Promise<unknown>; }
 export async function buildApp(database: Database, staticRoot?: string, accounts?:AccountServices) {
   const hops=trustedProxyHops();
+  const studio=studioEnabled();
   const app = Fastify({ logger: false, trustProxy:hops ? (_address,hop)=>hop<hops : false, requestTimeout: 30_000, connectionTimeout: 30_000 });
   if(process.env.NODE_ENV==='production')app.addHook('onResponse',async(request,reply)=>{if(request.routeOptions.url==='/api/health'&&reply.statusCode===200)return;console.log(JSON.stringify({event:'http',requestId:request.id,method:request.method,route:request.routeOptions.url??'unmatched',status:reply.statusCode,durationMs:Math.round(reply.elapsedTime)}));});
   app.addHook('onSend',async (request,reply) => {
@@ -39,20 +40,25 @@ export async function buildApp(database: Database, staticRoot?: string, accounts
         if(path==='/api/owner'||path.startsWith('/api/owner/'))requireOwner(request);else requireAuthor(request);
       }
     }
-    if(['/app','/app/','/app.html','/player.html'].includes(path)){
+    if(['/app','/app/','/app.html','/player.html','/studio','/studio/','/studio.html'].includes(path)){
       const author=request.author;
       if(!author||!author.verified||author.approvalStatus!=='approved')return reply.redirect('/account/');
+      if(!studio&&path.startsWith('/studio'))return reply.redirect('/app/');
     }
   });
+  // Lets the classic workspace offer the new one only where the operator has turned it on.
+  app.get('/api/features',async()=>({studio}));
   if (accounts) await app.register(accountRoutes,{prefix:'/api',...accounts});
   await app.register(projectRoutes, { prefix: '/api/projects',playerRoot:staticRoot });
   if (staticRoot){
     await app.register(staticFiles,{root:resolve(staticRoot),index:false,allowedPath:(pathName,_root,request)=>{
-      if(!['app.html','player.html'].includes(basename(pathName)))return true;
+      if(!['app.html','player.html','studio.html'].includes(basename(pathName)))return true;
+      if(basename(pathName)==='studio.html'&&!studio)return false;
       return Boolean(request.author?.verified&&request.author.approvalStatus==='approved');
     }});
     app.get('/',async(_request,reply)=>reply.sendFile('index.html'));
     for(const path of ['/app','/app/'])app.get(path,async(_request,reply)=>reply.header('Cache-Control','no-store').sendFile('app.html'));
+    for(const path of ['/studio','/studio/'])app.get(path,async(_request,reply)=>studio ? reply.header('Cache-Control','no-store').sendFile('studio.html') : reply.redirect('/app/'));
     for(const path of ['/account','/account/'])app.get(path,async(_request,reply)=>reply.header('Cache-Control','no-store').sendFile('account.html'));
   }
   return app;

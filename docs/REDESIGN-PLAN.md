@@ -1,8 +1,8 @@
 # OpenScroll redesign plan
 
 Status: draft for review, 2026-11-25. Stage 1 (schema 4) and the Rise importer are built on the `feature/schema-4`
-branch: see [FORMAT-SPEC.md](FORMAT-SPEC.md#version-4-additions) and [RISE-IMPORT.md](RISE-IMPORT.md). The
-interface work has not started. A clickable prototype accompanies this plan (kept outside the repository because it
+branch: see [FORMAT-SPEC.md](FORMAT-SPEC.md#version-4-additions) and [RISE-IMPORT.md](RISE-IMPORT.md). Stage 3,
+the studio shell (library and course page at `/studio/`), is built: see [STUDIO.md](STUDIO.md). A clickable prototype accompanies this plan (kept outside the repository because it
 contains the owner's course content).
 
 ## Goal
