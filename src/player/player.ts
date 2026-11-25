@@ -7,6 +7,8 @@ import { richToDom,richToPlain } from '../shared/rich-text.js';
 import { renderBlock } from '../shared/block-renderer.js';
 import { CourseFlow,type LearnerSnapshot } from './state.js';
 import { renderResponse } from './response-player.js';
+import { renderPractice } from './practice-player.js';
+import { enhanceVideo,enhanceEmbed } from './media-player.js';
 import { renderWorkbook,workbookEntries } from './workbook.js';
 import { isResponseBlock,responseTitle } from '../shared/responses.js';
 export interface PlayerOptions {preview?:boolean;assetURL?:(id:string)=>string;restored?:unknown;changed?:(state:LearnerSnapshot)=>void;storageWarning?:string;}
@@ -54,7 +56,10 @@ export class CoursePlayer {
         }else{
           const rendered=renderBlock(block,this.project,undefined,id=>this.url(id),index=>{if(flow.visit(block.id,index)){this.persist();queueMicrotask(()=>this.refreshGates());}});
           if(isAssessment(block))rendered.replaceChildren(renderAssessment(block,flow,()=>this.persist(),focus=>this.render(focus),id=>this.url(id)));
+          else if(block.type==='software-practice')rendered.replaceChildren(renderPractice(block,flow,()=>this.persist(),()=>this.refreshGates(),id=>this.url(id)));
           else if(isResponseBlock(block))rendered.replaceChildren(renderResponse(block,flow,()=>this.persist(),()=>this.refreshGates()));
+          else if(block.type==='video')enhanceVideo(block,rendered,flow,id=>this.url(id),id=>{const target=this.root.querySelector<HTMLElement>(`[data-focus="question-${id}"]`);target?.scrollIntoView({block:'center'});target?.focus();});
+          else if(block.type==='embed-video')enhanceEmbed(block,rendered,!!this.options.preview);
           wrapper.append(rendered);
           if(block.requiredInteraction){const status=node('p');status.dataset.interactionProgress=block.id;status.setAttribute('role','status');status.textContent=`Explored ${flow.explored(block.id)} of ${interactionCount(block)} items.`;wrapper.append(status);}
           if(required.has(block.id)){const reviewed=flow.reviewed.has(block.id);wrapper.append(this.action(reviewed ? 'Reviewed' : 'Mark as reviewed',()=>{flow.review(block.id);this.message='Content marked as reviewed.';this.persist();this.render(`review-${block.id}`);},`review-${block.id}`,false));const b=wrapper.querySelector<HTMLButtonElement>(`[data-focus="review-${block.id}"]`)!;b.setAttribute('aria-pressed',String(reviewed));b.setAttribute('aria-label',`${reviewed ? 'Reviewed' : 'Mark as reviewed'}: ${this.blockLabel(block.id)}`);}

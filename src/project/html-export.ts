@@ -17,7 +17,10 @@ export async function htmlFiles(input:unknown,playerRoot:string):Promise<Map<str
   const visit=async(key:string)=>{if(visited.has(key))return;visited.add(key);const entry=manifest[key];if(!entry)throw new ProjectError('The HTML player build is incomplete.');await addRuntime(entry.file);for(const css of entry.css ?? [])await addRuntime(css);for(const dependency of entry.imports ?? [])await visit(dependency);};
   await visit('player.html');
   if(!html.includes('/assets/') || !html.includes('type="module"'))throw new ProjectError('The HTML player entry is invalid.');
-  html=html.replaceAll('="/assets/','="./runtime/');files.set('index.html',Buffer.from(html));
+  html=html.replaceAll('="/assets/','="./runtime/');
+  // Embedded video is the one outside service a course may use, and only when it has an embedded video block.
+  if(project.document.course.sections.some(s=>s.lessons.some(l=>l.blocks.some(b=>b.type==='embed-video')))){if(!html.includes("object-src 'none'"))throw new ProjectError('The HTML player entry is invalid.');html=html.replace("object-src 'none'","frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'");}
+  files.set('index.html',Buffer.from(html));
   const json=JSON.stringify(project.document);files.set('course.json',Buffer.from(json+'\n'));
   files.set('publication.json',Buffer.from(JSON.stringify({format:'openscroll-html',version:1,fingerprint:createHash('sha256').update(json).digest('hex')})+'\n'));
   for(const [path,data]of Object.entries(project.files))files.set(path,Buffer.from(data,'base64'));

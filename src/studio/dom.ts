@@ -126,3 +126,13 @@ export function pickFile(accept: string): Promise<File | undefined> {
     document.body.append(input); input.click();
   });
 }
+/** Choose a folder (all of its files), for imports such as an OpenStage Capture take. */
+export function pickFolder(): Promise<File[]> {
+  return new Promise(resolve => {
+    const input = h('input', { attrs: { type: 'file', multiple: true, hidden: true } });
+    input.setAttribute('webkitdirectory', '');
+    input.addEventListener('change', () => { resolve([...(input.files ?? [])]); input.remove(); }, { once: true });
+    input.addEventListener('cancel', () => { resolve([]); input.remove(); }, { once: true });
+    document.body.append(input); input.click();
+  });
+}

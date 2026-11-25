@@ -139,6 +139,16 @@ export class LessonEditor {
     if (field) { field.focus(); caretAtEnd(field); } else this.canvas.querySelector<HTMLElement>(`[data-focus="name-${prepared.block.id}"]`)?.focus();
     this.say(`${blockName(prepared.block)} added.`);
   }
+  /** A new multiple choice question placed after the video and its other checkpoint questions, for a checkpoint. */
+  private addQuestionAfter(videoId: string): string | undefined {
+    const blocks = this.blocks, at = blocks.findIndex(b => b.id === videoId), video = blocks[at];
+    if (at < 0 || video?.type !== 'video') return undefined;
+    const linked = video.content.checkpoints.map(c => blocks.findIndex(b => b.id === c.questionId)).filter(i => i > at);
+    const index = Math.max(at, ...linked) + 1, prepared = prepareBlock('single-choice', this.host.project());
+    if (!this.mutate(items => { items.splice(index, 0, prepared.block); })) return undefined;
+    this.render(); this.say('Question added after the video. Write it on the page.');
+    return prepared.block.id;
+  }
   private openPicker(index: number, opener: HTMLElement) { chooseBlock(opener, { pick: key => this.insert(key, index) }); }
   private addToColumn(columnsId: string, column: number, opener: HTMLElement) {
     const parent = locate(this.blocks, columnsId)?.block as Columns | undefined;
@@ -332,6 +342,13 @@ export class LessonEditor {
         upload: (file, kind, assign, input) => void this.upload(file, kind, assign, input, id),
         assetSource: assetId => this.host.assetSource(assetId),
         addToColumn: (column, opener) => this.addToColumn(id, column, opener),
+        lesson: this.blocks,
+        addQuestionAfter: videoId => this.addQuestionAfter(videoId),
+        changeWithAssets: (assets, mutate) => {
+          const applied = this.mutate((blocks, target) => { for (const { asset, data } of assets) { target.document.assets.push(asset); target.files[assetPath(asset)] = data; } const found = locate(blocks, id); if (!found) throw new Error('This block is no longer available.'); mutate(found.block); }, undefined, true);
+          if (applied) this.render();
+          return applied;
+        },
         selectChild: child => { this.select(child); this.canvas.querySelector<HTMLElement>(`[data-focus="name-${child}"]`)?.scrollIntoView({ block: 'center' }); this.panel.querySelector<HTMLElement>('#insp-heading')?.focus(); },
       }),
     );

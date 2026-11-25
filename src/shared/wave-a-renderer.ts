@@ -14,7 +14,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: 
  * the response blocks show a read-only version that the player replaces with live controls.
  * Returns false for any other block type.
  */
-export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich: Field, editing: boolean, child: (block: Block, prefix: string) => HTMLElement): boolean {
+type Picture = (assetId: string, alt: string, decorative: boolean) => HTMLImageElement;
+export const clock = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich: Field, editing: boolean, child: (block: Block, prefix: string) => HTMLElement, picture?: Picture): boolean {
   switch (block.type) {
     case 'objectives': {
       const c = block.content;
@@ -107,6 +109,34 @@ export function renderWaveA(block: Block, root: HTMLElement, field: Field, rich:
         c.bands.forEach((band, index) => { list.append(el('dt', `${band.min}–${band.max}`), (() => { const dd = el('dd'); dd.append(rich('div', band.text, `bands.${index}.text`, `Meaning of totals ${band.min} to ${band.max}`)); return dd; })()); });
         root.append(list);
       }
+      return true;
+    }
+    case 'embed-video': {
+      const c = block.content, host = c.provider === 'youtube' ? 'YouTube' : 'Vimeo';
+      root.append(field('h3', c.title, 'title', 'Video title', 300, false));
+      const facade = el('div', undefined, 'os-embed'); facade.dataset.embed = block.id;
+      facade.append(el('p', c.videoId ? `Plays from ${host} when you press play.${editing ? '' : ` ${host} may set cookies once it plays.`}` : editing ? 'Paste the YouTube or Vimeo address in the block settings.' : 'This video is not available. Read the transcript below.', 'os-embed-note'));
+      root.append(facade, el('h4', 'Transcript'), field('p', c.transcript, 'transcript', 'Video transcript'));
+      return true;
+    }
+    case 'software-practice': {
+      const c = block.content;
+      root.append(field('h3', c.title, 'title', 'Practice title', 300, false));
+      if (editing || c.intro) root.append(rich('div', c.intro, 'intro', 'Practice introduction'));
+      const list = el('ol', undefined, 'os-practice-steps');
+      c.steps.forEach((step, index) => {
+        const li = el('li');
+        li.append(field('p', step.instruction, `steps.${index}.instruction`, `Step ${index + 1} instruction`, 300, false));
+        if (step.typed) li.append(el('p', `Type: ${step.typed}`, 'os-practice-typed'));
+        if (picture) {
+          const stage = el('div', undefined, 'os-hotspot-stage'); stage.append(picture(step.imageId, step.alt, false));
+          const mark = el('span', undefined, 'os-area'); mark.setAttribute('aria-hidden', 'true');
+          mark.style.left = `${step.target.x}%`; mark.style.top = `${step.target.y}%`; mark.style.width = `${step.target.w}%`; mark.style.height = `${step.target.h}%`;
+          stage.append(mark); li.append(stage);
+        }
+        list.append(li);
+      });
+      root.append(list);
       return true;
     }
     case 'survey': {

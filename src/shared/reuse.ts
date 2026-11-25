@@ -1,10 +1,12 @@
-import { assetPath,parseCourse,eachBlock,type Block,type PortableProject,type CourseDocument } from './course.js';
+import { assetPath,parseCourse,eachBlock,relinkCheckpoints,type Block,type PortableProject,type CourseDocument } from './course.js';
 import { renewIds } from './block-catalog.js';
 import { newId } from './outline.js';
 export type ReusableKind='template'|'group'|'asset';
 export function blockAssetIds(block:Block):string[]{
  if(block.type==='columns')return block.content.columns.flatMap(column=>column.blocks.flatMap(blockAssetIds));
  if(block.type==='assessment')return block.content.image ? [block.content.image.assetId] : [];
+ if(block.type==='software-practice')return block.content.steps.map(step=>step.imageId);
+ if(block.type==='video' && block.content.describedAssetId)return [...(block.content.assetId ? [block.content.assetId] : []),block.content.describedAssetId];
  if(block.type==='image'||block.type==='image-text'||block.type==='labeled-graphic')return [block.content.assetId];
  if(block.type==='gallery')return block.content.items.map(item=>item.assetId);
  if((block.type==='audio'||block.type==='video'||block.type==='attachment') && block.content.assetId)return [block.content.assetId];return [];
@@ -12,6 +14,8 @@ export function blockAssetIds(block:Block):string[]{
 export function remapBlockAssets(block:Block,ids:Map<string,string>){
  if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)remapBlockAssets(child,ids);
  if(block.type==='assessment' && block.content.image)block.content.image.assetId=ids.get(block.content.image.assetId)!;
+ if(block.type==='software-practice')for(const step of block.content.steps)step.imageId=ids.get(step.imageId)!;
+ if(block.type==='video' && block.content.describedAssetId)block.content.describedAssetId=ids.get(block.content.describedAssetId)!;
  if(block.type==='image'||block.type==='image-text'||block.type==='labeled-graphic')block.content.assetId=ids.get(block.content.assetId)!;
  if(block.type==='gallery')for(const image of block.content.items)image.assetId=ids.get(image.assetId)!;
  if((block.type==='audio'||block.type==='video'||block.type==='attachment') && block.content.assetId)block.content.assetId=ids.get(block.content.assetId)!;
@@ -45,19 +49,19 @@ export function importAssets(target:PortableProject,source:PortableProject){
  if(existing){ids.set(asset.id,existing.id);continue;}const copy={...asset,id:newId()};target.document.assets.push(copy);target.files[assetPath(copy)]=data;ids.set(asset.id,copy.id);}return ids;
 }
 export function insertGroup(target:PortableProject,lessonId:string,source:PortableProject,index?:number){
- const lesson=target.document.course.sections.flatMap(s=>s.lessons).find(l=>l.id===lessonId);if(!lesson)throw new Error('Open a lesson before inserting reusable content.');const ids=importAssets(target,source),blocks=source.document.course.sections.flatMap(s=>s.lessons).flatMap(l=>l.blocks).map(block=>{const copy=renewIds(structuredClone(block));remapBlockAssets(copy,ids);return copy;});
+ const lesson=target.document.course.sections.flatMap(s=>s.lessons).find(l=>l.id===lessonId);if(!lesson)throw new Error('Open a lesson before inserting reusable content.');const links=new Map<string,string>(),ids=importAssets(target,source),blocks=source.document.course.sections.flatMap(s=>s.lessons).flatMap(l=>l.blocks).map(block=>{const copy=renewIds(structuredClone(block));links.set(block.id,copy.id);remapBlockAssets(copy,ids);return copy;});relinkCheckpoints(blocks,links);
  lesson.blocks.splice(index??lesson.blocks.length,0,...blocks);return blocks.map(b=>b.id);
 }
 export function templateCopy(source:PortableProject,title=source.document.course.title,author=source.document.course.author):PortableProject{
  const project:PortableProject={document:structuredClone(source.document),files:{}},ids=new Map<string,string>();project.document.assets=[];
  for(const [old,id]of importAssets(project,source))ids.set(old,id);
  const course=project.document.course;course.id=newId();course.title=title;course.author=author;course.createdAt=course.updatedAt=new Date().toISOString();remapDocumentAssets(course,ids);
- for(const section of course.sections){section.id=newId();for(const lesson of section.lessons){lesson.id=newId();for(const objective of lesson.objectives)objective.id=newId();for(const block of lesson.blocks)renewIds(block);}}project.document=parseCourse(project.document);return project;
+ for(const section of course.sections){section.id=newId();for(const lesson of section.lessons){lesson.id=newId();for(const objective of lesson.objectives)objective.id=newId();const links=new Map<string,string>();for(const block of lesson.blocks){const old=block.id;renewIds(block);links.set(old,block.id);}relinkCheckpoints(lesson.blocks,links);}}project.document=parseCourse(project.document);return project;
 }
 /** Restore content while retaining current asset bytes needed by session undo. */
 export function restoredProject(current:PortableProject,snapshot:PortableProject):PortableProject{
  const project=structuredClone(current),ids=importAssets(project,snapshot),course=structuredClone(snapshot.document.course);course.id=current.document.course.id;course.createdAt=current.document.course.createdAt;course.updatedAt=new Date().toISOString();
- remapDocumentAssets(course,ids);const used=new Set([course.id,...project.document.assets.map(a=>a.id)]);const unique=(id:string)=>{const next=used.has(id)?newId():id;used.add(next);return next;};for(const section of course.sections){section.id=unique(section.id);for(const lesson of section.lessons){lesson.id=unique(lesson.id);for(const objective of lesson.objectives)objective.id=unique(objective.id);for(const block of eachBlock(lesson.blocks)){block.id=unique(block.id);if(block.type==='objectives')for(const item of block.content.items)item.id=unique(item.id);}}}project.document.course=course;project.document=parseCourse(project.document);assertProjectBudget(project);return project;
+ remapDocumentAssets(course,ids);const used=new Set([course.id,...project.document.assets.map(a=>a.id)]);const unique=(id:string)=>{const next=used.has(id)?newId():id;used.add(next);return next;};for(const section of course.sections){section.id=unique(section.id);for(const lesson of section.lessons){lesson.id=unique(lesson.id);for(const objective of lesson.objectives)objective.id=unique(objective.id);const links=new Map<string,string>();for(const block of eachBlock(lesson.blocks)){const old=block.id;block.id=unique(block.id);links.set(old,block.id);if(block.type==='objectives')for(const item of block.content.items)item.id=unique(item.id);}relinkCheckpoints(lesson.blocks,links);}}project.document.course=course;project.document=parseCourse(project.document);assertProjectBudget(project);return project;
 }
 export type CourseTheme=CourseDocument['course']['theme'];
 

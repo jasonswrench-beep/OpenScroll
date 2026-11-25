@@ -57,8 +57,11 @@ it. Click into any text to edit it; Ctrl+B and Ctrl+I format formatted text.
 - **Columns.** Two or three columns (equal, wide and narrow, or narrow and wide) hold text, images, lists,
   notes, quotes and link buttons. Each column has its own Add button, and its blocks are selected and edited like
   any other. Changing the column count keeps every block.
-- **Region editor.** Labeled graphic markers can be dragged on the image, moved with the arrow keys (Shift moves
-  further), or placed with number fields. The same editor will place hotspot areas in stage 5.
+- **Region editor.** Labeled graphic markers, hotspot areas and software practice targets can be dragged on the
+  image, moved with the arrow keys (Shift moves further; Alt with arrows resizes an area), or placed with number
+  fields.
+- **Timed cues.** Captions, audio descriptions, chapters and checkpoints use one cue editor beside a video preview;
+  see [MEDIA-AND-INTERACTIONS.md](MEDIA-AND-INTERACTIONS.md#wave-c-audio-description-interactive-video-embedded-video-and-software-practice).
 - **Undo.** Undo and Redo (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z) cover every block change in the lesson for the
   session. Typing in inspector fields uses the browser's own undo while the field has focus.
 - **Narrow screens.** Below 1200 px the panel becomes a sheet along the bottom of the window, so the selected

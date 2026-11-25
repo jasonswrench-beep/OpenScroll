@@ -54,6 +54,11 @@ function responseRecords(block: ResponseBlock, response: LearnerResponse, editio
       const result = selfAssessmentResult(block, response), ratings = (response.ratings ?? []).map(r => r === null ? '-' : String(r + 1)).join(' ');
       return [{ ...base, id: block.id, type: modern ? 'other' : 'fill-in', response: freeText(`${result.complete ? `Total ${result.total} of ${result.max}. ` : ''}Ratings ${ratings}`, limit), description: plain(block.content.title || 'Self-assessment', 250) }];
     }
+    case 'software-practice': {
+      if (!response.test && !response.done) return [];
+      const right = response.test?.filter(Boolean).length ?? 0, all = response.test ? right === response.test.length : false;
+      return [{ id: block.id, type: modern ? 'other' : 'performance', weighting: 0, result: response.test ? (all ? 'correct' : 'incorrect') : 'neutral', response: freeText(response.test ? `${right} of ${response.test.length} steps right the first time` : 'Practised every step', limit), description: plain(block.content.title || 'Software practice', 250) }];
+    }
     case 'survey': return block.content.items.flatMap((item, i) => {
       const answer = response.answers?.[i] ?? null;
       if (answer === null) return [];

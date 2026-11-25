@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { assetPath, parseCourse, eachBlock, ProjectError, type CourseDocument, type PortableProject } from '../shared/course.js';
+import { assetPath, parseCourse, eachBlock, relinkCheckpoints, ProjectError, type CourseDocument, type PortableProject } from '../shared/course.js';
 import { remapDocumentAssets } from '../shared/reuse.js';
 import { validateProject, exportProject } from '../project/archive.js';
 import { HttpError, requireAuthor } from './accounts/routes.js';
@@ -40,6 +40,7 @@ export function duplicateProject(source:PortableProject):PortableProject {
     }
   }
   remapDocumentAssets(document.course,ids);
+  for (const lesson of document.course.sections.flatMap(s=>s.lessons)) relinkCheckpoints(lesson.blocks,ids);
   document.course.title=`Copy of ${document.course.title}`.slice(0,300);
   document.course.createdAt=document.course.updatedAt=new Date().toISOString();
   return validateProject({document,files});

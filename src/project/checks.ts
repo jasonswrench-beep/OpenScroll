@@ -29,7 +29,8 @@ function* walk(project: PortableProject): Generator<{ lesson: Lesson; block: Blo
 }
 const looksLikeFileName = (alt: string) => /\.(png|jpe?g|webp|gif|svg)$/i.test(alt.trim()) || /^(img|image|photo|picture|dsc|screenshot)[\s_-]*\d*$/i.test(alt.trim());
 
-export function courseChecks(project: PortableProject): CheckIssue[] {
+export interface CheckOptions { /** Whether this server allows embedded YouTube and Vimeo video. */ externalVideo?: boolean }
+export function courseChecks(project: PortableProject, options: CheckOptions = {}): CheckIssue[] {
   const issues: CheckIssue[] = [], course = project.document.course;
   const add = (issue: CheckIssue) => issues.push(issue);
   if (!course.title.trim()) add({ effect: 'warning', code: 'course-title', message: 'The course has no title.', outputs: ALL, field: 'course-title' });
@@ -52,6 +53,17 @@ export function courseChecks(project: PortableProject): CheckIssue[] {
     switch (block.type) {
       case 'assessment': { const issue = assessmentIssue(block); if (issue) blocking('question', `Assessment is not ready: ${issue}`, richIsEmpty(block.content.prompt) ? 'prompt' : undefined); break; }
       case 'audio': case 'video':
+        if (block.type === 'video') {
+          const order = lesson.blocks.findIndex(b => b.id === block.id);
+          for (const checkpoint of block.content.checkpoints) {
+            if (checkpoint.kind !== 'question') continue;
+            const at = lesson.blocks.findIndex(b => b.id === checkpoint.questionId);
+            if (at < 0 || lesson.blocks[at]?.type !== 'assessment') warn('checkpoint-missing', 'A video checkpoint points at a question that is no longer in this lesson.');
+            else if (at < order) warn('checkpoint-order', 'A video checkpoint question sits above the video. Move it below the video so learners meet it in order.');
+            else if (lesson.blocks.slice(order + 1, at).some(b => b.type === 'continue')) warn('checkpoint-gated', 'A Continue button sits between this video and its checkpoint question, so learners cannot reach the question when the video pauses.');
+          }
+          if (block.content.describedAssetId && !block.content.assetId) warn('described-only', 'This video has a described version but no main video file.');
+        }
         if (block.content.assetId && !block.content.transcript.trim()) blocking('transcript', `Add a transcript to the ${block.type} block before publishing.`);
         if (block.type === 'video' && block.content.assetId && !block.content.captions.length) blocking('captions', 'Add timed captions to the video block before publishing.');
         if (!block.content.assetId) warn('media-missing', `This ${block.type} block has no file yet. Learners will see the transcript only.`);
@@ -86,6 +98,16 @@ export function courseChecks(project: PortableProject): CheckIssue[] {
       case 'button': if (!safeLink(block.content.url)) warn('link-missing', 'This link button has no web address yet.', undefined, 'content', LIVE); break;
       case 'attachment': if (!block.content.assetId) warn('attachment-missing', 'This attachment has no file yet.', undefined, 'content', LIVE); break;
       case 'heading': if (!block.content.text.trim()) warn('heading-empty', 'This heading is empty. Screen reader users navigate by headings.', 'text'); break;
+      case 'embed-video':
+        if (!options.externalVideo) blocking('external-video-off', 'This server does not allow YouTube or Vimeo video. Upload the video instead, or ask the operator to turn on embedded video.');
+        if (!block.content.videoId) blocking('embed-address', 'Paste the YouTube or Vimeo address for this video.');
+        if (!block.content.transcript.trim()) blocking('embed-transcript', 'Add a transcript to the embedded video before publishing.');
+        review('external-content', `This video loads from ${block.content.provider === 'youtube' ? 'YouTube' : 'Vimeo'} when a learner presses play, so the course is not fully self-contained. Check that your learners' networks allow it.`, undefined, 'content');
+        break;
+      case 'software-practice':
+        if (block.content.steps.some(step => !step.instruction.trim())) blocking('practice-instruction', 'Give every software practice step an instruction before publishing.');
+        if (block.content.steps.some(step => !step.alt.trim())) warn('practice-alt', 'A software practice screenshot has no description. Describe what the screen shows.', undefined, 'content');
+        break;
     }
   }
   if (written) add({ effect: 'warning', code: 'scorm-12-responses', message: 'This course has written responses. SCORM 1.2 can keep only about 4,000 characters of progress, so long answers may stay on the learner’s device. Choose SCORM 2004 when your LMS supports it.', outputs: ['scorm'] });

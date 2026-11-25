@@ -89,6 +89,6 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
   }
   // Blocks inside a column are edited through the same binder, with their path inside the columns block.
   const child=(inner:Block,prefix:string)=>renderBlock(inner,project,bind ? (element,f)=>{const key=prefix+f.key;element.dataset.field=key;bind(element,{...f,key});} : undefined,assetURL);
-  if(!renderWaveA(block,root,field,rich,!!bind,child))renderExtended(block,root,project,field,rich,picture,src,!!bind,explored);
+  if(!renderWaveA(block,root,field,rich,!!bind,child,picture))renderExtended(block,root,project,field,rich,picture,src,!!bind,explored);
   return root;
 }

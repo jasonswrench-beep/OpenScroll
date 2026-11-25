@@ -7,6 +7,7 @@ import { Library, CircleQuestionMark, PanelsTopLeft } from 'lucide';
 import { loadSession, account, hasAuthoringAccess, api, setAccount } from '../client/account-api.js';
 import { libraryView } from './library.js';
 import { courseView } from './course.js';
+import { loadFeatures } from './features.js';
 import { h, icon, openMenu, button } from './dom.js';
 
 interface View { id?: string | undefined; leave: () => Promise<boolean>; update: (route: { lessonId?: string }) => void; }
@@ -74,6 +75,7 @@ async function start() {
   try {
     await loadSession();
     if (!hasAuthoringAccess(account)) { location.replace('/account/'); return; }
+    await loadFeatures();
     await show();
   } catch {
     root.replaceChildren(h('div', { class: 'studio-error', attrs: { role: 'alert' } }, [h('p', { text: 'Your authoring access could not be checked.' }), button('Try again', () => location.reload(), { class: 'btn btn-primary' })]));

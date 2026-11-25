@@ -33,6 +33,8 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'gallery',label:'Image gallery',category:'Media',type:'gallery',variant:'grid',description:'A responsive gallery with individual image descriptions.'},
   {key:'audio',label:'Audio',category:'Media',type:'audio',variant:'player',description:'Uploaded audio with a readable transcript.'},
   {key:'video',label:'Video',category:'Media',type:'video',variant:'player',description:'Uploaded video with captions and a descriptive transcript.'},
+  {key:'interactive-video',label:'Interactive video',category:'Media',type:'video',variant:'interactive',description:'An uploaded video that pauses for questions and notes, with chapters.'},
+  {key:'embed-video',label:'YouTube or Vimeo video',category:'Media',type:'embed-video',variant:'facade',description:'Plays from YouTube or Vimeo only after learners press play. Needs a transcript.'},
   {key:'attachment',label:'Attachment',category:'Media',type:'attachment',variant:'download',description:'A PDF or text file learners can download.'},
   {key:'button',label:'Link button',category:'Media',type:'button',variant:'link',description:'An accessible link to a web resource.'},
   {key:'accordion',label:'Accordion',category:'Interactive',type:'accordion',variant:'stacked',description:'Expandable explanations for related ideas.'},
@@ -40,6 +42,7 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'flashcards',label:'Flashcards',category:'Interactive',type:'flashcards',variant:'grid',description:'Reveal an explanation on the back of each card.'},
   {key:'process',label:'Process',category:'Interactive',type:'process',variant:'steps',description:'A sequence learners explore one step at a time.'},
   {key:'timeline',label:'Timeline',category:'Interactive',type:'timeline',variant:'vertical',description:'A readable sequence of events and explanations.'},
+  {key:'software-practice',label:'Software practice',category:'Interactive',type:'software-practice',variant:'steps',description:'Watch, try and test a task on screenshots, step by step.'},
   {key:'labeled-graphic',label:'Labeled graphic',category:'Interactive',type:'labeled-graphic',variant:'markers',description:'Keyboard accessible image markers and descriptions.'},
   {key:'reflection',label:'Reflection',category:'Activities',type:'reflection',variant:'plain',description:'Learners write a response and can compare it with a sample.'},
   {key:'journal',label:'Journal prompt',category:'Activities',type:'reflection',variant:'journal',description:'A reflection styled as a journal page.'},
@@ -75,13 +78,15 @@ export function renewIds<T extends Block>(block:T):T {
   if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)child.id=newId();
   if(block.type==='objectives')for(const item of block.content.items)item.id=newId();
   if(block.type==='survey')for(const item of block.content.items)item.id=newId();
+  if(block.type==='software-practice')for(const step of block.content.steps)step.id=newId();
+  if(block.type==='video')for(const checkpoint of block.content.checkpoints)checkpoint.id=newId();
   return block;
 }
 export function prepareBlock(key:string,project:PortableProject):{block:Block;asset?:Asset;data?:string} {
   const template=BLOCK_TEMPLATES.find(t=>t.key===key);if(!template)throw new Error('Unknown block template.');
   const appearance={width:'reading',padding:'medium',background:'page'};const base={id:newId(),type:template.type,variant:template.variant,appearance:template.type==='columns' ? {...appearance,width:'wide'} : appearance};
   let asset:Asset|undefined;let imageId='';
-  if(['image','image-text','gallery','labeled-graphic'].includes(template.type) || template.variant==='hotspot'){
+  if(['image','image-text','gallery','labeled-graphic','software-practice'].includes(template.type) || template.variant==='hotspot'){
     const existing=project.document.assets.find(a=>a.mediaType==='image/png' && a.sha256===STARTER_IMAGE_SHA256 && project.files[assetPath(a)]===STARTER_IMAGE_BASE64);
     asset=existing ? undefined : {id:newId(),fileName:'openscroll-starter.png',mediaType:'image/png',byteLength:STARTER_IMAGE_BYTES,sha256:STARTER_IMAGE_SHA256};
     imageId=existing?.id ?? asset!.id;
@@ -113,6 +118,8 @@ export function prepareBlock(key:string,project:PortableProject):{block:Block;as
     activity:{title:'Try it now',minutes:10,steps:['Choose one task you do every week.','Write down one small change you could test.','Try the change once and note what happened.'],output:'What I noticed',required:false,workbook:true},
     checklist:{title:'Before you start',items:['I know what I want to try.','I have the materials I need.','I know who to ask for help.'],required:false,workbook:true},
     'self-assessment':{title:'How confident do you feel?',intro:'Rate each statement honestly. There are no wrong answers.',scale:['Not yet','Somewhat','Mostly','Fully'],items:['I can explain the main idea.','I can use it in my own work.','I can help a colleague use it.'],bands:[{min:3,max:6,text:'You are just getting started. Revisit the examples and try one small step.'},{min:7,max:9,text:'You are well on your way. Pick one area to practise next.'},{min:10,max:12,text:'You are confident. Consider sharing what you know with others.'}],required:false,workbook:true},
+    'embed-video':{provider:'youtube',videoId:'',title:'Watch the overview',transcript:'Add a transcript of everything said and shown in the video.',start:0},
+    'software-practice':{title:'Try it yourself',intro:'Follow each step on the screenshots. In Try, select the right place; in Test, do it without hints.',steps:[{id:newId(),imageId,alt:'Screenshot of the task screen.',instruction:'Select the person on the left.',target:{x:6,y:12,w:32,h:76},typed:'',hint:'Look at the left side of the screen.'}],modes:{watch:true,try:true,test:false},required:false,workbook:false},
     survey:{title:'Tell us what you think',intro:'Your answers help improve this course. There are no right or wrong answers.',scale:['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'],items:[{id:newId(),kind:'rating',prompt:'The examples were useful.',options:[]},{id:newId(),kind:'differential',prompt:'How did the pace feel?',options:['Too slow','Too fast']},{id:newId(),kind:'choice',prompt:'Which part did you use most?',options:['The reading','The activities','The questions']},{id:newId(),kind:'comment',prompt:'What one change would improve this lesson?',options:[]}],required:false,workbook:false},
     columns:{columns:Array.from({length:template.variant==='1-1-1' ? 3 : 2},(_,index)=>({blocks:[blockSchema.parse({id:newId(),type:'paragraph',variant:'with-heading',appearance,content:{heading:['First idea','Second idea','Third idea'][index],text:'Keep each column short. On a phone, columns stack in reading order.'}})]}))},
   };

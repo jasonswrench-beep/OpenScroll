@@ -4,7 +4,7 @@ import { assetPath,safeLink,ProjectError,type Block,type PortableProject } from 
 import { OBJECTIVE_LEVEL_NAMES } from '../shared/objectives.js';
 import { publicationProject } from './readiness.js';
 import { PDF_RENDER_REQUEST_LIMIT } from './pdf-protocol.js';
-import { richHtml,richIsEmpty } from '../shared/rich-text.js';
+import { richHtml,richIsEmpty,richToPlain } from '../shared/rich-text.js';
 import type { Lesson } from '../shared/course.js';
 export const pdfOptionsSchema=z.strictObject({paper:z.enum(['A4','Letter']).default('A4'),includeAnswers:z.boolean().default(false)});
 export type PdfOptions=z.output<typeof pdfOptionsSchema>;
@@ -25,6 +25,7 @@ export function pdfHtml(input:unknown,settings:unknown={}){
  const escapedBytes=(value:string)=>{let bytes=Buffer.byteLength(value);for(const char of value){if(char==='&')bytes+=4;else if(char==='<'||char==='>')bytes+=3;else if(char==='"')bytes+=5;else if(char==="'")bytes+=4;}return bytes;};
  const questions:{block:Extract<Block,{type:'assessment'}>;number:number}[]=[];
  const samples:{prompt:string;sample:string}[]=[];
+ const clock=(seconds:number)=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
  const lines=(count:number)=>`<div class="lines" aria-hidden="true">${'<span></span>'.repeat(count)}</div>`;
  const image=(id:string,alt:string,decorative:boolean)=>{const asset=project.document.assets.find(a=>a.id===id);if(!asset)return text('p','Image unavailable.');const encoded=project.files[assetPath(asset)]!;reserve(encoded.length);return `<img src="data:${asset.mediaType};base64,${encoded}" alt="${escapeHtml(decorative?'':alt)}">`;};
  const figure=(id:string,alt:string,decorative:boolean,caption:string)=>`<figure>${image(id,alt,decorative)}${caption?text('figcaption',caption):''}</figure>`;
@@ -45,7 +46,14 @@ export function pdfHtml(input:unknown,settings:unknown={}){
    case 'gallery':body=block.content.items.map(v=>figure(v.assetId,v.altText,v.decorative,v.caption)).join('');break;
    case 'audio':case 'video':{
     const asset=project.document.assets.find(a=>a.id===block.content.assetId);body=text('h4',block.content.title || (block.type==='audio'?'Audio':'Video'))+text('p',`${block.type==='audio'?'Audio':'Video'} is represented by its transcript.${asset?' Source file: '+asset.fileName:''}`)+text('h5',block.type==='video'?'Descriptive transcript':'Transcript')+text('p',block.content.transcript || 'No transcript supplied.');
-    if(block.type==='video' && block.content.captions.length)body+='<h5>Timed captions (seconds)</h5>'+list(block.content.captions.map(c=>`${c.start}–${c.end}: ${c.text}`));break;
+    if(block.type==='video'){
+     const v=block.content,questionsHere=project.document.course.sections.flatMap(s=>s.lessons).flatMap(l=>l.blocks);
+     if(v.descriptions.length)body+='<h5>Audio description</h5>'+list(v.descriptions.map(c=>`${clock(c.start)}: ${c.text}`));
+     if(v.chapters.length)body+='<h5>Chapters</h5>'+list(v.chapters.map(c=>`${clock(c.time)}: ${c.title}`));
+     if(v.checkpoints.length)body+='<h5>Checkpoints</h5>'+list(v.checkpoints.map(c=>{const q=c.questionId?questionsHere.find(b=>b.id===c.questionId):undefined;return `${clock(c.time)}: ${c.kind==='question'?(q&&q.type==='assessment'?`answer the question “${richToPlain(q.content.prompt).slice(0,120)}”, which follows the video`:'a question'):`${c.title}${richIsEmpty(c.note)?'':' — '+richToPlain(c.note)}`}`;}));
+     if(v.captions.length)body+='<h5>Timed captions (seconds)</h5>'+list(v.captions.map(c=>`${c.start}–${c.end}: ${c.text}`));
+    }
+    break;
    }
    case 'attachment':{
     const asset=project.document.assets.find(a=>a.id===block.content.assetId);body=text('h4',block.content.label || 'Attachment')+text('p',block.content.description)+text('p',asset?`Companion file: ${asset.fileName}. The file itself is not embedded in this PDF.`:'Attachment unavailable.');
@@ -81,6 +89,13 @@ export function pdfHtml(input:unknown,settings:unknown={}){
     body=(c.title?text('h4',c.title):'')+(richIsEmpty(c.intro)?'':rich(c.intro))+`<table class="rating"><thead><tr><th scope="col">Statement</th>${c.scale.map((label,i)=>`<th scope="col">${escapeHtml(label)} (${i+1})</th>`).join('')}</tr></thead><tbody>${c.items.map(item=>`<tr><th scope="row">${escapeHtml(item)}</th>${c.scale.map(()=>'<td class="box"><span></span></td>').join('')}</tr>`).join('')}</tbody></table>`;
     if(c.bands.length)body+=`<p>Add up the numbers you chose. Your total is between ${c.items.length} and ${c.items.length*c.scale.length}.</p><table class="bands"><thead><tr><th scope="col">Total</th><th scope="col">What it means</th></tr></thead><tbody>${c.bands.map(band=>`<tr><th scope="row">${band.min}–${band.max}</th><td>${rich(band.text)}</td></tr>`).join('')}</tbody></table>`;
     break;
+   }
+   case 'embed-video':{
+    const c=block.content,address=c.videoId?(c.provider==='youtube'?`https://www.youtube.com/watch?v=${c.videoId}`:`https://vimeo.com/${c.videoId}`):'';
+    body=text('h4',c.title||'Video')+(address?`<p>Video on ${c.provider==='youtube'?'YouTube':'Vimeo'}: <a href="${escapeHtml(address)}">${escapeHtml(address)}</a></p>`:text('p','Video address not set.'))+text('h5','Transcript')+text('p',c.transcript||'No transcript supplied.');break;
+   }
+   case 'software-practice':{
+    const c=block.content;body=text('h4',c.title||'Software practice')+(richIsEmpty(c.intro)?'':rich(c.intro))+`<ol class="practice">${c.steps.map(step=>`<li>${text('p',step.instruction)}${step.typed?text('p',`Type: ${step.typed}`):''}<figure><div class="graphic">${image(step.imageId,step.alt,false)}<span aria-hidden="true" class="area" style="left:${step.target.x}%;top:${step.target.y}%;width:${step.target.w}%;height:${step.target.h}%"></span></div></figure></li>`).join('')}</ol>`;break;
    }
    case 'survey':{
     const c=block.content;body=(c.title?text('h4',c.title):'')+(richIsEmpty(c.intro)?'':rich(c.intro))+`<ol class="survey">${c.items.map(item=>`<li>${text('p',item.prompt)}${item.kind==='comment'?lines(3):item.kind==='differential'?`<p class="scale">${escapeHtml(item.options[0]??'')} ${c.scale.map((_,i)=>`<span class="box"></span>${i+1}`).join(' ')} ${escapeHtml(item.options[1]??'')}</p>`:`<ul class="boxes inline">${(item.kind==='choice'?item.options:c.scale).map(o=>text('li',o)).join('')}</ul>`}</li>`).join('')}</ol>`;break;

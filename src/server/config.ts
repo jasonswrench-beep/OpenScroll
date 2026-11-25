@@ -20,3 +20,14 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
 /** The new workspace at /studio/ is on by default in development and off in production until an operator turns it on. */
 export function studioEnabled(env:NodeJS.ProcessEnv=process.env){const value=env.OPENSCROLL_STUDIO;if(value===undefined||value==='')return env.NODE_ENV!=='production';if(value==='on')return true;if(value==='off')return false;throw new Error('OPENSCROLL_STUDIO must be on or off.');}
 export function trustedProxyHops(env:NodeJS.ProcessEnv=process.env){if(env.TRUST_PROXY===undefined||env.TRUST_PROXY==='false')return false;if(env.TRUST_PROXY==='1')return 1;throw new Error('TRUST_PROXY must be false or 1 (one trusted reverse proxy).');}
+
+/**
+ * Embedded YouTube and Vimeo video. Off unless the operator turns it on, so exports stay self-contained by default.
+ * When on, a course may embed video that loads from those services only after the learner presses play.
+ */
+export function externalVideoEnabled(env:NodeJS.ProcessEnv=process.env){
+  const value=env.OPENSCROLL_EXTERNAL_VIDEO;
+  if(value===undefined || value==='' || value==='off')return false;
+  if(value==='on')return true;
+  throw new Error('OPENSCROLL_EXTERNAL_VIDEO must be on or off.');
+}

@@ -20,6 +20,7 @@ import { rememberOpened } from './memory.js';
 import { LessonEditor } from './lesson-editor.js';
 import { courseChecks, hasWrittenResponses, type CheckIssue } from '../project/checks.js';
 import { checksDialog, checksBadge } from './checks-panel.js';
+import { features } from './features.js';
 import { previewDialog } from './preview.js';
 import { themeStudio, accentReport } from './theme-studio.js';
 import { accentInk as inkFor, textAccent } from '../shared/contrast.js';
@@ -79,7 +80,7 @@ export function courseView(root: HTMLElement, context: Context) {
   /* ---------- checks ---------- */
   function refreshChecks() {
     if (!controller || disposed) return;
-    issues = courseChecks(controller.project);
+    issues = courseChecks(controller.project, { externalVideo: features.externalVideo });
     const badge = checksBadge(issues);
     checksCount.textContent = badge.blocking ? String(badge.blocking) : badge.warnings ? String(badge.warnings) : '';
     checksCount.hidden = !checksCount.textContent;

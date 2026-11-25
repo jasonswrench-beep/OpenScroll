@@ -4,7 +4,12 @@
  * learners must do) and Access (alternative text, narration, and what assistive technology announces).
  */
 import { ArrowUp, ArrowDown, Trash2, Plus, ImagePlus } from 'lucide';
-import { OBJECTIVE_LEVELS, COLUMN_CHILD_TYPES, type Block, type PortableProject } from '../shared/course.js';
+import { OBJECTIVE_LEVELS, COLUMN_CHILD_TYPES, type Block, type PortableProject, type Asset } from '../shared/course.js';
+import { plainToRich } from '../shared/rich-text.js';
+import { cueEditor } from './cue-editor.js';
+import { parseVideoAddress } from '../shared/video-address.js';
+import { importCaptureTake } from './capture-import.js';
+import { pickFolder } from './dom.js';
 import { OBJECTIVE_LEVEL_NAMES } from '../shared/objectives.js';
 import { templatesFor, prepareBlock } from '../shared/block-catalog.js';
 import { newId } from '../shared/outline.js';
@@ -33,6 +38,12 @@ export interface InspectorContext {
   selectChild: (id: string) => void;
   marker: number;
   setMarker: (index: number) => void;
+  /** The blocks of the lesson being edited, for linking video checkpoints to questions. */
+  lesson: Block[];
+  /** Adds a multiple choice question right after the video (after its last checkpoint question) and returns its id. */
+  addQuestionAfter: (videoId: string) => string | undefined;
+  /** Adds files to the course and changes this block in one step, for imports. */
+  changeWithAssets: (assets: { asset: Asset; data: string }[], mutate: (block: Block) => void) => boolean;
 }
 
 const TABS: [Tab, string][] = [['content', 'Content'], ['style', 'Style'], ['behavior', 'Behavior'], ['access', 'Access']];
@@ -273,6 +284,87 @@ function contentTab(ctx: InspectorContext): HTMLElement[] {
       const host = h('div', { class: 'classic-settings' });
       extendedSettings(host, block, ctx.project, (mutate, key, redraw) => change(mutate, { ...(key ? { group: key } : {}), redraw: !!redraw }), (file, kind, assign, input) => ctx.upload(file, kind, assign, input));
       out.push(h('section', { class: 'insp-sec' }, [heading('Scoring and feedback'), host]));
+      break;
+    }
+    case 'video': {
+      const c = block.content, src = c.assetId ? ctx.assetSource(c.assetId) : undefined;
+      const host = h('div', { class: 'classic-settings' });
+      extendedSettings(host, block, ctx.project, (mutate, key, redraw) => change(mutate, { ...(key ? { group: key } : {}), redraw: !!redraw }), (file, kind, assign, input) => ctx.upload(file, kind, assign, input));
+      out.push(h('section', { class: 'insp-sec' }, [heading('Video file, transcript and caption file'), host]));
+      out.push(h('section', { class: 'insp-sec' }, [heading(`Captions (${c.captions.length})`), cueEditor({ ...(src ? { src } : {}), cues: c.captions, withEnd: true, noun: 'Caption', textLabel: 'Text', multiline: true, max: 500, textMax: 5000,
+        make: start => ({ start, end: Math.round((start + 3) * 10) / 10, text: '' }), change: cues => set<'video'>(b => { b.content.captions = cues.map(q => ({ start: q.start, end: q.end ?? q.start + 3, text: q.text })); }) })]));
+      const describedUpload = button(c.describedAssetId ? 'Replace the described version' : 'Upload a described version', async () => { const file = await pickFile('.mp4'); if (file) ctx.upload(file, 'video', (b, id) => { if (b.type === 'video') b.content.describedAssetId = id; }, describedUpload); }, { icon: Plus, class: 'btn btn-sm' });
+      out.push(h('section', { class: 'insp-sec' }, [heading('Audio description'),
+        note('Give learners who are blind or have low vision the visual information: a second MP4 with description narrated in, or timed description text that is announced and shown as the video plays.'),
+        h('div', { class: 'row' }, [describedUpload, c.describedAssetId ? button('Remove the described version', () => set<'video'>(b => { b.content.describedAssetId = null; }, true), { icon: Trash2, class: 'btn btn-sm' }) : null]),
+        checkField('Pause the video while a description is read', c.pauseForDescriptions, value => set<'video'>(b => { b.content.pauseForDescriptions = value; }), 'Extended description: learners press Continue when they are ready.'),
+        cueEditor({ ...(src ? { src } : {}), cues: c.descriptions, withEnd: true, noun: 'Description', textLabel: 'Text', multiline: true, max: 500, textMax: 5000,
+          make: start => ({ start, end: Math.round((start + 4) * 10) / 10, text: '' }), change: cues => set<'video'>(b => { b.content.descriptions = cues.map(q => ({ start: q.start, end: q.end ?? q.start + 4, text: q.text })); }) })]));
+      if (block.variant === 'interactive') {
+        const questions = (after: number) => ctx.lesson.slice(after + 1).filter((b): b is Extract<Block, { type: 'assessment' }> => b.type === 'assessment');
+        const position = ctx.lesson.findIndex(b => b.id === block.id);
+        out.push(h('section', { class: 'insp-sec' }, [heading(`Chapters (${c.chapters.length})`), cueEditor({ ...(src ? { src } : {}), cues: c.chapters.map(ch => ({ start: ch.time, text: ch.title })), withEnd: false, noun: 'Chapter', textLabel: 'Title', max: 50,
+          make: start => ({ start, text: 'A new chapter' }), change: cues => set<'video'>(b => { b.content.chapters = cues.map(q => ({ time: q.start, title: q.text })); }) })]),
+          h('section', { class: 'insp-sec' }, [heading(`Checkpoints (${c.checkpoints.length})`),
+            note('At each checkpoint the video pauses. A question checkpoint sends learners to a question placed after the video; a note shows its text. Every checkpoint is also listed under the video.'),
+            cueEditor({ ...(src ? { src } : {}), cues: c.checkpoints.map(cp => ({ ...cp, start: cp.time, text: cp.title })), withEnd: false, noun: 'Checkpoint', textLabel: 'Title', max: 50,
+              make: start => ({ id: newId(), start, time: start, kind: 'question' as const, questionId: null, title: '', note: '', text: '' }),
+              change: cues => set<'video'>(b => { b.content.checkpoints = cues.map(q => ({ id: q.id, time: q.start, kind: q.kind, questionId: q.questionId, title: q.text, note: q.note })); }, true),
+              extra: (cue, index, update) => [
+                selectField(`Checkpoint ${index + 1} shows`, [['question', 'A question'], ['note', 'A note']], cue.kind, value => update({ kind: value as 'question' | 'note' })),
+                ...(cue.kind === 'question' ? [
+                  selectField(`Question for checkpoint ${index + 1}`, [['', 'Choose a question after the video'], ...questions(position).map(q => [q.id, `${ctx.lesson.indexOf(q) + 1}. ${richToPlain(q.content.prompt).slice(0, 60) || 'Question'}`] as [string, string])], cue.questionId ?? '', value => update({ questionId: value || null })),
+                  button(`Add a new question for checkpoint ${index + 1}`, () => { const id = ctx.addQuestionAfter(block.id); if (id) update({ questionId: id }); }, { icon: Plus, class: 'btn btn-sm' }),
+                ] : [textField(`Checkpoint ${index + 1} note`, richToPlain(cue.note), value => update({ note: plainToRich(value) }), { multiline: true, max: 2000 })]),
+              ] }),
+            checkField('Learners cannot skip ahead', c.noSkipAhead, value => set<'video'>(b => { b.content.noSkipAhead = value; }), 'They can go back, but not past the furthest point they have watched.')]));
+      } else out.push(note('For chapters and checkpoints, choose the Interactive video template on the Style tab.'));
+      break;
+    }
+    case 'embed-video': {
+      const c = block.content, current = c.videoId ? (c.provider === 'youtube' ? `https://www.youtube.com/watch?v=${c.videoId}` : `https://vimeo.com/${c.videoId}`) : '';
+      const status = h('p', { class: 'hint', attrs: { role: 'status' } });
+      out.push(textField('YouTube or Vimeo address', current, value => {
+        const parsed = parseVideoAddress(value);
+        if (!value.trim()) { set<'embed-video'>(b => { b.content.videoId = ''; }, false, 'address'); status.textContent = ''; return; }
+        if (!parsed) { status.textContent = 'Paste a YouTube or Vimeo video address, such as https://www.youtube.com/watch?v=…'; return; }
+        set<'embed-video'>(b => { b.content.provider = parsed.provider; b.content.videoId = parsed.id; if (parsed.start !== undefined) b.content.start = parsed.start; }, false, 'address');
+        status.textContent = `${parsed.provider === 'youtube' ? 'YouTube' : 'Vimeo'} video ${parsed.id} set.`;
+      }, { max: 300 }), status,
+        numberField('Start at (seconds)', c.start, 0, 86400, value => set<'embed-video'>(b => { b.content.start = value; })),
+        note('Learners load nothing from the video service until they press play, and YouTube videos use its privacy-enhanced player. Write the transcript on the page: it is required, and it is what learners read when their network blocks the service.'));
+      break;
+    }
+    case 'software-practice': {
+      const c = block.content, step = Math.min(ctx.marker, c.steps.length - 1), current = c.steps[step]!;
+      const importButton = button('Import from an OpenStage Capture take', async () => {
+        const files = await pickFolder(); if (!files.length) return;
+        importButton.disabled = true; importStatus.textContent = 'Reading the recording…';
+        try {
+          const result = await importCaptureTake(files, ctx.project);
+          if (ctx.changeWithAssets(result.assets, b => { if (b.type === 'software-practice') b.content.steps = result.steps.slice(0, 60); })) importStatus.textContent = `${result.steps.length} steps imported. ${result.notes.join(' ')}`;
+        } catch (error) { importStatus.textContent = error instanceof Error ? error.message : 'The take could not be imported.'; }
+        finally { if (importButton.isConnected) importButton.disabled = false; }
+      }, { icon: Plus, class: 'btn btn-sm' });
+      const importStatus = h('p', { class: 'hint', attrs: { role: 'status' } });
+      out.push(h('section', { class: 'insp-sec' }, [heading('Modes'),
+        checkField('Watch: show each step with its target outlined', c.modes.watch, value => set<'software-practice'>(b => { b.content.modes.watch = value; if (!value && !b.content.modes.try && !b.content.modes.test) b.content.modes.try = true; }, true)),
+        checkField('Try: learners select each target, with hints', c.modes.try, value => set<'software-practice'>(b => { b.content.modes.try = value; if (!value && !b.content.modes.watch && !b.content.modes.test) b.content.modes.watch = true; }, true)),
+        checkField('Test: no hints; records each step right the first time', c.modes.test, value => set<'software-practice'>(b => { b.content.modes.test = value; if (!value && !b.content.modes.watch && !b.content.modes.try) b.content.modes.try = true; }, true))]),
+        h('section', { class: 'insp-sec' }, [heading('Import'), importButton, importStatus, note('Choose the take folder of a recording made with interaction recording on. Each click becomes a step with a screenshot, a target and an instruction you can edit.')]),
+        itemList({ title: 'Steps', items: c.steps, noun: 'Step', min: 1, max: 60, name: s2 => s2.instruction,
+          row: (s2, i) => i === step ? [
+            textField(`Step ${i + 1} instruction`, s2.instruction, value => set<'software-practice'>(b => { b.content.steps[i]!.instruction = value; }, false, `instruction-${i}`)),
+            textField(`Step ${i + 1} screenshot description`, s2.alt, value => set<'software-practice'>(b => { b.content.steps[i]!.alt = value; }, false, `alt-${i}`), { multiline: true, max: 2000 }),
+            textField(`Step ${i + 1} text to type (optional)`, s2.typed, value => set<'software-practice'>(b => { b.content.steps[i]!.typed = value; }, false, `typed-${i}`)),
+            textField(`Step ${i + 1} hint`, s2.hint, value => set<'software-practice'>(b => { b.content.steps[i]!.hint = value; }, false, `hint-${i}`)),
+            imageChooser(ctx, s2.imageId, (b, id) => { if (b.type === 'software-practice') b.content.steps[i]!.imageId = id; }),
+          ] : [button(`Edit step ${i + 1}`, () => ctx.setMarker(i), { class: 'btn btn-sm' })],
+          add: () => set<'software-practice'>(b => { const last = b.content.steps.at(-1)!; b.content.steps.push({ ...structuredClone(last), id: newId(), instruction: 'Describe the next action.', typed: '', hint: '' }); }, true),
+          remove: i => set<'software-practice'>(b => { b.content.steps.splice(i, 1); }, true), move: (i, d) => set<'software-practice'>(b => moveIn(b.content.steps, i, d), true) }),
+        h('section', { class: 'insp-sec' }, [heading(`Target for step ${step + 1}`), regionEditor({ src: ctx.assetSource(current.imageId), alt: '', name: `${block.id}-${step}`, shape: 'rect', selected: 0,
+          regions: [{ ...current.target, label: current.instruction }], select: () => undefined,
+          change: (_index, region) => set<'software-practice'>(b => { const target = b.content.steps[step]?.target; if (target) { target.x = region.x; target.y = region.y; target.w = region.w ?? target.w; target.h = region.h ?? target.h; } }) })]));
       break;
     }
     default: {

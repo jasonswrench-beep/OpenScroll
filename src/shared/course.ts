@@ -29,6 +29,8 @@ const buttonBlock = z.strictObject({...base,type:z.literal('button'),variant:z.l
 export const COLUMN_CHILD_TYPES = ['heading','paragraph','list','statement','quote','image','button'] as const;
 const columnChildSchema = z.discriminatedUnion('type', [headingBlock, paragraphBlock, listBlock, statementBlock, quoteBlock, imageBlock, buttonBlock]);
 const percent = z.number().min(0).max(100);
+const seconds = z.number().min(0).max(86400);
+const region = z.strictObject({ x: percent, y: percent, w: percent, h: percent });
 const numericSchema = z.strictObject({ mode: z.enum(['exact', 'range']), value: z.number().min(-1e12).max(1e12), tolerance: z.number().min(0).max(1e12), min: z.number().min(-1e12).max(1e12), max: z.number().min(-1e12).max(1e12), unit: z.string().max(40) });
 /** Shared by blocks that collect a learner response: whether one is needed to finish, and whether it appears in My workbook. */
 const responseOptions = { required: z.boolean(), workbook: z.boolean() };
@@ -41,7 +43,12 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...base, type: z.literal('spacer'), variant: z.enum(['small', 'medium', 'large']), content: z.strictObject({}) }),
   z.strictObject({...base,type:z.literal('gallery'),variant:z.literal('grid'),content:z.strictObject({items:z.array(z.strictObject(imageContent)).min(1).max(30)})}),
   z.strictObject({...base,type:z.literal('audio'),variant:z.literal('player'),content:z.strictObject({title:label,assetId:idSchema.nullable(),transcript:text})}),
-  z.strictObject({...base,type:z.literal('video'),variant:z.literal('player'),content:z.strictObject({title:label,assetId:idSchema.nullable(),transcript:text,captionLanguage:z.string().min(2).max(35),captions:z.array(cue).max(500)})}),
+  z.strictObject({...base,type:z.literal('video'),variant:z.enum(['player','interactive']),content:z.strictObject({title:label,assetId:idSchema.nullable(),transcript:text,captionLanguage:z.string().min(2).max(35),captions:z.array(cue).max(500),
+    // Wave C: audio description (a described version and/or timed description text) and interactive video.
+    describedAssetId:idSchema.nullable().default(null),descriptions:z.array(cue).max(500).default([]),pauseForDescriptions:z.boolean().default(false),
+    chapters:z.array(z.strictObject({time:seconds,title:label})).max(50).default([]),
+    checkpoints:z.array(z.strictObject({id:idSchema,time:seconds,kind:z.enum(['question','note']),questionId:idSchema.nullable(),title:label,note:rich})).max(50).default([]),
+    noSkipAhead:z.boolean().default(false)})}),
   z.strictObject({...base,type:z.literal('attachment'),variant:z.literal('download'),content:z.strictObject({label,description:text,assetId:idSchema.nullable()})}),
   z.strictObject({...base,type:z.literal('accordion'),variant:z.literal('stacked'),content:z.strictObject({items:z.array(item).min(1).max(50)})}),
   z.strictObject({...base,type:z.literal('tabs'),variant:z.literal('horizontal'),content:z.strictObject({items:z.array(item).min(1).max(50)})}),
@@ -67,6 +74,8 @@ export const blockSchema = z.discriminatedUnion('type', [
   z.strictObject({...base,type:z.literal('checklist'),variant:z.literal('ticks'),content:z.strictObject({title:label,items:z.array(label).min(1).max(50),...responseOptions})}),
   z.strictObject({...base,type:z.literal('self-assessment'),variant:z.literal('scale'),content:z.strictObject({title:label,intro:rich,scale:z.array(label).min(2).max(7),items:z.array(label).min(1).max(30),bands:z.array(z.strictObject({min:z.number().int().min(0).max(1000),max:z.number().int().min(0).max(1000),text:rich})).max(8),...responseOptions})}),
   z.strictObject({...base,type:z.literal('survey'),variant:z.literal('form'),content:z.strictObject({title:label,intro:rich,scale:z.array(label).min(2).max(7),items:z.array(z.strictObject({id:idSchema,kind:z.enum(['rating','differential','choice','comment']),prompt:label,options:z.array(label).max(10)})).min(1).max(30),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('embed-video'),variant:z.literal('facade'),content:z.strictObject({provider:z.enum(['youtube','vimeo']),videoId:z.string().max(40),title:label,transcript:text,start:z.number().int().min(0).max(86400)})}),
+  z.strictObject({...base,type:z.literal('software-practice'),variant:z.literal('steps'),content:z.strictObject({title:label,intro:rich,steps:z.array(z.strictObject({id:idSchema,imageId:idSchema,alt:z.string().max(2000),instruction:label,target:region,typed:label,hint:label})).min(1).max(60),modes:z.strictObject({watch:z.boolean(),try:z.boolean(),test:z.boolean()}),...responseOptions})}),
   z.strictObject({...base,type:z.literal('columns'),variant:z.enum(['1-1','1-1-1','2-1','1-2']),content:z.strictObject({columns:z.array(z.strictObject({blocks:z.array(columnChildSchema).max(20)})).min(2).max(3)})}),
 ]);
 export const assetSchema = z.strictObject({
@@ -97,6 +106,10 @@ export type CourseDocument = z.infer<typeof courseSchema>;
 export type Asset = z.infer<typeof assetSchema>;
 export type Block = z.infer<typeof blockSchema>;
 export type ColumnChild = z.infer<typeof columnChildSchema>;
+/** After blocks get new identifiers, points each interactive video checkpoint at its question's new identifier. */
+export function relinkCheckpoints(blocks: readonly Block[], ids: ReadonlyMap<string, string>) {
+  for (const block of blocks) if (block.type === 'video') for (const checkpoint of block.content.checkpoints) if (checkpoint.questionId && ids.has(checkpoint.questionId)) checkpoint.questionId = ids.get(checkpoint.questionId)!;
+}
 /** Every block in reading order, including the blocks inside columns. */
 export function eachBlock(blocks: readonly Block[]): Block[] {
   const all: Block[] = [];
@@ -144,7 +157,7 @@ export function migrateToCurrent(input: Loose): Loose {
   doc.schemaVersion = SCHEMA_VERSION;
   return doc;
 }
-const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey']);
+const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey','embed-video','software-practice']);
 /** Older versions migrate by copying; original archives and stored rows remain untouched until explicit save. */
 export function parseCourse(input: unknown): CourseDocument {
   if (input === null || typeof input !== 'object' || !('schemaVersion' in input)) throw new ProjectError('The course is missing its schema version.');
@@ -199,6 +212,9 @@ export function parseCourse(input: unknown): CourseDocument {
         if(block.type==='assessment' && block.content.image)checkImage(block.content.image.assetId);
         if(block.type==='assessment' && block.content.areas.some(a=>a.x+a.w>100.001 || a.y+a.h>100.001))throw new ProjectError('Hotspot areas must stay inside the image.');
         if(block.type==='survey')for(const item of block.content.items)claim(item.id);
+        if(block.type==='video'){for(const checkpoint of block.content.checkpoints)claim(checkpoint.id);if(block.content.describedAssetId && assets.get(block.content.describedAssetId)?.mediaType!=='video/mp4')throw new ProjectError(`Missing or incompatible described video: ${block.content.describedAssetId}.`);}
+        if(block.type==='embed-video' && block.content.videoId && !(block.content.provider==='youtube' ? /^[A-Za-z0-9_-]{11}$/ : /^\d{5,12}$/).test(block.content.videoId))throw new ProjectError('The embedded video address is not a YouTube or Vimeo video.');
+        if(block.type==='software-practice'){for(const step of block.content.steps){claim(step.id);checkImage(step.imageId);if(step.target.x+step.target.w>100.001 || step.target.y+step.target.h>100.001)throw new ProjectError('A practice target must stay inside its screenshot.');}if(!block.content.modes.watch && !block.content.modes.try && !block.content.modes.test)throw new ProjectError('Turn on at least one software practice mode.');}
         if(block.type==='assessment' && (block.content.placements.length>block.content.items.length || block.content.placements.some(i=>i>=Math.max(1,block.content.groups.length))))throw new ProjectError('Sorting placements must match existing cards and groups.');
         if (block.type === 'image' || block.type === 'image-text' || block.type==='labeled-graphic') checkImage(block.content.assetId);
         if(block.type==='gallery')for(const image of block.content.items)checkImage(image.assetId);

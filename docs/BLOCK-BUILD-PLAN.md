@@ -6,7 +6,10 @@ responses and My workbook (F2) and the region editor (F4). Because schema 4 is n
 shapes joined it instead of starting version 5; later waves do the same until the release stage. Stage 5 added the question engine
 with per-question LMS reporting (F3), Wave B's short answer, numeric, hotspot and survey, Checks, the export
 dialog, the device preview and the theme studio. Question banks and `.openassess` import moved to stage 7, because
-they need the course resources panel (F6) that stage 7 builds.
+they need the course resources panel (F6) that stage 7 builds. Stage 6 added the timed cue editor (F5), audio
+description, interactive video, embedded video behind an instance setting that is off by default (F7, pending the
+owner's decision), software practice with OpenStage Capture import, and test results reported as `performance`.
+Size-limit settings wait for the owner's decision and move to the release stage with the server work they need.
 
 ## Scope
 

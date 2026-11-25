@@ -26,3 +26,6 @@ li>.os-rich>p:only-child{margin:0}
 .os-area{position:absolute;border:2px solid var(--os-accent);background:color-mix(in srgb,var(--os-accent) 14%,transparent);border-radius:.3rem;font-weight:700;font-size:.85rem;padding:0 .3rem;color:var(--os-accent-ink);background-clip:padding-box}
 .os-area{color:#fff;text-shadow:0 0 2px #000}
 .os-survey{padding-left:1.4rem;display:grid;gap:.6rem}.os-scale-preview{font-size:.9rem;opacity:.8;margin:0}
+.os-embed{display:grid;place-items:center;min-height:12rem;border-radius:.4rem;background:color-mix(in srgb,var(--os-accent) 10%,#f4f4f4);padding:1rem;text-align:center}.os-embed-note{margin:0;font-size:.95rem}
+.os-practice-steps{padding-left:1.4rem;display:grid;gap:1rem}.os-practice-typed{font-family:ui-monospace,monospace;font-size:.9rem}
+.os-video-marks{padding-left:1.4rem}

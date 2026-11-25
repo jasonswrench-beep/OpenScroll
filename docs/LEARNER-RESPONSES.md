@@ -13,6 +13,7 @@ course file, the library, or the authoring database.
 | Checklist | Which items are ticked | Every item ticked |
 | Self-assessment | One rating per statement | Every statement rated |
 | Survey | A rating, choice or comment for each question | Every rating and choice question answered (comments are optional) |
+| Software practice | Whether every step was practised, and in Test, whether each step was right the first time | The test finished (when Test is on), otherwise every step practised |
 
 A block that is not required never holds up the lesson. A required block appears in the lesson's "To finish this
 lesson" list until its response meets the rule, and a Continue button set to wait for the blocks above it waits for

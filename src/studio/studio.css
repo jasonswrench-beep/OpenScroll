@@ -385,3 +385,6 @@ dialog.theme-dialog{width:min(1200px,calc(100vw - 24px))}
 .theme-lesson{padding:0 0 24px}
 .theme-lesson .os-block{pointer-events:none}
 @media (max-width:899px){.theme-studio{grid-template-columns:1fr}}
+/* Timed cue editor (F5) */
+.cue-editor{display:grid;gap:8px}.cue-editor video{width:100%;max-height:220px;border-radius:6px;background:#000}
+.cue .row{align-items:end}.cue-fld label{font-size:12px;font-weight:600;color:var(--muted)}.cue-time{width:96px!important;font-family:var(--mono)}.cues{list-style:none;margin:0;padding:0;display:grid;gap:8px}
