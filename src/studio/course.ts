@@ -1,14 +1,13 @@
 /**
  * The course page: the cover edited where learners see it, lessons and sections, course details and theme, honest
- * saving with recovery and conflict handling, and (until the new lesson editor ships) the existing block editor for
- * lessons. All saving goes through the shared SaveController and revision-checked API.
+ * saving with recovery and conflict handling, and the lesson editor. All saving goes through the shared
+ * SaveController and revision-checked API.
  */
 import { ArrowUp, ArrowDown, ArrowLeft, Ellipsis, Pencil, Copy, Trash2, Plus, Eye, Package, CircleCheck, LoaderCircle, TriangleAlert, OctagonAlert, Camera, Download, RotateCcw, Settings2, ImagePlus, X as XIcon, Globe, GraduationCap, FileText, FileArchive, FolderInput } from 'lucide';
 import type { Account } from '../client/account-api.js';
 import { SaveController, type RecoveryDraft } from '../client/save-controller.js';
 import { readDraft, storeDraft } from '../client/recovery.js';
 import { bindInline, bindRich } from '../client/inline-text.js';
-import { BlockEditor } from '../client/block-editor.js';
 import { readImage } from '../client/images.js';
 import { openSnapshots } from '../client/snapshots.js';
 import { previewCourse, publishHtml, publishPdf } from '../client/publishing.js';
@@ -18,6 +17,7 @@ import { richToDom, RICH_TEXT_MAX } from '../shared/rich-text.js';
 import { library, projects, fileName } from './api.js';
 import { h, icon, button, openDialog, confirmAction, openMenu, toast, announce, saveBlob, pickFile } from './dom.js';
 import { rememberOpened } from './memory.js';
+import { LessonEditor } from './lesson-editor.js';
 import LOGO from '../assets/openscroll.svg';
 
 type Course = CourseDocument['course'];
@@ -29,15 +29,15 @@ const SAVE_TEXT = { saved: 'Saved', pending: 'Changes pending', saving: 'Savingâ
 export function courseView(root: HTMLElement, context: Context) {
   const owner = context.account.id, id = context.id;
   let controller: SaveController | undefined, candidate: RecoveryDraft | undefined, candidateConflict = false;
-  let lessonId = context.lessonId, editor: BlockEditor | undefined, editorScope = crypto.randomUUID(), disposed = false;
+  let lessonId = context.lessonId, editor: LessonEditor | undefined, disposed = false;
   root.replaceChildren(h('div', { class: 'studio-loading', attrs: { role: 'status' } }, ['Opening courseâ€¦']));
 
   const crumbs = h('nav', { class: 'crumbs', attrs: { 'aria-label': 'Location' } });
   const saveButton = h('button', { class: 'savebtn', attrs: { type: 'button', 'data-state': 'saved', 'aria-label': 'Save status, snapshots, and recovery' } });
   saveButton.addEventListener('click', () => saveSheet());
   const live = h('span', { class: 'sr-only', attrs: { role: 'status' } });
-  const preview = button('Preview', () => { if (controller) previewCourse(controller.project, preview, lessonId); }, { icon: Eye, class: 'btn btn-ghost lbl' });
-  const exporter = button('Export', () => exportDialog(exporter), { icon: Package, class: 'btn btn-primary lbl' });
+  const preview = button('Preview', () => { if (controller) previewCourse(controller.project, preview, lessonId); }, { icon: Eye, class: 'btn btn-ghost has-label' });
+  const exporter = button('Export', () => exportDialog(exporter), { icon: Package, class: 'btn btn-primary has-label' });
   const top = h('header', { class: 'top' }, [
     h('div', { class: 'top-l' }, [h('button', { class: 'logo-btn', attrs: { type: 'button', 'aria-label': 'Back to library' }, on: { click: () => context.toLibrary() } }, [h('img', { attrs: { src: LOGO, alt: '' } })]), crumbs]),
     h('div', { class: 'top-r' }, [saveButton, live, h('span', { class: 'vsep' }), preview, exporter]),
@@ -359,25 +359,17 @@ export function courseView(root: HTMLElement, context: Context) {
     } catch (error) { toast(error instanceof Error ? error.message : 'The image could not be added.'); opener.focus(); }
   }
 
-  /* ---------- lesson editing (existing block editor until stage 4) ---------- */
-  function lessonHtml(lesson: Lesson): HTMLElement {
-    const title = h('input', { attrs: { id: 'lesson-title', value: lesson.title, maxlength: 300, 'aria-label': 'Lesson title' } });
-    title.addEventListener('input', () => { if (edit(p => { const target = p.document.course.sections.flatMap(s => s.lessons).find(l => l.id === lesson.id); if (target) target.title = title.value; })) drawCrumbs(); });
-    const all = lessons();
-    const switcher = h('select', { class: 'inp', attrs: { id: 'lesson-switch', 'aria-label': 'Go to lesson' } });
-    all.forEach((l, i) => switcher.add(new Option(`${i + 1}. ${l.title || 'Untitled lesson'}`, l.id, false, l.id === lesson.id)));
-    switcher.style.maxWidth = '260px';
-    switcher.addEventListener('change', () => { if (editor?.busy) { switcher.value = lesson.id; toast('Wait for the upload to finish before changing lessons.'); return; } context.go(switcher.value); });
-    const host = h('div', { class: 'classic' });
-    const pane = h('div', { class: 'lesson-pane' }, [
-      h('div', { class: 'lesson-head' }, [button('Back to course', () => { if (editor?.busy) { toast('Wait for the upload to finish first.'); return; } context.go(undefined); }, { icon: ArrowLeft }), title, switcher]),
-      h('p', { class: 'hint', text: 'Lessons use the current block editor until the new lesson editor arrives. Your edits save the same way.' }),
-      host,
-    ]);
-    editor?.reset();
-    editor = new BlockEditor(host, { project: () => controller?.project, apply: (change, assetsChanged) => edit(change, assetsChanged), navigate: next => context.go(next) });
-    editor.show(editorScope, lesson.id);
-    return pane;
+  /* ---------- lesson editing ---------- */
+  function lessonEditor() {
+    editor ??= new LessonEditor({
+      project: () => controller!.project,
+      edit: (change, assetsChanged) => edit(change, assetsChanged),
+      go: next => context.go(next),
+      assetSource: assetId => assetSource(assetId),
+      themeVars: element => themeVars(element),
+      titleChanged: () => drawCrumbs(),
+    });
+    return editor;
   }
 
   /* ---------- drawing ---------- */
@@ -388,12 +380,14 @@ export function courseView(root: HTMLElement, context: Context) {
     const lesson = lessonId ? lessons().find(l => l.id === lessonId) : undefined;
     if (lessonId && !lesson) { toast('That lesson no longer exists.'); lessonId = undefined; context.go(undefined); return; }
     if (lesson) {
-      body.classList.add('no-side'); side.replaceChildren(); side.hidden = true;
-      canvas.replaceChildren(lessonHtml(lesson));
+      const lessons = lessonEditor();
+      body.classList.add('lesson-mode'); side.hidden = false; side.setAttribute('aria-label', 'Lesson and block settings');
+      lessons.show(lesson.id);
+      canvas.replaceChildren(lessons.canvas);
+      side.replaceChildren(lessons.panel);
       rememberOpened(owner, { id, title: course().title, lessonId: lesson.id, lessonTitle: lesson.title });
     } else {
-      editor?.reset(); editor = undefined; editorScope = crypto.randomUUID();
-      body.classList.remove('no-side'); side.hidden = false;
+      body.classList.remove('lesson-mode'); side.hidden = false; side.setAttribute('aria-label', 'Course details');
       const paper = h('article', { class: 'paper' }, [coverHtml(), outlineHtml()]);
       themeVars(paper);
       canvas.replaceChildren(paper);
@@ -441,7 +435,7 @@ export function courseView(root: HTMLElement, context: Context) {
         if (controller.dirty && !await confirmAction('Leave this course?', 'Some changes are not confirmed yet. A recovery copy stays in this browser and is offered the next time you open the course.', 'Leave course', saveButton)) return false;
         await controller.keepDraft();
       }
-      disposed = true; controller?.dispose(); editor?.reset();
+      disposed = true; controller?.dispose();
       window.removeEventListener('beforeunload', beforeUnload);
       return true;
     },

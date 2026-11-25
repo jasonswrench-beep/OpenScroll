@@ -6,7 +6,8 @@ export function newSection():Section {return {id:newId(),title:'Untitled section
 export function newLesson():Lesson {return {id:newId(),title:'Untitled lesson',blocks:[],banner:null,objectives:[]};}
 export function copyLesson(source:Lesson):Lesson {
   const copy=structuredClone(source);copy.id=newId();copy.title=`Copy of ${source.title}`.slice(0,300);
-  for(const block of copy.blocks)block.id=newId();
+  for(const objective of copy.objectives)objective.id=newId();
+  for(const block of copy.blocks){block.id=newId();if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)child.id=newId();if(block.type==='objectives')for(const item of block.content.items)item.id=newId();}
   return copy;
 }
 export function copySection(source:Section):Section {

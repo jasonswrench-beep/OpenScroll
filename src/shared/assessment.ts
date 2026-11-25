@@ -6,9 +6,9 @@ export function isAssessment(block:Block):block is AssessmentBlock{return block.
 const normalize=(s:string,sensitive=false)=>{const value=s.normalize('NFC').trim().replace(/\s+/g,' ');return sensitive ? value : value.toLowerCase();};
 export function assessmentIssue(block:AssessmentBlock):string|undefined{
  const c=block.content;if(richIsEmpty(c.prompt))return 'Add a question prompt.';
- if(['single-choice','multiple-response'].includes(block.variant)){
+ if(['single-choice','multiple-response','true-false'].includes(block.variant)){
   if(c.options.length<2 || c.options.some(x=>!x.trim()) || new Set(c.options.map(x=>normalize(x))).size!==c.options.length)return 'Add at least two distinct, nonempty choices.';
-  if(!c.correct.length || (block.variant==='single-choice' && c.correct.length!==1))return 'Select the correct answer or answers.';
+  if(!c.correct.length || (block.variant!=='multiple-response' && c.correct.length!==1))return 'Select the correct answer or answers.';
  }
  if(block.variant==='fill-blank' && (!c.accepted.length || c.accepted.some(x=>!x.trim())))return 'Add at least one nonempty accepted answer.';
  if(block.variant==='matching' && (c.pairs.length<2 || c.pairs.some(p=>!p.left.trim() || !p.right.trim()) || new Set(c.pairs.map(p=>normalize(p.left))).size!==c.pairs.length || new Set(c.pairs.map(p=>normalize(p.right))).size!==c.pairs.length))return 'Add at least two distinct, nonempty matching pairs.';
@@ -30,7 +30,7 @@ export function validAnswer(block:AssessmentBlock,value:unknown,complete=true):v
  if(kind==='matches')return items.length===count && (!complete || new Set(items).size===count);
  if(new Set(items).size!==items.length)return false;
  if(kind==='order')return items.length===count;
- return (!complete || items.length>0) && (block.variant!=='single-choice' || items.length<=1);
+ return (!complete || items.length>0) && (block.variant==='multiple-response' || items.length<=1);
 }
 export function correctAnswer(block:AssessmentBlock,answer:Answer){
  if(assessmentIssue(block) || !validAnswer(block,answer))return false;

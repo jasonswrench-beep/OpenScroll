@@ -142,6 +142,21 @@ Formatted text is a canonical subset of HTML: `<p>`, `<h3>`, `<h4>`, `<ul>`, `<o
 
 The assessment variant `sorting` is renamed `ordering` so it cannot be confused with sorting cards into groups. A banner that uses the course cover names no asset; one that uses its own image must name an image asset. Section titles may be empty, in which case learner outputs show no section heading.
 
+**Wave A blocks.** Version 4 is not yet released, so the first block wave joins it rather than starting version 5. Older files never contain these types; a version 1–3 file that names one is rejected.
+
+| Block | Variants | Content |
+| --- | --- | --- |
+| `objectives` | `list`, `cards` | `heading`, `intro` (formatted), `items` (1–30 `{ id, text, level }`, level as for lesson objectives) |
+| `table` | `lined`, `striped` | `caption`, `head` (0–8 plain column headings), `rows` (1–60 rows of 1–8 formatted cells), `headerColumn` |
+| `reflection` | `plain`, `journal` | `prompt` and `sample` (formatted), `placeholder`, `minWords` (0–1000), `required`, `workbook` |
+| `activity` | `card` | `title`, `minutes` (0–600), `steps` (1–20 formatted), `output` (writing box label, empty for none), `required`, `workbook` |
+| `checklist` | `ticks` | `title`, `items` (1–50 plain), `required`, `workbook` |
+| `self-assessment` | `scale` | `title`, `intro` (formatted), `scale` (2–7 labels), `items` (1–30 statements), `bands` (0–8 `{ min, max, text }`), `required`, `workbook` |
+| `columns` | `1-1`, `1-1-1`, `2-1`, `1-2` | `columns` (2, or 3 for `1-1-1`), each `{ blocks }` with at most 20 heading, paragraph, list, statement, quote, image or button blocks |
+| `assessment` | adds `true-false` | exactly two `options` and one `correct` answer |
+
+Integrity checks: every table row has the same number of cells as the header; the column count matches the layout; a score band's `min` is not above its `max`; identifiers are unique across blocks inside columns and objective items; images inside columns must name image assets. Learner responses to reflection, activity, checklist and self-assessment blocks are learner state, never part of the course file (see [LEARNER-RESPONSES.md](LEARNER-RESPONSES.md)).
+
 ## Version and migration policy
 
 Version 1 is the initial development format; version 2 adds the Step 8 media/interaction families; version 3 adds assessments and exploration requirements; version 4 adds formatted text and the fields above. Migration to version 4 runs on a copy: plain text is escaped and line breaks become paragraphs or `<br>`, `sorting` becomes `ordering`, and new fields take their defaults. `parseCourse` validates supported v1 input and copies it into v3 by changing only the version. It rejects new block types incorrectly labeled v1. The original archive and stored database row remain unchanged on read; an explicit save/download targets v3. The v1/v2 schemas and original starter fixtures are retained. Unknown properties/types are never silently stripped. Version 0 and newer unsupported versions fail explicitly and preserve their sources.

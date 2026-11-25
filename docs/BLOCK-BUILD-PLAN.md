@@ -1,7 +1,10 @@
 # Block build plan
 
-Status: draft for review, 2026-11-25. Companion to [REDESIGN-PLAN.md](REDESIGN-PLAN.md). Stage 1 is built on the
-`feature/schema-4` branch; the block waves are not started.
+Status: draft for review, 2026-11-25. Companion to [REDESIGN-PLAN.md](REDESIGN-PLAN.md). Stages 1, 3 and 4 are built
+on the `feature/schema-4` branch: schema 4, the studio shell, and the new lesson editor with Wave A, learner
+responses and My workbook (F2) and the region editor (F4). Because schema 4 is not yet released, Wave A's block
+shapes joined it instead of starting version 5; later waves do the same until the release stage. Per-question LMS
+reporting of responses (`cmi.interactions`) arrives with F3 in stage 5.
 
 ## Scope
 

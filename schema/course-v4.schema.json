@@ -971,6 +971,116 @@
                               },
                               "type": {
                                 "type": "string",
+                                "const": "button"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "const": "link"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "label": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "url": {
+                                    "type": "string",
+                                    "maxLength": 2048
+                                  }
+                                },
+                                "required": [
+                                  "label",
+                                  "url"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
                                 "const": "image-text"
                               },
                               "variant": {
@@ -1758,116 +1868,6 @@
                                   "label",
                                   "description",
                                   "assetId"
-                                ],
-                                "additionalProperties": false
-                              }
-                            },
-                            "required": [
-                              "id",
-                              "appearance",
-                              "type",
-                              "variant",
-                              "content"
-                            ],
-                            "additionalProperties": false
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "id": {
-                                "type": "string",
-                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
-                              },
-                              "appearance": {
-                                "type": "object",
-                                "properties": {
-                                  "width": {
-                                    "type": "string",
-                                    "enum": [
-                                      "reading",
-                                      "wide",
-                                      "full"
-                                    ]
-                                  },
-                                  "padding": {
-                                    "type": "string",
-                                    "enum": [
-                                      "small",
-                                      "medium",
-                                      "large"
-                                    ]
-                                  },
-                                  "background": {
-                                    "type": "string",
-                                    "enum": [
-                                      "page",
-                                      "surface",
-                                      "accent"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "width",
-                                  "padding",
-                                  "background"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "narration": {
-                                "type": "object",
-                                "properties": {
-                                  "script": {
-                                    "type": "string",
-                                    "maxLength": 100000
-                                  },
-                                  "language": {
-                                    "type": "string",
-                                    "minLength": 2,
-                                    "maxLength": 35
-                                  },
-                                  "voice": {
-                                    "type": "string",
-                                    "maxLength": 100
-                                  },
-                                  "speed": {
-                                    "type": "number",
-                                    "minimum": 0.5,
-                                    "maximum": 2
-                                  }
-                                },
-                                "required": [
-                                  "script",
-                                  "language",
-                                  "speed"
-                                ],
-                                "additionalProperties": false
-                              },
-                              "requiredInteraction": {
-                                "type": "boolean"
-                              },
-                              "type": {
-                                "type": "string",
-                                "const": "button"
-                              },
-                              "variant": {
-                                "type": "string",
-                                "const": "link"
-                              },
-                              "content": {
-                                "type": "object",
-                                "properties": {
-                                  "label": {
-                                    "type": "string",
-                                    "maxLength": 300
-                                  },
-                                  "url": {
-                                    "type": "string",
-                                    "maxLength": 2048
-                                  }
-                                },
-                                "required": [
-                                  "label",
-                                  "url"
                                 ],
                                 "additionalProperties": false
                               }
@@ -2796,6 +2796,7 @@
                                 "enum": [
                                   "single-choice",
                                   "multiple-response",
+                                  "true-false",
                                   "fill-blank",
                                   "matching",
                                   "ordering",
@@ -3089,6 +3090,1767 @@
                               "variant",
                               "content",
                               "completion"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "objectives"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "enum": [
+                                  "list",
+                                  "cards"
+                                ]
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "heading": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "intro": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "items": {
+                                    "minItems": 1,
+                                    "maxItems": 30,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                        },
+                                        "text": {
+                                          "type": "string",
+                                          "maxLength": 300
+                                        },
+                                        "level": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "enum": [
+                                                "remember",
+                                                "understand",
+                                                "apply",
+                                                "analyze",
+                                                "evaluate",
+                                                "create"
+                                              ]
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "text",
+                                        "level"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "heading",
+                                  "intro",
+                                  "items"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "table"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "enum": [
+                                  "lined",
+                                  "striped"
+                                ]
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "caption": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "head": {
+                                    "maxItems": 8,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 300
+                                    }
+                                  },
+                                  "rows": {
+                                    "minItems": 1,
+                                    "maxItems": 60,
+                                    "type": "array",
+                                    "items": {
+                                      "minItems": 1,
+                                      "maxItems": 8,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "maxLength": 100000
+                                      }
+                                    }
+                                  },
+                                  "headerColumn": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "caption",
+                                  "head",
+                                  "rows",
+                                  "headerColumn"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "reflection"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "enum": [
+                                  "plain",
+                                  "journal"
+                                ]
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "prompt": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "placeholder": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "sample": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "minWords": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 1000
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "workbook": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "prompt",
+                                  "placeholder",
+                                  "sample",
+                                  "minWords",
+                                  "required",
+                                  "workbook"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "activity"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "const": "card"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "title": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "minutes": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 600
+                                  },
+                                  "steps": {
+                                    "minItems": 1,
+                                    "maxItems": 20,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 100000
+                                    }
+                                  },
+                                  "output": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "workbook": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "title",
+                                  "minutes",
+                                  "steps",
+                                  "output",
+                                  "required",
+                                  "workbook"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "checklist"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "const": "ticks"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "title": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "items": {
+                                    "minItems": 1,
+                                    "maxItems": 50,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 300
+                                    }
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "workbook": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "title",
+                                  "items",
+                                  "required",
+                                  "workbook"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "self-assessment"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "const": "scale"
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "title": {
+                                    "type": "string",
+                                    "maxLength": 300
+                                  },
+                                  "intro": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "scale": {
+                                    "minItems": 2,
+                                    "maxItems": 7,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 300
+                                    }
+                                  },
+                                  "items": {
+                                    "minItems": 1,
+                                    "maxItems": 30,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 300
+                                    }
+                                  },
+                                  "bands": {
+                                    "maxItems": 8,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "min": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 1000
+                                        },
+                                        "max": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 1000
+                                        },
+                                        "text": {
+                                          "type": "string",
+                                          "maxLength": 100000
+                                        }
+                                      },
+                                      "required": [
+                                        "min",
+                                        "max",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": {
+                                    "type": "boolean"
+                                  },
+                                  "workbook": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "title",
+                                  "intro",
+                                  "scale",
+                                  "items",
+                                  "bands",
+                                  "required",
+                                  "workbook"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                              },
+                              "appearance": {
+                                "type": "object",
+                                "properties": {
+                                  "width": {
+                                    "type": "string",
+                                    "enum": [
+                                      "reading",
+                                      "wide",
+                                      "full"
+                                    ]
+                                  },
+                                  "padding": {
+                                    "type": "string",
+                                    "enum": [
+                                      "small",
+                                      "medium",
+                                      "large"
+                                    ]
+                                  },
+                                  "background": {
+                                    "type": "string",
+                                    "enum": [
+                                      "page",
+                                      "surface",
+                                      "accent"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "width",
+                                  "padding",
+                                  "background"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "narration": {
+                                "type": "object",
+                                "properties": {
+                                  "script": {
+                                    "type": "string",
+                                    "maxLength": 100000
+                                  },
+                                  "language": {
+                                    "type": "string",
+                                    "minLength": 2,
+                                    "maxLength": 35
+                                  },
+                                  "voice": {
+                                    "type": "string",
+                                    "maxLength": 100
+                                  },
+                                  "speed": {
+                                    "type": "number",
+                                    "minimum": 0.5,
+                                    "maximum": 2
+                                  }
+                                },
+                                "required": [
+                                  "script",
+                                  "language",
+                                  "speed"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "requiredInteraction": {
+                                "type": "boolean"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "columns"
+                              },
+                              "variant": {
+                                "type": "string",
+                                "enum": [
+                                  "1-1",
+                                  "1-1-1",
+                                  "2-1",
+                                  "1-2"
+                                ]
+                              },
+                              "content": {
+                                "type": "object",
+                                "properties": {
+                                  "columns": {
+                                    "minItems": 2,
+                                    "maxItems": 3,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "blocks": {
+                                          "maxItems": 20,
+                                          "type": "array",
+                                          "items": {
+                                            "oneOf": [
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  "appearance": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "width": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reading",
+                                                          "wide",
+                                                          "full"
+                                                        ]
+                                                      },
+                                                      "padding": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "small",
+                                                          "medium",
+                                                          "large"
+                                                        ]
+                                                      },
+                                                      "background": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "page",
+                                                          "surface",
+                                                          "accent"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "width",
+                                                      "padding",
+                                                      "background"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "narration": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "script": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "language": {
+                                                        "type": "string",
+                                                        "minLength": 2,
+                                                        "maxLength": 35
+                                                      },
+                                                      "voice": {
+                                                        "type": "string",
+                                                        "maxLength": 100
+                                                      },
+                                                      "speed": {
+                                                        "type": "number",
+                                                        "minimum": 0.5,
+                                                        "maximum": 2
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "script",
+                                                      "language",
+                                                      "speed"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "requiredInteraction": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "const": "heading"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "heading",
+                                                      "subheading"
+                                                    ]
+                                                  },
+                                                  "content": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "appearance",
+                                                  "type",
+                                                  "variant",
+                                                  "content"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  "appearance": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "width": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reading",
+                                                          "wide",
+                                                          "full"
+                                                        ]
+                                                      },
+                                                      "padding": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "small",
+                                                          "medium",
+                                                          "large"
+                                                        ]
+                                                      },
+                                                      "background": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "page",
+                                                          "surface",
+                                                          "accent"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "width",
+                                                      "padding",
+                                                      "background"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "narration": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "script": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "language": {
+                                                        "type": "string",
+                                                        "minLength": 2,
+                                                        "maxLength": 35
+                                                      },
+                                                      "voice": {
+                                                        "type": "string",
+                                                        "maxLength": 100
+                                                      },
+                                                      "speed": {
+                                                        "type": "number",
+                                                        "minimum": 0.5,
+                                                        "maximum": 2
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "script",
+                                                      "language",
+                                                      "speed"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "requiredInteraction": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "const": "paragraph"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "plain",
+                                                      "with-heading"
+                                                    ]
+                                                  },
+                                                  "content": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "heading": {
+                                                        "type": "string",
+                                                        "maxLength": 300
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text",
+                                                      "heading"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "appearance",
+                                                  "type",
+                                                  "variant",
+                                                  "content"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  "appearance": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "width": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reading",
+                                                          "wide",
+                                                          "full"
+                                                        ]
+                                                      },
+                                                      "padding": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "small",
+                                                          "medium",
+                                                          "large"
+                                                        ]
+                                                      },
+                                                      "background": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "page",
+                                                          "surface",
+                                                          "accent"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "width",
+                                                      "padding",
+                                                      "background"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "narration": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "script": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "language": {
+                                                        "type": "string",
+                                                        "minLength": 2,
+                                                        "maxLength": 35
+                                                      },
+                                                      "voice": {
+                                                        "type": "string",
+                                                        "maxLength": 100
+                                                      },
+                                                      "speed": {
+                                                        "type": "number",
+                                                        "minimum": 0.5,
+                                                        "maximum": 2
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "script",
+                                                      "language",
+                                                      "speed"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "requiredInteraction": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "const": "list"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "bulleted",
+                                                      "numbered",
+                                                      "checklist"
+                                                    ]
+                                                  },
+                                                  "content": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "items": {
+                                                        "maxItems": 100,
+                                                        "type": "array",
+                                                        "items": {
+                                                          "type": "string",
+                                                          "maxLength": 100000
+                                                        }
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "items"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "appearance",
+                                                  "type",
+                                                  "variant",
+                                                  "content"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  "appearance": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "width": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reading",
+                                                          "wide",
+                                                          "full"
+                                                        ]
+                                                      },
+                                                      "padding": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "small",
+                                                          "medium",
+                                                          "large"
+                                                        ]
+                                                      },
+                                                      "background": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "page",
+                                                          "surface",
+                                                          "accent"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "width",
+                                                      "padding",
+                                                      "background"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "narration": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "script": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "language": {
+                                                        "type": "string",
+                                                        "minLength": 2,
+                                                        "maxLength": 35
+                                                      },
+                                                      "voice": {
+                                                        "type": "string",
+                                                        "maxLength": 100
+                                                      },
+                                                      "speed": {
+                                                        "type": "number",
+                                                        "minimum": 0.5,
+                                                        "maximum": 2
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "script",
+                                                      "language",
+                                                      "speed"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "requiredInteraction": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "const": "statement"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "statement",
+                                                      "note"
+                                                    ]
+                                                  },
+                                                  "content": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "appearance",
+                                                  "type",
+                                                  "variant",
+                                                  "content"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  "appearance": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "width": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reading",
+                                                          "wide",
+                                                          "full"
+                                                        ]
+                                                      },
+                                                      "padding": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "small",
+                                                          "medium",
+                                                          "large"
+                                                        ]
+                                                      },
+                                                      "background": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "page",
+                                                          "surface",
+                                                          "accent"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "width",
+                                                      "padding",
+                                                      "background"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "narration": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "script": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "language": {
+                                                        "type": "string",
+                                                        "minLength": 2,
+                                                        "maxLength": 35
+                                                      },
+                                                      "voice": {
+                                                        "type": "string",
+                                                        "maxLength": 100
+                                                      },
+                                                      "speed": {
+                                                        "type": "number",
+                                                        "minimum": 0.5,
+                                                        "maximum": 2
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "script",
+                                                      "language",
+                                                      "speed"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "requiredInteraction": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "const": "quote"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "const": "plain"
+                                                  },
+                                                  "content": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "text": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "attribution": {
+                                                        "type": "string",
+                                                        "maxLength": 300
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "text",
+                                                      "attribution"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "appearance",
+                                                  "type",
+                                                  "variant",
+                                                  "content"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  "appearance": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "width": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reading",
+                                                          "wide",
+                                                          "full"
+                                                        ]
+                                                      },
+                                                      "padding": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "small",
+                                                          "medium",
+                                                          "large"
+                                                        ]
+                                                      },
+                                                      "background": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "page",
+                                                          "surface",
+                                                          "accent"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "width",
+                                                      "padding",
+                                                      "background"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "narration": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "script": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "language": {
+                                                        "type": "string",
+                                                        "minLength": 2,
+                                                        "maxLength": 35
+                                                      },
+                                                      "voice": {
+                                                        "type": "string",
+                                                        "maxLength": 100
+                                                      },
+                                                      "speed": {
+                                                        "type": "number",
+                                                        "minimum": 0.5,
+                                                        "maximum": 2
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "script",
+                                                      "language",
+                                                      "speed"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "requiredInteraction": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "const": "image"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "enum": [
+                                                      "centered",
+                                                      "full-width"
+                                                    ]
+                                                  },
+                                                  "content": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "assetId": {
+                                                        "type": "string",
+                                                        "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                      },
+                                                      "altText": {
+                                                        "type": "string",
+                                                        "maxLength": 2000
+                                                      },
+                                                      "decorative": {
+                                                        "type": "boolean"
+                                                      },
+                                                      "caption": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "assetId",
+                                                      "altText",
+                                                      "decorative",
+                                                      "caption"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "appearance",
+                                                  "type",
+                                                  "variant",
+                                                  "content"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": {
+                                                    "type": "string",
+                                                    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+                                                  },
+                                                  "appearance": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "width": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "reading",
+                                                          "wide",
+                                                          "full"
+                                                        ]
+                                                      },
+                                                      "padding": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "small",
+                                                          "medium",
+                                                          "large"
+                                                        ]
+                                                      },
+                                                      "background": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                          "page",
+                                                          "surface",
+                                                          "accent"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "width",
+                                                      "padding",
+                                                      "background"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "narration": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "script": {
+                                                        "type": "string",
+                                                        "maxLength": 100000
+                                                      },
+                                                      "language": {
+                                                        "type": "string",
+                                                        "minLength": 2,
+                                                        "maxLength": 35
+                                                      },
+                                                      "voice": {
+                                                        "type": "string",
+                                                        "maxLength": 100
+                                                      },
+                                                      "speed": {
+                                                        "type": "number",
+                                                        "minimum": 0.5,
+                                                        "maximum": 2
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "script",
+                                                      "language",
+                                                      "speed"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  "requiredInteraction": {
+                                                    "type": "boolean"
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "const": "button"
+                                                  },
+                                                  "variant": {
+                                                    "type": "string",
+                                                    "const": "link"
+                                                  },
+                                                  "content": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "label": {
+                                                        "type": "string",
+                                                        "maxLength": 300
+                                                      },
+                                                      "url": {
+                                                        "type": "string",
+                                                        "maxLength": 2048
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "label",
+                                                      "url"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "id",
+                                                  "appearance",
+                                                  "type",
+                                                  "variant",
+                                                  "content"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "blocks"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "columns"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "appearance",
+                              "type",
+                              "variant",
+                              "content"
                             ],
                             "additionalProperties": false
                           }

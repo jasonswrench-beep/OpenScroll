@@ -1,7 +1,7 @@
 import { type Block,type PortableProject,type Asset,assetPath,blockSchema } from './course.js';
 import { newId } from './outline.js';
 import { STARTER_IMAGE_BASE64,STARTER_IMAGE_SHA256,STARTER_IMAGE_BYTES } from './starter-image.js';
-export interface BlockTemplate {key:string;label:string;category:'Text'|'Images'|'Structure'|'Media'|'Interactive'|'Assessment';type:Block['type'];variant:string;description:string;}
+export interface BlockTemplate {key:string;label:string;category:'Text'|'Images'|'Structure'|'Media'|'Interactive'|'Activities'|'Assessment';type:Block['type'];variant:string;description:string;}
 export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'paragraph',label:'Paragraph',category:'Text',type:'paragraph',variant:'plain',description:'A clear reading column for one useful idea.'},
   {key:'paragraph-heading',label:'Paragraph with heading',category:'Text',type:'paragraph',variant:'with-heading',description:'A short heading followed by explanatory text.'},
@@ -12,7 +12,11 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'quote',label:'Quote',category:'Text',type:'quote',variant:'plain',description:'A quotation with its own attribution.'},
   {key:'bulleted-list',label:'Bulleted list',category:'Text',type:'list',variant:'bulleted',description:'Group related points without a sequence.'},
   {key:'numbered-list',label:'Numbered list',category:'Text',type:'list',variant:'numbered',description:'Describe a sequence, one step at a time.'},
-  {key:'checklist',label:'Checklist',category:'Text',type:'list',variant:'checklist',description:'A visual checklist of things to consider.'},
+  {key:'checklist',label:'Check-mark list',category:'Text',type:'list',variant:'checklist',description:'A list marked with ticks. Learners read it; nothing is saved.'},
+  {key:'objectives',label:'Learning objectives',category:'Text',type:'objectives',variant:'list',description:'What learners will be able to do, with optional thinking levels.'},
+  {key:'objective-cards',label:'Objective cards',category:'Text',type:'objectives',variant:'cards',description:'Learning objectives shown as a row of cards.'},
+  {key:'table',label:'Table',category:'Text',type:'table',variant:'lined',description:'Rows and columns with real header cells.'},
+  {key:'striped-table',label:'Striped table',category:'Text',type:'table',variant:'striped',description:'A table with shaded alternate rows.'},
   {key:'image',label:'Centered image',category:'Images',type:'image',variant:'centered',description:'A centered picture with an editable caption.'},
   {key:'full-image',label:'Full-width image',category:'Images',type:'image',variant:'full-width',description:'Let an image span the available content width.'},
   {key:'image-text',label:'Image and text',category:'Images',type:'image-text',variant:'image-left',description:'Place a picture beside an explanation.'},
@@ -22,6 +26,10 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'small-spacer',label:'Small spacer',category:'Structure',type:'spacer',variant:'small',description:'A little breathing room between blocks.'},
   {key:'spacer',label:'Medium spacer',category:'Structure',type:'spacer',variant:'medium',description:'A larger pause between ideas.'},
   {key:'large-spacer',label:'Large spacer',category:'Structure',type:'spacer',variant:'large',description:'A generous pause in the page layout.'},
+  {key:'columns',label:'Two columns',category:'Structure',type:'columns',variant:'1-1',description:'Two equal columns that stack on phones.'},
+  {key:'three-columns',label:'Three columns',category:'Structure',type:'columns',variant:'1-1-1',description:'Three equal columns that stack on phones.'},
+  {key:'columns-wide-left',label:'Wide and narrow columns',category:'Structure',type:'columns',variant:'2-1',description:'A wide column beside a narrow one.'},
+  {key:'columns-wide-right',label:'Narrow and wide columns',category:'Structure',type:'columns',variant:'1-2',description:'A narrow column beside a wide one.'},
   {key:'gallery',label:'Image gallery',category:'Media',type:'gallery',variant:'grid',description:'A responsive gallery with individual image descriptions.'},
   {key:'audio',label:'Audio',category:'Media',type:'audio',variant:'player',description:'Uploaded audio with a readable transcript.'},
   {key:'video',label:'Video',category:'Media',type:'video',variant:'player',description:'Uploaded video with captions and a descriptive transcript.'},
@@ -33,8 +41,14 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
   {key:'process',label:'Process',category:'Interactive',type:'process',variant:'steps',description:'A sequence learners explore one step at a time.'},
   {key:'timeline',label:'Timeline',category:'Interactive',type:'timeline',variant:'vertical',description:'A readable sequence of events and explanations.'},
   {key:'labeled-graphic',label:'Labeled graphic',category:'Interactive',type:'labeled-graphic',variant:'markers',description:'Keyboard accessible image markers and descriptions.'},
+  {key:'reflection',label:'Reflection',category:'Activities',type:'reflection',variant:'plain',description:'Learners write a response and can compare it with a sample.'},
+  {key:'journal',label:'Journal prompt',category:'Activities',type:'reflection',variant:'journal',description:'A reflection styled as a journal page.'},
+  {key:'activity',label:'Activity',category:'Activities',type:'activity',variant:'card',description:'Timed steps to follow, with a box to write in.'},
+  {key:'interactive-checklist',label:'Checklist',category:'Activities',type:'checklist',variant:'ticks',description:'Items learners tick off. Their ticks are saved.'},
+  {key:'self-assessment',label:'Self-assessment',category:'Activities',type:'self-assessment',variant:'scale',description:'Learners rate statements and see what their total means.'},
   {key:'single-choice',label:'Multiple choice',category:'Assessment',type:'assessment',variant:'single-choice',description:'Select one answer.'},
   {key:'multiple-response',label:'Multiple response',category:'Assessment',type:'assessment',variant:'multiple-response',description:'Select every correct answer.'},
+  {key:'true-false',label:'True or false',category:'Assessment',type:'assessment',variant:'true-false',description:'Judge whether a statement is true.'},
   {key:'fill-blank',label:'Fill in the blank',category:'Assessment',type:'assessment',variant:'fill-blank',description:'Type an accepted answer.'},
   {key:'matching',label:'Matching',category:'Assessment',type:'assessment',variant:'matching',description:'Match related terms without dragging.'},
   {key:'ordering',label:'Ordering',category:'Assessment',type:'assessment',variant:'ordering',description:'Put items in order with keyboard controls.'},
@@ -44,12 +58,23 @@ export const BLOCK_TEMPLATES:BlockTemplate[]=[
 export function templatesFor(block:Block){return BLOCK_TEMPLATES.filter(t=>t.type===block.type);}
 export function switchVariant(block:Block,variant:string):Block {
   if(!templatesFor(block).some(t=>t.variant===variant))throw new Error('Choose a compatible template for this block.');
-  return blockSchema.parse({...structuredClone(block),variant});
+  const next=structuredClone(block);
+  // Changing the column count keeps every child block: a removed column's blocks join the one before it.
+  if(next.type==='columns'){const count=variant==='1-1-1' ? 3 : 2;while(next.content.columns.length<count)next.content.columns.push({blocks:[]});while(next.content.columns.length>count){const last=next.content.columns.pop()!;next.content.columns.at(-1)!.blocks.push(...last.blocks);}}
+  if(next.type==='assessment' && variant==='true-false' && next.variant!=='true-false'){next.content.options=['True','False'];next.content.correct=[next.content.correct[0]===1 ? 1 : 0];next.content.choiceFeedback=next.content.choiceFeedback.slice(0,2);}
+  return blockSchema.parse({...next,variant});
 }
-export function duplicateBlock(block:Block):Block {return {...structuredClone(block),id:newId()};}
+/** A copy with new identifiers for the block, the blocks inside it, and its objectives. */
+export function duplicateBlock(block:Block):Block {return renewIds(structuredClone(block));}
+export function renewIds<T extends Block>(block:T):T {
+  block.id=newId();
+  if(block.type==='columns')for(const column of block.content.columns)for(const child of column.blocks)child.id=newId();
+  if(block.type==='objectives')for(const item of block.content.items)item.id=newId();
+  return block;
+}
 export function prepareBlock(key:string,project:PortableProject):{block:Block;asset?:Asset;data?:string} {
   const template=BLOCK_TEMPLATES.find(t=>t.key===key);if(!template)throw new Error('Unknown block template.');
-  const appearance={width:'reading',padding:'medium',background:'page'};const base={id:newId(),type:template.type,variant:template.variant,appearance};
+  const appearance={width:'reading',padding:'medium',background:'page'};const base={id:newId(),type:template.type,variant:template.variant,appearance:template.type==='columns' ? {...appearance,width:'wide'} : appearance};
   let asset:Asset|undefined;let imageId='';
   if(['image','image-text','gallery','labeled-graphic'].includes(template.type)){
     const existing=project.document.assets.find(a=>a.mediaType==='image/png' && a.sha256===STARTER_IMAGE_SHA256 && project.files[assetPath(a)]===STARTER_IMAGE_BASE64);
@@ -77,7 +102,15 @@ export function prepareBlock(key:string,project:PortableProject):{block:Block;as
     'labeled-graphic':{...image,markers:[{label:'Look here',text:'Explain this part of the image.',x:30,y:40},{label:'A connection',text:'Connect this detail to your main idea.',x:70,y:60}]},
     assessment:{prompt:template.variant==='fill-blank' ? 'Learning grows through ____.' : template.variant==='matching' ? 'Match each action to its meaning.' : template.variant==='ordering' ? 'Order the steps from noticing to reflection.' : template.variant==='categorize' ? 'Place each action in the stage where it belongs.' : 'Which action helps turn an idea into practice?',options:['Try a small, practical step.','Wait for a perfect plan.','Avoid reflecting on the result.'],correct:[0],accepted:['practice'],caseSensitive:false,pairs:[{left:'Notice',right:'Identify what matters'},{left:'Act',right:'Try one useful step'}],items:['Notice what matters','Try a useful step','Reflect on the result'],feedbackCorrect:'You connected the idea to a useful action.',feedbackIncorrect:'Review the idea, then try another approach.',groups:['Before you act','After you act'],placements:[0,0,1]},
     divider:{label:template.variant==='numbered' ? '1' : 'The next idea'},spacer:{},continue:{label:'Continue'},
+    objectives:{heading:'By the end of this lesson, you will be able to',intro:'',items:[{id:newId(),text:'Describe the main idea in your own words.',level:'understand'},{id:newId(),text:'Apply it to one situation from your own work.',level:'apply'}]},
+    table:{caption:'How the three stages compare',head:['Stage','What you do','What to look for'],rows:[['Notice','Look closely at the situation.','What stands out?'],['Act','Try one small step.','What changes?'],['Reflect','Think about the result.','What will you keep?']],headerColumn:true},
+    reflection:{prompt:'Think of a time you tried something new at work. What helped you take the first step?',placeholder:'Write a few sentences…',sample:'A colleague showed me a short example, which made the first step feel small enough to try.',minWords:0,required:false,workbook:true},
+    activity:{title:'Try it now',minutes:10,steps:['Choose one task you do every week.','Write down one small change you could test.','Try the change once and note what happened.'],output:'What I noticed',required:false,workbook:true},
+    checklist:{title:'Before you start',items:['I know what I want to try.','I have the materials I need.','I know who to ask for help.'],required:false,workbook:true},
+    'self-assessment':{title:'How confident do you feel?',intro:'Rate each statement honestly. There are no wrong answers.',scale:['Not yet','Somewhat','Mostly','Fully'],items:['I can explain the main idea.','I can use it in my own work.','I can help a colleague use it.'],bands:[{min:3,max:6,text:'You are just getting started. Revisit the examples and try one small step.'},{min:7,max:9,text:'You are well on your way. Pick one area to practise next.'},{min:10,max:12,text:'You are confident. Consider sharing what you know with others.'}],required:false,workbook:true},
+    columns:{columns:Array.from({length:template.variant==='1-1-1' ? 3 : 2},(_,index)=>({blocks:[blockSchema.parse({id:newId(),type:'paragraph',variant:'with-heading',appearance,content:{heading:['First idea','Second idea','Third idea'][index],text:'Keep each column short. On a phone, columns stack in reading order.'}})]}))},
   };
-  const block=blockSchema.parse({...base,content:content[template.type],...(template.type==='assessment' ? {assessment:{graded:false,points:1,required:false,completion:'submitted',maxAttempts:0}} : {}),...(template.type==='continue' ? {completion:'none'} : {})});
+  const starter=template.variant==='true-false' ? {...(content.assessment as object),prompt:'Small, practical steps make new ideas easier to apply.',options:['True','False'],correct:[0],choiceFeedback:[]} : content[template.type];
+  const block=blockSchema.parse({...base,content:starter,...(template.type==='assessment' ? {assessment:{graded:false,points:1,required:false,completion:'submitted',maxAttempts:0}} : {}),...(template.type==='continue' ? {completion:'none'} : {})});
   return {block,...(asset ? {asset,data:STARTER_IMAGE_BASE64} : {})};
 }

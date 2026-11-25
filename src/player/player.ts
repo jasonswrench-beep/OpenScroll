@@ -5,10 +5,13 @@ import { assetPath,type PortableProject,type Lesson } from '../shared/course.js'
 import { richToDom,richToPlain } from '../shared/rich-text.js';
 import { renderBlock } from '../shared/block-renderer.js';
 import { CourseFlow,type LearnerSnapshot } from './state.js';
+import { renderResponse } from './response-player.js';
+import { renderWorkbook,workbookEntries } from './workbook.js';
+import { isResponseBlock,responseTitle } from '../shared/responses.js';
 export interface PlayerOptions {preview?:boolean;assetURL?:(id:string)=>string;restored?:unknown;changed?:(state:LearnerSnapshot)=>void;storageWarning?:string;}
 function node<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string,cls?:string){const element=document.createElement(tag);if(text!==undefined)element.textContent=text;if(cls)element.className=cls;return element;}
 export class CoursePlayer {
-  readonly flow:CourseFlow;private message='';private warning:string;
+  readonly flow:CourseFlow;private message='';private warning:string;private view:'lesson'|'workbook'='lesson';
   constructor(private root:HTMLElement,private project:PortableProject,private options:PlayerOptions={}){
     this.flow=new CourseFlow(project.document);if(options.restored)this.flow.restore(options.restored);this.warning=options.storageWarning ?? '';this.render();
   }
@@ -24,15 +27,18 @@ export class CoursePlayer {
     if(course.cover){const img=node('img');img.className='player-cover';img.src=this.url(course.cover.assetId);img.alt=course.cover.decorative ? '' : course.cover.altText;header.append(img);}
     const progress=flow.progress;const progressLabel=node('p',`${progress.done} of ${progress.total} lessons complete · ${progress.percent}%`);progressLabel.id='course-progress-label';
     const meter=node('progress');meter.max=Math.max(1,progress.total);meter.value=progress.done;meter.setAttribute('aria-labelledby',progressLabel.id);header.append(progressLabel,meter);
+    if(workbookEntries(this.project).length){const open=this.action(this.view==='workbook' ? 'Back to the course' : 'My workbook',()=>{this.view=this.view==='workbook' ? 'lesson' : 'workbook';this.render(this.view==='workbook' ? 'workbook' : 'lesson-title');},'workbook-toggle');open.setAttribute('aria-pressed',String(this.view==='workbook'));header.append(open);}
     header.append(this.action('Reset progress',()=>{if(this.options.preview || confirm('Reset your progress in this course?'))this.reset();},'reset'));
     const score=flow.score;if(score.possible){const result=node('p',`Assessment: ${score.earned} of ${score.possible} points · ${score.percent}% · ${score.status}. Passing score: ${score.passingScore}%.`);result.className='player-score';result.setAttribute('role','status');header.append(result);}
     const layout=node('div',undefined,`player-layout${course.theme.pageWidth==='wide' ? ' player-wide' : ''}`);
     const nav=node('nav');nav.setAttribute('aria-label','Course lessons');nav.append(node('h2','Course outline'));
     for(const section of course.sections){if(!section.lessons.length)continue;if(section.title)nav.append(node('h3',section.title));const list=node('ol');for(const lesson of section.lessons){const li=node('li'),complete=flow.completed.has(lesson.id),locked=!flow.canEnter(lesson.id);const b=this.action(`${lesson.title || 'Untitled lesson'}${complete ? ' · Complete' : locked ? ' · Locked' : ''}`,()=>{flow.enter(lesson.id);this.message='';this.persist();this.render('lesson-title');},`nav-${lesson.id}`,locked);if(lesson.id===flow.lessonId)b.setAttribute('aria-current','step');li.append(b);list.append(li);}nav.append(list);}
     const main=node('main');main.id='lesson-content';main.tabIndex=-1;
+    if(this.view==='workbook'){main.append(renderWorkbook(this.project,flow,()=>{this.view='lesson';this.render('lesson-title');}));layout.append(nav,main);this.root.append(header,layout);if(focus)[...this.root.querySelectorAll<HTMLElement>('[data-focus]')].find(el=>el.dataset.focus===focus)?.focus();return;}
     const heading=node('h2',flow.lesson?.title || 'No lessons yet');heading.tabIndex=-1;heading.dataset.focus='lesson-title';
     const banner=flow.lesson ? this.banner(flow.lesson) : undefined;if(banner)main.append(banner);if(course.theme.lessonHeader==='accent')heading.classList.add('player-lesson-accent');main.append(heading);
-    if(flow.lesson?.objectives.length){const objectives=node('section',undefined,'player-objectives');objectives.setAttribute('aria-label','Lesson objectives');objectives.append(node('h3','In this lesson, you will'));const list=node('ul');for(const objective of flow.lesson.objectives)list.append(node('li',objective.text));objectives.append(list);main.append(objectives);}
+    // An objectives block in the lesson replaces the lesson-level list, so objectives never show twice.
+    if(flow.lesson?.objectives.length && !flow.lesson.blocks.some(b=>b.type==='objectives')){const objectives=node('section',undefined,'player-objectives');objectives.setAttribute('aria-label','Lesson objectives');objectives.append(node('h3','In this lesson, you will'));const list=node('ul');for(const objective of flow.lesson.objectives)list.append(node('li',objective.text));objectives.append(list);main.append(objectives);}
     const status=node('p',this.message);status.setAttribute('role','status');status.className='player-status';main.append(status);
     if(this.warning){const warning=node('p',this.warning);warning.setAttribute('role','status');main.append(warning);}
     if(!flow.lesson)main.append(node('p','This course has no lessons to display. Return to the authoring tool to add one.'));
@@ -47,6 +53,7 @@ export class CoursePlayer {
         }else{
           const rendered=renderBlock(block,this.project,undefined,id=>this.url(id),index=>{if(flow.visit(block.id,index)){this.persist();queueMicrotask(()=>this.refreshGates());}});
           if(isAssessment(block))rendered.replaceChildren(renderAssessment(block,flow,()=>this.persist(),focus=>this.render(focus)));
+          else if(isResponseBlock(block))rendered.replaceChildren(renderResponse(block,flow,()=>this.persist(),()=>this.refreshGates()));
           wrapper.append(rendered);
           if(block.requiredInteraction){const status=node('p');status.dataset.interactionProgress=block.id;status.setAttribute('role','status');status.textContent=`Explored ${flow.explored(block.id)} of ${interactionCount(block)} items.`;wrapper.append(status);}
           if(required.has(block.id)){const reviewed=flow.reviewed.has(block.id);wrapper.append(this.action(reviewed ? 'Reviewed' : 'Mark as reviewed',()=>{flow.review(block.id);this.message='Content marked as reviewed.';this.persist();this.render(`review-${block.id}`);},`review-${block.id}`,false));const b=wrapper.querySelector<HTMLButtonElement>(`[data-focus="review-${block.id}"]`)!;b.setAttribute('aria-pressed',String(reviewed));b.setAttribute('aria-label',`${reviewed ? 'Reviewed' : 'Mark as reviewed'}: ${this.blockLabel(block.id)}`);}
@@ -87,11 +94,11 @@ export class CoursePlayer {
     root.replaceChildren();if(this.flow.canFinish())return;
     const items=this.flow.visible().filter(block=>{
       if(block.type==='continue')return block!==this.flow.lesson?.blocks.at(-1) && !this.flow.released.has(block.id);
-      return (isAssessment(block) && (block.assessment.required || this.gated(block.id)) || block.requiredInteraction || this.flow.required().has(block.id)) && !this.flow.isComplete(block);
+      return (isAssessment(block) && (block.assessment.required || this.gated(block.id)) || (isResponseBlock(block) && block.content.required) || block.requiredInteraction || this.flow.required().has(block.id)) && !this.flow.isComplete(block);
     });
     if(!items.length)return;root.append(node('p','To finish this lesson:'));const list=node('ul');
     for(const block of items){
-      const label=isAssessment(block)?`${this.flow.record(block.id)?.last?'Answer correctly':'Submit answer'}: ${richToPlain(block.content.prompt).slice(0,120)}`:block.requiredInteraction?`Explore all items: ${this.blockLabel(block.id)}`:block.type==='continue'?'Open the next section':'Review: '+this.blockLabel(block.id);
+      const label=isAssessment(block)?`${this.flow.record(block.id)?.last?'Answer correctly':'Submit answer'}: ${richToPlain(block.content.prompt).slice(0,120)}`:isResponseBlock(block)?`Respond: ${responseTitle(block).slice(0,120)}`:block.requiredInteraction?`Explore all items: ${this.blockLabel(block.id)}`:block.type==='continue'?'Open the next section':'Review: '+this.blockLabel(block.id);
       const item=node('li');item.append(this.action(label,()=>{const target=this.root.querySelector<HTMLElement>(`[data-focus="${isAssessment(block)?'question-':'block-'}${block.id}"]`);target?.focus();target?.scrollIntoView({block:'center'});},'requirement-'+block.id));list.append(item);
     }root.append(list);
   }

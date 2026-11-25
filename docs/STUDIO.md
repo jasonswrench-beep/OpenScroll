@@ -30,13 +30,44 @@ format are the same either way.
   that keeps keyboard focus on the moved row, Duplicate, Move to section and Delete; and a details panel for
   author, language, lesson order, pass mark, cover image and alt text, and theme (accent colour, cover layout,
   lesson header, body font, reading width).
-- **Lesson editing**: Edit lesson opens the block editor inside the studio, with a lesson switcher and Back to
-  course. The new lesson canvas replaces it in stage 4.
+- **Lesson editor**: the lesson shown as learners see it, on the course's own paper and theme, with text edited in
+  place (see below).
 - **Saving**: the save button in the top bar always shows the true state (Saved, Changes pending, Saving, Save not
   confirmed, Conflict). Edits are revision-checked, kept in this browser as a recovery draft until the server
   confirms them, and never overwrite a change made in another tab: the conflict banner offers Download my edits,
   Save as a separate copy, or Reload saved course. Snapshots are one click away from the save button.
 - **Export**: SCORM 1.2, SCORM 2004 4th Edition, website ZIP, PDF and editable project, all from the current edits.
+
+## The lesson editor
+
+Edit lesson opens the lesson on the course paper: the banner, the title, then each block exactly as learners see
+it. Click into any text to edit it; Ctrl+B and Ctrl+I format formatted text.
+
+- **Block bar.** Every block has a small bar with its number and name (select it to open its settings), Move up,
+  Move down, Duplicate and Delete. Blocks inside columns also have Move to the column on the left or right.
+- **Adding blocks.** Add block (top bar, between blocks, or at the end) opens the picker: search, categories
+  (Text, Images, Structure, Media, Interactive, Activities, Assessment) and a description of every block. A
+  new block is inserted after the selected one and its first text is ready to type.
+- **Inspector.** The panel beside the lesson has four tabs. *Content* holds lists of items, rows, steps, ratings,
+  score bands, images and answers; *Style* the template, width, spacing and background; *Behavior* what learners
+  must do (required responses, opening every item, Continue rules); *Access* alternative text, decorative
+  images, narration scripts, and a plain description of what assistive technology announces for that block.
+  With nothing selected, the panel shows the lesson's own settings: banner (none, the course cover, or its own
+  image, with alternative text) and lesson objectives with optional thinking levels.
+- **Columns.** Two or three columns (equal, wide and narrow, or narrow and wide) hold text, images, lists,
+  notes, quotes and link buttons. Each column has its own Add button, and its blocks are selected and edited like
+  any other. Changing the column count keeps every block.
+- **Region editor.** Labeled graphic markers can be dragged on the image, moved with the arrow keys (Shift moves
+  further), or placed with number fields. The same editor will place hotspot areas in stage 5.
+- **Undo.** Undo and Redo (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z) cover every block change in the lesson for the
+  session. Typing in inspector fields uses the browser's own undo while the field has focus.
+- **Narrow screens.** Below 1200 px the panel becomes a sheet along the bottom of the window, so the selected
+  block and its settings stay on screen together.
+
+Wave A adds learning objectives, tables, reflections, activities, checklists, self-assessments, true or false
+questions and columns. Learner responses to the activity blocks are described in
+[LEARNER-RESPONSES.md](LEARNER-RESPONSES.md). The classic workspace can show and edit the text of the new blocks,
+but their settings are only in the studio.
 
 ## Addresses
 

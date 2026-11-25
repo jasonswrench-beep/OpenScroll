@@ -1,4 +1,5 @@
 import { renderExtended } from './extended-renderer.js';
+import { renderWaveA } from './wave-a-renderer.js';
 import { assetPath,type Block,type PortableProject } from './course.js';
 import { richToDom,RICH_TEXT_MAX } from './rich-text.js';
 export interface TextField {key:string;label:string;max:number;multiline:boolean;rich?:boolean;}
@@ -29,7 +30,7 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
   switch(block.type){
     case 'assessment':{
       root.append(rich('div',block.content.prompt,'prompt','Question prompt'));
-      if(['single-choice','multiple-response'].includes(block.variant))block.content.options.forEach((value,i)=>root.append(field('p',value,`options.${i}`,`Choice ${i+1}`,300,false)));
+      if(['single-choice','multiple-response','true-false'].includes(block.variant))block.content.options.forEach((value,i)=>root.append(field('p',value,`options.${i}`,`Choice ${i+1}`,300,false)));
       if(block.variant==='fill-blank'){const note=document.createElement('p');note.textContent='Accepted answers are edited in question settings.';root.append(note);}
       if(block.variant==='matching')block.content.pairs.forEach((pair,i)=>root.append(field('h4',pair.left,`pairs.${i}.left`,`Pair ${i+1} term`,300,false),field('p',pair.right,`pairs.${i}.right`,`Pair ${i+1} match`,300,false)));
       if(block.variant==='ordering')block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Item ${i+1} to order`,300,false)));
@@ -54,7 +55,7 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
     }
     case 'list':{
       const list=document.createElement(block.variant==='numbered' ? 'ol' : 'ul');list.className=block.variant==='checklist' ? 'os-checklist' : '';
-      block.content.items.forEach((item,index)=>{const li=document.createElement('li');li.append(rich('div',item,`items-${index}`,`List item ${index+1}`));list.append(li);});root.append(list);break;
+      block.content.items.forEach((item,index)=>{const li=document.createElement('li');li.append(rich('div',item,`items.${index}`,`List item ${index+1}`));list.append(li);});root.append(list);break;
     }
     case 'image':{
       const figure=document.createElement('figure');figure.append(picture(block.content.assetId,block.content.altText,block.content.decorative),field('figcaption',block.content.caption,'caption','Image caption'));root.append(figure);break;
@@ -75,6 +76,8 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
       break;
     }
   }
-  renderExtended(block,root,project,field,rich,picture,src,!!bind,explored);
+  // Blocks inside a column are edited through the same binder, with their path inside the columns block.
+  const child=(inner:Block,prefix:string)=>renderBlock(inner,project,bind ? (element,f)=>{const key=prefix+f.key;element.dataset.field=key;bind(element,{...f,key});} : undefined,assetURL);
+  if(!renderWaveA(block,root,field,rich,!!bind,child))renderExtended(block,root,project,field,rich,picture,src,!!bind,explored);
   return root;
 }

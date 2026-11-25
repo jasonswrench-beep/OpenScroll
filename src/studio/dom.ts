@@ -32,7 +32,7 @@ export function button(text: string, run: (event: Event) => void, options: Butto
     class: options.class ?? (options.iconOnly ? 'ibtn' : 'btn'),
     attrs: { type: 'button', 'aria-label': options.iconOnly || options.label ? label : null, title: options.title ?? (options.iconOnly ? label : null), disabled: options.disabled, ...options.attrs },
     on: { click: run },
-  }, [options.icon ? icon(options.icon) : null, options.iconOnly ? null : options.class?.includes('lbl') ? h('span', { class: 'lbl-text', text }) : text]);
+  }, [options.icon ? icon(options.icon) : null, options.iconOnly ? null : options.class?.includes('has-label') ? h('span', { class: 'lbl-text', text }) : text]);
   return element;
 }
 

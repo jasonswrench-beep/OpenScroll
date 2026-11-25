@@ -3,7 +3,8 @@ import type pg from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { assetPath, parseCourse, ProjectError, type CourseDocument, type PortableProject } from '../shared/course.js';
+import { assetPath, parseCourse, eachBlock, ProjectError, type CourseDocument, type PortableProject } from '../shared/course.js';
+import { remapDocumentAssets } from '../shared/reuse.js';
 import { validateProject, exportProject } from '../project/archive.js';
 import { HttpError, requireAuthor } from './accounts/routes.js';
 const idSchema=z.string().uuid();
@@ -27,19 +28,18 @@ export function duplicateProject(source:PortableProject):PortableProject {
   document.course.id=replace(document.course.id);
   const files:Record<string,string>={};
   for (const asset of document.assets) {const old=assetPath(asset);asset.id=replace(asset.id);files[assetPath(asset)]=source.files[old]!;}
-  if (document.course.cover) document.course.cover.assetId=ids.get(document.course.cover.assetId)!;
   for (const section of document.course.sections) {
     section.id=replace(section.id);
     for (const lesson of section.lessons) {
       lesson.id=replace(lesson.id);
-      for (const block of lesson.blocks) {
+      for (const objective of lesson.objectives) objective.id=replace(objective.id);
+      for (const block of eachBlock(lesson.blocks)) {
         block.id=replace(block.id);
-        if (block.type === 'image' || block.type === 'image-text' || block.type==='labeled-graphic') block.content.assetId=ids.get(block.content.assetId)!;
-        if(block.type==='gallery')for(const image of block.content.items)image.assetId=ids.get(image.assetId)!;
-        if((block.type==='audio' || block.type==='video' || block.type==='attachment') && block.content.assetId)block.content.assetId=ids.get(block.content.assetId)!;
+        if(block.type==='objectives')for(const item of block.content.items)item.id=replace(item.id);
       }
     }
   }
+  remapDocumentAssets(document.course,ids);
   document.course.title=`Copy of ${document.course.title}`.slice(0,300);
   document.course.createdAt=document.course.updatedAt=new Date().toISOString();
   return validateProject({document,files});
