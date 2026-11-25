@@ -13,6 +13,8 @@ import { readImage } from '../client/images.js';
 export interface ImportedStep { id: string; imageId: string; alt: string; instruction: string; target: { x: number; y: number; w: number; h: number }; typed: string; hint: string }
 interface Click { t: number; x: number; y: number; name?: string; role?: string; typed: string }
 const MAX_STEPS = 60;
+/** Plain words for the Windows accessibility roles the log records. */
+const ROLE_WORDS: Record<string, string> = { edit: 'box', 'push button': 'button', 'check box': 'checkbox', 'combo box': 'list', 'list item': 'item', 'menu item': 'menu item', 'tab item': 'tab', 'radio button': 'option', text: 'text', hyperlink: 'link' };
 
 /** Finds the newest finished take among the chosen files (a take folder or a whole .capture folder). */
 async function chooseTake(files: File[]) {
@@ -69,7 +71,8 @@ export async function importCaptureTake(files: File[], project: PortableProject)
       const image = await readImage(new File([blob], `step-${index + 1}.webp`, { type: 'image/webp' }), shadow);
       shadow.document.assets.push(image.asset); shadow.files[assetPath(image.asset)] = image.data; assets.push(image);
       const w = 8, h = 8 * width / height, x = Math.min(100 - w, Math.max(0, click.x / width * 100 - w / 2)), y = Math.min(100 - h, Math.max(0, click.y / height * 100 - h / 2));
-      const what = click.name ? (click.role ? `the ${click.name} ${click.role}` : `“${click.name}”`) : 'the highlighted place';
+      const role = click.role ? ROLE_WORDS[click.role] ?? click.role : '';
+      const what = click.name ? (role ? `the ${click.name} ${role}` : `“${click.name}”`) : 'the highlighted place';
       steps.push({ id: newId(), imageId: image.asset.id, alt: `Screenshot for step ${index + 1}.`, instruction: `Select ${what}.`.slice(0, 300), target: { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10, w, h: Math.round(Math.min(h, 100) * 10) / 10 }, typed: click.typed.trim(), hint: click.name ? `Look for ${what}.`.slice(0, 300) : '' });
     }
     notes.push('Check each instruction and describe each screenshot: the recording names what was clicked but not why.');

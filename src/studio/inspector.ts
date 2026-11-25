@@ -9,7 +9,7 @@ import { plainToRich } from '../shared/rich-text.js';
 import { cueEditor } from './cue-editor.js';
 import { parseVideoAddress } from '../shared/video-address.js';
 import { importCaptureTake } from './capture-import.js';
-import { pickFolder } from './dom.js';
+import { pickFolder, toast, announce } from './dom.js';
 import { OBJECTIVE_LEVEL_NAMES } from '../shared/objectives.js';
 import { templatesFor, prepareBlock } from '../shared/block-catalog.js';
 import { newId } from '../shared/outline.js';
@@ -342,7 +342,8 @@ function contentTab(ctx: InspectorContext): HTMLElement[] {
         importButton.disabled = true; importStatus.textContent = 'Reading the recording…';
         try {
           const result = await importCaptureTake(files, ctx.project);
-          if (ctx.changeWithAssets(result.assets, b => { if (b.type === 'software-practice') b.content.steps = result.steps.slice(0, 60); })) importStatus.textContent = `${result.steps.length} steps imported. ${result.notes.join(' ')}`;
+          // The panel redraws after the import, so the outcome is told in a toast and announced.
+          if (ctx.changeWithAssets(result.assets, b => { if (b.type === 'software-practice') b.content.steps = result.steps.slice(0, 60); })) { const message = `${result.steps.length} steps imported. ${result.notes.join(' ')}`; toast(message); announce(message); }
         } catch (error) { importStatus.textContent = error instanceof Error ? error.message : 'The take could not be imported.'; }
         finally { if (importButton.isConnected) importButton.disabled = false; }
       }, { icon: Plus, class: 'btn btn-sm' });
