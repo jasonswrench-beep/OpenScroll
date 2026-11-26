@@ -7,7 +7,7 @@ import pg from 'pg';
 import yauzl from 'yauzl';
 import AxeBuilder from '@axe-core/playwright';
 import { hashPassword,randomToken,tokenHash } from '../../src/server/accounts/passwords.js';
-import { mediaProject } from '../helpers/media-project.js';
+import { mediaProject,classicMedia } from '../helpers/media-project.js';
 import { assetPath } from '../../src/shared/course.js';
 import { importProject } from '../../src/project/archive.js';
 let client:APIRequestContext,id:string,server:Server,origin:string;let files=new Map<string,Buffer>();
@@ -19,7 +19,7 @@ test.beforeAll(async({playwright})=>{
  server=createServer((req,res)=>{const path=new URL(req.url!,'http://test').pathname;const data=files.get(path.replace(/^\/lesson\//,''));if(!path.startsWith('/lesson/') || !data){res.writeHead(404);res.end();return;}const ext=path.split('.').at(-1)!;res.setHeader('Content-Type',({html:'text/html',js:'text/javascript',css:'text/css',json:'application/json',png:'image/png',wav:'audio/wav',mp4:'video/mp4',txt:'text/plain'} as Record<string,string>)[ext] ?? 'text/plain');res.end(data);});await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
 });
 test.beforeEach(async({context})=>{
- await context.addCookies([cookie]);id=randomUUID();const project=await mediaProject();const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});const db=await pool.connect();
+ await context.addCookies([cookie]);id=randomUUID();const project=classicMedia(await mediaProject());const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});const db=await pool.connect();
  try{await db.query('BEGIN');await db.query('INSERT INTO courses(id,owner_id,document) VALUES($1,$2,$3)',[id,owner,project.document]);for(const asset of project.document.assets)await db.query('INSERT INTO course_assets(course_id,asset_id,data) VALUES($1,$2,$3)',[id,asset.id,Buffer.from(project.files[assetPath(asset)]!,'base64')]);await db.query('COMMIT');}catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();await pool.end();}
 });
 test.afterEach(async()=>{const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});try{await pool.query('DELETE FROM courses WHERE owner_id=$1',[owner]);}finally{await pool.end();}});

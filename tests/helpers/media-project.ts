@@ -13,3 +13,17 @@ export async function mediaProject():Promise<PortableProject>{
  const link=lesson.blocks.find(b=>b.type==='button')!;if(link.type==='button')link.content.url='https://example.org/learning';
  const gate=prepareBlock('continue',project).block;if(gate.type==='continue')gate.completion='all-previous';lesson.blocks.push(gate);project.document.course.sections[0]!.lessons=[lesson];return project;
 }
+/**
+ * The classic media and interaction blocks, without the schema 4 additions (interactive video, embedded video,
+ * software practice and scenarios). Browser checks of the classic workspace use this; every template, including
+ * the additions, is covered by the all-template player check and the studio checks.
+ */
+export function classicMedia(project:PortableProject):PortableProject{
+ for(const section of project.document.course.sections)for(const lesson of section.lessons)lesson.blocks=lesson.blocks.filter(b=>!(b.type==='embed-video' || b.type==='software-practice' || b.type==='scenario' || (b.type==='video' && b.variant==='interactive')));
+ return project;
+}
+/** The browser test server keeps embedded YouTube and Vimeo video off, its production default, so it refuses to publish them. */
+export function withoutEmbeddedVideo(project:PortableProject):PortableProject{
+ for(const section of project.document.course.sections)for(const lesson of section.lessons)lesson.blocks=lesson.blocks.filter(b=>b.type!=='embed-video');
+ return project;
+}

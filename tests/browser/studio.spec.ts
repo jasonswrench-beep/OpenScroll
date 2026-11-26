@@ -72,7 +72,7 @@ test('a change made in another tab pauses saving and keeps the edits',async({pag
 });
 
 test('the studio redirects people without authoring access to their account page',async({browser})=>{
-  const context=await browser.newContext();const page=await context.newPage();
+  const context=await browser.newContext({storageState:{cookies:[],origins:[]}});const page=await context.newPage();
   await page.goto('/studio/');await expect(page).toHaveURL(/\/account\/?/);
   await context.close();
 });
