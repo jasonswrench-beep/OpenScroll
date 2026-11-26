@@ -48,6 +48,8 @@ Changes save after a short debounce, every 30 seconds, on hidden visibility, and
 
 Checkpoints bind to the full publication fingerprint and retain drafts, attempts, best/last answers, interaction visits, gates, lesson completion and bookmark. They use indexed IDs in an ASCII/base64 envelope, then restore through authored rules. A changed publication, malformed or impossible checkpoint produces an error and preserves the LMS data. Start a new LMS attempt after republishing changed content. Review/browse launches read existing state but make no SetValue/Commit calls.
 
+The LMS status and the **Save LMS progress**, **Download recovery progress** and **Exit course** buttons sit at the foot of the course menu (on phones, behind **Show course menu**, with the status line always shown). A review or browse launch says "LMS review mode: this launch is for viewing, so progress is not saved." Brightspace launches SCORM in browse mode for instructors, so an instructor sees that message while students are tracked normally. Test tracking with a student account.
+
 The adapter enforces **4096 ASCII characters for SCORM 1.2** and **64000 for SCORM 2004 4th Edition** before any save writes. It never truncates answers or drops state to fit. Large courses or long responses can exceed either capacity. Prefer 2004 for larger courses. A capacity/connection/commit error is visible, keeps the latest progress in memory, and can be retried with Save LMS progress. Download recovery progress preserves a JSON copy for support; automatic recovery-file import is not implemented. Keep the page open until the save succeeds. Closing/reloading after an unsaved failure can lose newer work. Browser close warnings and unload saves are best effort, especially on mobile. LMS SetValue operations are not transactional: a failed commit may leave partial LMS values; retry sends the full current checkpoint/report again.
 
 All grading runs client-side and published answer keys are available in course data. This is not secure examination or tamper-proof reporting.
@@ -55,6 +57,8 @@ All grading runs client-side and published answer keys are available in course d
 ## Brightspace validation checklist
 
 Brightspace was selected by the user. The user reports SCORM 1.2 working and an initial SCORM 2004 launch-read failure. After the suspend-data fix and interaction improvements, the user confirmed that both labeled Revision 4 packages worked as anticipated in Brightspace. Detailed gradebook/resume/retake results remain unrecorded. The agent has no direct tenant access; release/version and detailed grading/resume results are still needed. Record the Brightspace release, browser/version, legacy/new SCORM engine if selectable, launch frame/window settings, import options and gradebook mapping. Local harness results do not establish Brightspace support or SCORM certification.
+
+Test as a learner: sign in with a separate student test account. An instructor launch, and in some reports "View as student", runs in browse mode and records nothing.
 
 1. Import each edition as a separate test activity. Confirm manifest acceptance, all assets, and title/description. Capture import warnings.
 2. Launch with free and sequential courses, Continue gates, required exploration, media and all five assessment formats. Verify keyboard use and narrow layout.

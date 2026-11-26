@@ -12,6 +12,15 @@ The player uses the same semantic core block renderer and styles as the editor, 
 
 The iframe runs trusted OpenScroll player code and inert authored text. It permits its own scripts and origin for module loading, plus sandboxed form events for trusted assessment controls, while disallowing popups and top navigation. Message exchange verifies the parent/frame source and same origin. This is not a sandbox for arbitrary uploaded HTML or custom scripts; those remain unsupported. The built server permits same-origin framing only for `player.html`, retaining framing denial on the authoring shell.
 
+## What learners see
+
+The published course (standalone HTML and SCORM alike) follows the course theme set in the theme studio:
+
+- **Cover.** A new learner starts on the course cover, laid out as the theme's cover layout chooses (image beside the text, split, two-thirds, image behind the text, or centered with no image), with the author, description, lesson count and **Start course**. A returning learner goes straight back to their lesson; the course title in the menu returns to the cover, where the button reads **Resume course**. The author's lesson preview opens on the lesson.
+- **Course menu.** A sidebar carries the course title and progress on the accent colour, the numbered lessons with a mark for complete, current and locked, then **My workbook**, **Reset progress** and, in SCORM, the LMS status and buttons. On narrow screens it folds behind **Show course menu**; the LMS status line stays visible.
+- **Lessons.** Each lesson opens with "Lesson N of M" and its title, over the lesson banner when there is one (or on the accent colour when the lesson header is set to accent). The lesson ends with what comes next and **Complete lesson and continue**. An opened Continue leaves a quiet divider.
+- **Type.** Headings use the font pairing's heading face and body text the pairing's serif when the body is set to serif. Courses carry no font files, so each pairing names its typeface first (Lato and Merriweather, Work Sans and Source Serif, Figtree and Literata, Atkinson Hyperlegible) and falls back to a close system face on devices without it.
+
 ## Navigation, review, and completion
 
 Choose **Lesson navigation** in the course outline:
