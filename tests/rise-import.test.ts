@@ -85,6 +85,8 @@ test('a Rise web export imports every supported block with formatting, files, an
   if (multiple?.type === 'assessment') { assert.deepEqual(multiple.content.correct, [0, 1]); assert.equal(multiple.content.feedbackIncorrect, 'Look again.'); }
   assert.ok(gate?.type === 'continue' && gate.content.hint === 'Finish the questions first.');
   assert.ok(attachment?.type === 'attachment' && attachment.content.label === 'Garden Workbook');
+  // Rise shortens names inside its export; learners save the file under the name the author gave it.
+  if (attachment?.type === 'attachment') assert.equal(project.document.assets.find(a => a.id === attachment.content.assetId)?.fileName, 'Garden Workbook.pdf');
   const all = JSON.stringify(project.document);
   assert.doesNotMatch(all, /<script|alert\(|data-editor-id|target=/);
   for (const value of [paragraph, note].flatMap(b => b && 'text' in b.content ? [b.content.text] : [])) assert.ok(isCanonicalRich(value as string));

@@ -152,7 +152,8 @@ export async function importRiseExport(bytes: Buffer): Promise<{ project: Portab
   };
   const assets: Asset[] = [], projectFiles: Record<string, string> = {}, byHash = new Map<string, string>();
   let assetBytes = 0;
-  const addAsset = (name: string, accepted: (type: Asset['mediaType']) => boolean): string | undefined => {
+  // Rise shortens names in its export ("Module_08_Intimacy_with_Pu.pdf"), so a learner-facing file takes its original name when Rise kept one.
+  const addAsset = (name: string, accepted: (type: Asset['mediaType']) => boolean, originalName?: string): string | undefined => {
     const decoded = (() => { try { return decodeURIComponent(name); } catch { return name; } })();
     const bytes = files.get(decoded) ?? files.get(name);
     if (!bytes || !bytes.length) return undefined;
@@ -162,7 +163,8 @@ export async function importRiseExport(bytes: Buffer): Promise<{ project: Portab
     const existing = byHash.get(sha256);
     if (existing) return existing;
     if (assets.length >= 255) throw new ProjectError('This course has more than 255 media files, more than one OpenScroll project can hold.');
-    const asset: Asset = { id: id('asset', sha256), fileName: cleanFileName(decoded.split('/').pop()!, type), mediaType: type, byteLength: bytes.length, sha256 };
+    const original = (() => { try { return decodeURIComponent(originalName ?? ''); } catch { return originalName ?? ''; } })().split(/[/?#]/).filter(Boolean).pop();
+    const asset: Asset = { id: id('asset', sha256), fileName: cleanFileName(original || decoded.split('/').pop()!, type), mediaType: type, byteLength: bytes.length, sha256 };
     assets.push(asset); projectFiles[assetPath(asset)] = bytes.toString('base64'); byHash.set(sha256, asset.id); assetBytes += bytes.length;
     return asset.id;
   };
@@ -241,7 +243,7 @@ export async function importRiseExport(bytes: Buffer): Promise<{ project: Portab
     if (type === 'divider' && variant === 'spacer') { count('spacer'); return [{ ...base, type: 'spacer', variant: 'medium', content: {} }]; }
     if (type === 'multimedia' && variant === 'attachment') {
       const attachment = first.media?.attachment as Loose | undefined;
-      const assetId = addAsset(str(attachment?.key) || str(attachment?.originalUrl), t => t === 'application/pdf');
+      const assetId = addAsset(str(attachment?.key) || str(attachment?.originalUrl), t => t === 'application/pdf', str(attachment?.originalUrl));
       if (!assetId) { review('This attachment is not a PDF, so it was not imported. Attach it again as a PDF.'); return []; }
       count('attachment'); review('Add a short description of this file so learners know what it contains.');
       return [{ ...base, type: 'attachment', variant: 'download', content: { label: plain(attachment?.originalUrl).replace(/\.pdf$/i, '') || 'Download', description: '', assetId } }];
