@@ -8,7 +8,7 @@ import { isolatedDatabase, migrate } from '../helpers/database.js';
 import { accountConfig } from '../../src/server/accounts/config.js';
 import { sampleProject } from '../../src/project/sample.js';
 import { importProject } from '../../src/project/archive.js';
-import { assetPath } from '../../src/shared/course.js';
+import { assetPath, SCHEMA_VERSION } from '../../src/shared/course.js';
 import { prepareBlock } from '../../src/shared/block-catalog.js';
 import { assessmentProject } from '../helpers/assessment-project.js';
 import { mediaProject } from '../helpers/media-project.js';
@@ -79,13 +79,13 @@ test('outline persistence and concurrency against isolated PostgreSQL',async t=>
       const downloaded=await app.inject({url:`/api/library/courses/${id}/download`,headers:a});const portable=await importProject(downloaded.rawPayload);
       assert.deepEqual(portable.document.course.sections[0]!.lessons[0]!.blocks.at(-1),image.block);assert.equal(portable.files[assetPath(image.asset)],image.data);
     });
-    await t.test('portable v1 stored rows upgrade in memory and commit v2 only on an explicit versioned save',async()=>{
+    await t.test('portable v1 stored rows upgrade in memory and commit the current version only on an explicit versioned save',async()=>{
       const opened=await snapshot();const legacy={...structuredClone(opened.project.document),schemaVersion:1};const mutationId=randomUUID();const digest=createHash('sha256').update(JSON.stringify({document:legacy,files:null})).digest('hex');
       await pool.query('UPDATE courses SET document=$1,revision=revision+1,last_save_id=$2,last_save_hash=$3 WHERE id=$4',[legacy,mutationId,digest,id]);
       const retry=await save({revision:opened.revision,mutationId,document:legacy});assert.equal(retry.statusCode,200);assert.equal(retry.json().revision,opened.revision+1);
       const changed=structuredClone(legacy);changed.course.description='A different v1 request';assert.equal((await save({revision:opened.revision,mutationId,document:changed})).statusCode,409);
-      const upgraded=await snapshot();assert.equal(upgraded.project.document.schemaVersion,3);assert.equal((await pool.query('SELECT document FROM courses WHERE id=$1',[id])).rows[0].document.schemaVersion,1);assert.deepEqual(upgraded.project.files,opened.project.files);
-      assert.equal((await save({revision:upgraded.revision,mutationId:randomUUID(),document:upgraded.project.document})).statusCode,200);assert.equal((await pool.query('SELECT document FROM courses WHERE id=$1',[id])).rows[0].document.schemaVersion,3);
+      const upgraded=await snapshot();assert.equal(upgraded.project.document.schemaVersion,SCHEMA_VERSION);assert.equal((await pool.query('SELECT document FROM courses WHERE id=$1',[id])).rows[0].document.schemaVersion,1);assert.deepEqual(upgraded.project.files,opened.project.files);
+      assert.equal((await save({revision:upgraded.revision,mutationId:randomUUID(),document:upgraded.project.document})).statusCode,200);assert.equal((await pool.query('SELECT document FROM courses WHERE id=$1',[id])).rows[0].document.schemaVersion,SCHEMA_VERSION);
     });
     await t.test('all media and interaction content persists atomically and copied courses retain private independent media',async()=>{
       const opened=await snapshot();const project=await mediaProject();project.document.course.id=opened.project.document.course.id;project.document.course.createdAt=opened.project.document.course.createdAt;
@@ -96,9 +96,11 @@ test('outline persistence and concurrency against isolated PostgreSQL',async t=>
       assert.equal((await app.inject({url:`/api/library/courses/${copyId}/edit`,headers:b})).statusCode,404);
       const downloaded=await app.inject({url:`/api/library/courses/${id}/download`,headers:a});assert.deepEqual((await importProject(downloaded.rawPayload)).files,project.files);
     });
-    await t.test('legacy v2 acknowledgements replay unchanged after the v3 upgrade',async()=>{
-      const opened=await snapshot(),legacy={...structuredClone(opened.project.document),schemaVersion:2},mutationId=randomUUID();const hash=createHash('sha256').update(JSON.stringify({document:legacy,files:null})).digest('hex');await pool.query('UPDATE courses SET document=$1,revision=revision+1,last_save_id=$2,last_save_hash=$3 WHERE id=$4',[legacy,mutationId,hash,id]);
-      const result=await save({revision:opened.revision,mutationId,document:legacy});assert.equal(result.statusCode,200);assert.equal(result.json().revision,opened.revision+1);assert.equal((await snapshot()).project.document.schemaVersion,3);assert.equal((await pool.query('SELECT document FROM courses WHERE id=$1',[id])).rows[0].document.schemaVersion,2);
+    await t.test('legacy v2 acknowledgements replay unchanged after the schema upgrade',async()=>{
+      // The course now holds blocks that only version 4 supports, so the stored v2 row keeps the sample lessons a real
+      // version 2 document can hold. Relabeling version 4 blocks as v2 would store a row no release could open.
+      const opened=await snapshot(),current=structuredClone(opened.project.document),legacy={...current,schemaVersion:2,course:{...current.course,sections:sampleProject().document.course.sections}},mutationId=randomUUID();const hash=createHash('sha256').update(JSON.stringify({document:legacy,files:null})).digest('hex');await pool.query('UPDATE courses SET document=$1,revision=revision+1,last_save_id=$2,last_save_hash=$3 WHERE id=$4',[legacy,mutationId,hash,id]);
+      const result=await save({revision:opened.revision,mutationId,document:legacy});assert.equal(result.statusCode,200);assert.equal(result.json().revision,opened.revision+1);assert.equal((await snapshot()).project.document.schemaVersion,SCHEMA_VERSION);assert.equal((await pool.query('SELECT document FROM courses WHERE id=$1',[id])).rows[0].document.schemaVersion,2);
     });
     await t.test('assessment answer keys, scoring rules and private duplicates persist without learner state',async()=>{
       const opened=await snapshot(),project=assessmentProject();project.document.course.id=opened.project.document.course.id;project.document.course.createdAt=opened.project.document.course.createdAt;
