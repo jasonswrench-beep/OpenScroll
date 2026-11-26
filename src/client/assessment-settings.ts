@@ -31,10 +31,10 @@ export function assessmentSettings(root:HTMLElement,block:Block,change:Change){
   block.content.accepted.forEach((_value,index)=>button(`Remove accepted answer ${index+1}`,()=>apply(b=>{b.content.accepted.splice(index,1);},undefined,true),block.content.accepted.length<=1));
  }
  for(const key of ['pairs','items'] as const)if((key==='pairs' && block.variant==='matching') || (key==='items' && block.variant==='ordering')){
-  const count=block.content[key].length;button(`Add ${key==='pairs' ? 'pair' : 'item'}`,()=>apply(b=>{if(key==='pairs')b.content.pairs.push({left:'New term',right:'New explanation'});else b.content.items.push('A new step');},undefined,true),count>=20);
+  const count=block.content[key].length;button(`Add ${key==='pairs' ? 'pair' : 'ordering item'}`,()=>apply(b=>{if(key==='pairs')b.content.pairs.push({left:'New term',right:'New explanation'});else b.content.items.push('A new step');},undefined,true),count>=20);
   for(let index=0;index<count;index++){
-   for(const delta of [-1,1] as const)button(`Move ${key==='pairs' ? 'pair' : 'item'} ${index+1} ${delta===-1 ? 'up' : 'down'}`,()=>apply(b=>{const array=b.content[key];[array[index],array[index+delta]]=[array[index+delta]!,array[index]!];},undefined,true),index+delta<0 || index+delta>=count);
-   button(`Remove ${key==='pairs' ? 'pair' : 'item'} ${index+1}`,()=>apply(b=>{b.content[key].splice(index,1);},undefined,true),count<=2);
+   for(const delta of [-1,1] as const)button(`Move ${key==='pairs' ? 'pair' : 'ordering item'} ${index+1} ${delta===-1 ? 'up' : 'down'}`,()=>apply(b=>{const array=b.content[key];[array[index],array[index+delta]]=[array[index+delta]!,array[index]!];},undefined,true),index+delta<0 || index+delta>=count);
+   button(`Remove ${key==='pairs' ? 'pair' : 'ordering item'} ${index+1}`,()=>apply(b=>{b.content[key].splice(index,1);},undefined,true),count<=2);
   }
  }
  if(block.variant==='categorize'){

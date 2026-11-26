@@ -1,5 +1,5 @@
 import type { TextField } from '../shared/block-renderer.js';
-import { sanitizeRich,plainToRich,richToDom } from '../shared/rich-text.js';
+import { sanitizeRich,plainToRich,richToDom,richIsEmpty } from '../shared/rich-text.js';
 /**
  * Formatted text. The browser's own editing produces the markup; every change is reduced to the canonical subset
  * before it is stored, and pasted HTML is sanitized and rebuilt as DOM nodes rather than inserted as markup.
@@ -13,7 +13,10 @@ export function bindRich(element:HTMLElement,field:TextField,commit:(html:string
   element.addEventListener('compositionstart',()=>{composing=true;});element.addEventListener('compositionend',()=>{composing=false;update();});
   element.addEventListener('input',update);
   element.addEventListener('paste',event=>{
-    event.preventDefault();const html=event.clipboardData?.getData('text/html') ?? '';const value=html ? sanitizeRich(html) : plainToRich(event.clipboardData?.getData('text/plain') ?? '');
+    event.preventDefault();const html=event.clipboardData?.getData('text/html') ?? '',formatted=html ? sanitizeRich(html) : '';
+    // Formatted text with nothing left after sanitizing (only an image or a script) falls back to the plain text,
+    // which is inserted as characters, so a paste is never silently lost.
+    const value=formatted && !richIsEmpty(formatted) ? formatted : plainToRich(event.clipboardData?.getData('text/plain') ?? '');
     const selection=window.getSelection();let range=selection?.rangeCount ? selection.getRangeAt(0) : undefined;
     if(!range || !element.contains(range.commonAncestorContainer)){range=document.createRange();range.selectNodeContents(element);range.collapse(false);}
     range.deleteContents();const fragment=richToDom(value,document,{editable:true});const last=fragment.lastChild;range.insertNode(fragment);if(last){range.setStartAfter(last);range.collapse(true);selection?.removeAllRanges();selection?.addRange(range);}update();
