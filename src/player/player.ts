@@ -2,7 +2,7 @@ import { accentInk } from '../shared/course-templates.js';
 import { textAccent } from '../shared/contrast.js';
 import { renderAssessment } from './assessment-player.js';
 import { isAssessment,interactionCount,emptyAnswer,validAnswer,assessmentIssue } from '../shared/assessment.js';
-import { assetPath,type PortableProject,type Lesson,type CourseDocument } from '../shared/course.js';
+import { assetPath,type PortableProject,type Lesson,type CourseDocument,type Block } from '../shared/course.js';
 import { richToDom,richToPlain } from '../shared/rich-text.js';
 import { renderBlock } from '../shared/block-renderer.js';
 import { CourseFlow,type LearnerSnapshot } from './state.js';
@@ -125,7 +125,7 @@ export class CoursePlayer {
         const enabled=flow.canContinue(block.id),released=flow.released.has(block.id);wrapper.classList.add('player-gate');
         // An opened gate has done its job: it leaves a quiet divider rather than a disabled button.
         if(released){wrapper.classList.add('is-released');wrapper.removeAttribute('tabindex');wrapper.append(node('hr'));content.append(wrapper);continue;}
-        const help=node('p',enabled ? 'Continue to reveal the next part of this lesson.' : block.content.hint || 'Complete the required content above before continuing.');help.id=`gate-${block.id}`;
+        const help=node('p',this.gateHelp(block));help.id=`gate-${block.id}`;
         const button=this.action(block.content.label || 'Continue',()=>{const visible=flow.visible().length;if(flow.continue(block.id)){this.message='More content is available.';this.persist();const next=flow.visible()[visible];this.render(next ? `block-${next.id}` : 'complete-lesson');}},`continue-${block.id}`,!enabled);button.setAttribute('aria-describedby',help.id);wrapper.append(button,help);
       }else{
         const rendered=renderBlock(block,this.project,undefined,id=>this.url(id),index=>{if(flow.visit(block.id,index)){this.persist();queueMicrotask(()=>this.refreshGates());}});
@@ -146,6 +146,13 @@ export class CoursePlayer {
     }
     parts.push(content);linkGlossaryTerms(content,this.project);
     const footer=node('div',undefined,'player-lesson-actions'),done=flow.completed.has(flow.lessonId),next=flow.lessons[index+1];
+    // Until every part of the lesson is open, the learner is still inside it: the lesson's end (what's next, finishing)
+    // stays hidden so it can't be mistaken for the next part. A course with free navigation offers a plainly named skip.
+    if(!done && this.unopened()){
+      if(!next || !flow.canEnter(next.id))return parts;
+      footer.classList.add('is-skip-only');footer.append(this.action(`Skip the rest of this lesson and go to Lesson ${index+2}`,()=>this.open(next.id),'skip-lesson',false,'player-skip-lesson'));
+      parts.push(footer);return parts;
+    }
     const requirements=node('div');requirements.className='player-requirements';requirements.dataset.requirements='';footer.append(requirements);this.requirements(requirements);
     const pending=[...flow.visible().filter(isAssessment),...flow.visible().flatMap(b=>b.type==='bank-draw' ? flow.drawn(b.id) : [])].filter(block=>{const record=flow.record(block.id);return ((block.assessment.required || this.gated(block.id)) && !record?.last) || !!record?.draft;});
     const buttons=node('div',undefined,'player-lesson-buttons');
@@ -157,7 +164,7 @@ export class CoursePlayer {
       this.message='Answers submitted. Review your feedback, then finish the lesson.';this.persist();this.render('complete-lesson');
     },'submit-all',false,'is-primary'));
     if(next && !done){const upNext=node('p',undefined,'player-next');upNext.append(node('span',`Up next · Lesson ${index+2} of ${flow.lessons.length}`,'player-next-label'),node('span',next.title || 'Untitled lesson','player-next-title'));footer.append(upNext);}
-    if(!done || !next)buttons.append(this.action(done ? 'Lesson complete' : next ? 'Complete lesson and continue' : 'Complete lesson',()=>{if(flow.finish()){
+    if(!done || !next)buttons.append(this.action(done ? 'Lesson complete' : next ? `Complete lesson and go to Lesson ${index+2}` : 'Complete lesson',()=>{if(flow.finish()){
       this.message=flow.progress.done===flow.progress.total ? 'Course complete. You have completed every lesson.' : 'Lesson complete.';
       if(next){flow.enter(next.id);this.message='Previous lesson complete.';}this.persist();this.render(next ? 'lesson-title' : 'complete-lesson');
     }},'complete-lesson',done || !flow.canFinish(),'is-primary player-complete'));
@@ -170,11 +177,19 @@ export class CoursePlayer {
   }
   private refreshGates(){
     for(const block of this.flow.visible()){
-      if(block.type==='continue' && !this.flow.released.has(block.id)){const button=this.root.querySelector<HTMLButtonElement>(`[data-focus="continue-${block.id}"]`);if(button)button.disabled=!this.flow.canContinue(block.id);const help=this.root.querySelector<HTMLElement>(`#gate-${block.id}`);if(help)help.textContent=this.flow.canContinue(block.id) ? 'Continue to reveal the next part of this lesson.' : block.content.hint || 'Complete the required content above before continuing.';}
+      if(block.type==='continue' && !this.flow.released.has(block.id)){const button=this.root.querySelector<HTMLButtonElement>(`[data-focus="continue-${block.id}"]`);if(button)button.disabled=!this.flow.canContinue(block.id);const help=this.root.querySelector<HTMLElement>(`#gate-${block.id}`);if(help)help.textContent=this.gateHelp(block);}
       const status=this.root.querySelector<HTMLElement>(`[data-interaction-progress="${block.id}"]`);if(status)status.textContent=`Explored ${this.flow.explored(block.id)} of ${interactionCount(block)} items.`;
     }
     const complete=this.root.querySelector<HTMLButtonElement>('[data-focus="complete-lesson"]');if(complete)complete.disabled=this.flow.completed.has(this.flow.lessonId) || !this.flow.canFinish();
     const requirements=this.root.querySelector<HTMLElement>('[data-requirements]');if(requirements)this.requirements(requirements);
+  }
+  /** The Continue blocks that divide this lesson into parts. One at the very end reveals nothing, so it is not a part. */
+  private gates(){const blocks=this.flow.lesson?.blocks ?? [];return blocks.filter(b=>b.type==='continue' && b!==blocks.at(-1));}
+  private unopened(){return this.gates().some(b=>!this.flow.released.has(b.id));}
+  /** Says that the lesson goes on below and how far through it the learner is, so Continue never reads as a new lesson. */
+  private gateHelp(block:Extract<Block,{type:'continue'}>){
+    if(!this.flow.canContinue(block.id))return block.content.hint || 'Finish the activity above to see the rest of this lesson.';
+    const gates=this.gates();return `This lesson continues below: part ${gates.findIndex(b=>b.id===block.id)+2} of ${gates.length+1}.`;
   }
   private gated(id:string){const blocks=this.flow.visible(),index=blocks.findIndex(b=>b.id===id);return blocks.some((b,i)=>b.type==='continue' && i>index && (b.completion==='all-previous' || b.completion==='previous' && i===index+1));}
   private requirements(root:HTMLElement){
@@ -185,7 +200,7 @@ export class CoursePlayer {
     });
     if(!items.length)return;root.append(node('p','To finish this lesson:'));const list=node('ul');
     for(const block of items){
-      const label=isAssessment(block)?`${this.flow.record(block.id)?.last?'Answer correctly':'Submit answer'}: ${richToPlain(block.content.prompt).slice(0,120)}`:block.type==='bank-draw'?`Answer the questions: ${block.content.title || 'questions from the bank'}`:isResponseBlock(block)?`Respond: ${responseTitle(block).slice(0,120)}`:block.requiredInteraction?`Explore all items: ${this.blockLabel(block.id)}`:block.type==='continue'?'Open the next section':'Review: '+this.blockLabel(block.id);
+      const label=isAssessment(block)?`${this.flow.record(block.id)?.last?'Answer correctly':'Submit answer'}: ${richToPlain(block.content.prompt).slice(0,120)}`:block.type==='bank-draw'?`Answer the questions: ${block.content.title || 'questions from the bank'}`:isResponseBlock(block)?`Respond: ${responseTitle(block).slice(0,120)}`:block.requiredInteraction?`Explore all items: ${this.blockLabel(block.id)}`:block.type==='continue'?'Show the rest of this lesson':'Review: '+this.blockLabel(block.id);
       const item=node('li');item.append(this.action(label,()=>{const target=this.root.querySelector<HTMLElement>(`[data-focus="${isAssessment(block)?'question-':'block-'}${block.id}"]`);target?.focus();target?.scrollIntoView({block:'center'});},'requirement-'+block.id));list.append(item);
     }root.append(list);
   }
