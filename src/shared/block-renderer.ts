@@ -44,7 +44,7 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
         const list=document.createElement('ol');list.type='A';block.content.areas.forEach(area=>{const li=document.createElement('li');li.textContent=area.label;list.append(li);});root.append(list);
       }
       if(block.variant==='matching')block.content.pairs.forEach((pair,i)=>root.append(field('h4',pair.left,`pairs.${i}.left`,`Pair ${i+1} term`,300,false),field('p',pair.right,`pairs.${i}.right`,`Pair ${i+1} match`,300,false)));
-      if(block.variant==='ordering')block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Item ${i+1} to order`,300,false)));
+      if(block.variant==='ordering')block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Ordering item ${i+1}`,300,false)));
       if(block.variant==='categorize'){
         block.content.groups.forEach((value,i)=>root.append(field('h4',value,`groups.${i}`,`Group ${i+1}`,300,false)));
         block.content.items.forEach((value,i)=>root.append(field('p',value,`items.${i}`,`Card ${i+1} to sort`,300,false)));
