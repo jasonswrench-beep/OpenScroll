@@ -8,6 +8,7 @@ import rateLimit from '@fastify/rate-limit';
 import { accountRoutes, type AccountServices } from './accounts/routes.js';
 import { installAccountAccess, requireAuthor, requireOwner } from './accounts/access.js';
 import { resolve, basename } from 'node:path';
+import { installLargeRequestSlot } from './large-requests.js';
 export interface Database { query: (text: string) => Promise<unknown>; }
 export async function buildApp(database: Database, staticRoot?: string, accounts?:AccountServices) {
   const hops=trustedProxyHops();
@@ -51,6 +52,8 @@ export async function buildApp(database: Database, staticRoot?: string, accounts
   });
   // Lets the classic workspace offer the new one only where the operator has turned it on.
   app.get('/api/features',async()=>({studio,externalVideo,limits}));
+  // One slot for every request that carries a whole course, shared by the project and library routes.
+  installLargeRequestSlot(app);
   if (accounts) await app.register(accountRoutes,{prefix:'/api',...accounts});
   await app.register(projectRoutes, { prefix: '/api/projects',playerRoot:staticRoot });
   if (staticRoot){

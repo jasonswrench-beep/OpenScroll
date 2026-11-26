@@ -128,7 +128,8 @@ services:
     security_opt: ["no-new-privileges:true"]
     tmpfs: ["/tmp:rw,nosuid,size=256m,mode=1777"]
     volumes: ["renderer_socket:/run/openscroll-renderer:ro"]
-    mem_limit: 2g
+    # One whole course is processed at a time; see OPENSCROLL_APP_MEMORY in env.example before raising the size limits.
+    mem_limit: ${OPENSCROLL_APP_MEMORY:-2g}
     pids_limit: 256
     ports: ["127.0.0.1:${APP_PORT:-3100}:3000"]
     healthcheck:

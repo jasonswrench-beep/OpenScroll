@@ -8,6 +8,7 @@ import { remapDocumentAssets } from '../shared/reuse.js';
 import { validateProject, exportProject, LIMITS } from '../project/archive.js';
 import { requestBytes, sizeLabel } from '../shared/limits.js';
 import { instanceSizeLimits } from './config.js';
+import { installLargeRequestSlot, guardLargeBodies, withLargeRequest } from './large-requests.js';
 import { HttpError, requireAuthor } from './accounts/routes.js';
 const idSchema=z.string().uuid();
 function courseId(request:FastifyRequest) {
@@ -85,6 +86,8 @@ async function saveNew(pool:pg.Pool,owner:string,project:PortableProject,assetLi
 export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=1024*1024*1024}:{pool:pg.Pool;assetLimitBytes?:number}) {
   const courseRequest=requestBytes(instanceSizeLimits());
   app.addHook('onRequest',async request => {requireAuthor(request);});
+  // Saves and imports that carry a whole course share the process's one large-request slot (large-requests.ts).
+  installLargeRequestSlot(app);guardLargeBodies(app);
   app.get('/courses',async request => {
     const query=parse(z.strictObject({search:z.string().max(200).default(''),sort:z.enum(['updated','created','title']).default('updated'),offset:z.coerce.number().int().min(0).max(10000).default(0)}),request.query);
     const ordering={updated:'updated_at DESC, id',created:'created_at DESC, id',title:"lower(document->'course'->>'title'), id"}[query.sort];
@@ -96,12 +99,12 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
     const data=parse(z.strictObject({title:z.string().trim().min(1).max(300)}),request.body);
     return saveNew(pool,request.author!.id,freshProject(data.title,request.author!.name),assetLimitBytes);
   });
-  app.post('/courses/import',{bodyLimit:courseRequest,config:{rateLimit:{max:10,timeWindow:'1 minute',groupId:'course-import'}}},async request => {
+  app.post('/courses/import',{bodyLimit:courseRequest,config:{largeBody:true,rateLimit:{max:10,timeWindow:'1 minute',groupId:'course-import'}}},async request => withLargeRequest(app,request,async () => {
     try {return await saveNew(pool,request.author!.id,validateProject(request.body),assetLimitBytes);}
     catch(error) {if(error instanceof ProjectError) throw new HttpError(422,error.message);throw error;}
-  });
+  }));
   app.get('/courses/:id/edit',async request => readSnapshot(pool,courseId(request),request.author!.id));
-  app.put('/courses/:id/document',{bodyLimit:courseRequest},async request => {
+  app.put('/courses/:id/document',{bodyLimit:courseRequest,config:{largeBody:true}},async request => withLargeRequest(app,request,async () => {
     const id=courseId(request);
     const input=parse(z.strictObject({revision:z.number().int().positive(),mutationId:z.string().uuid(),document:z.unknown(),files:z.record(z.string(),z.string()).optional()}),request.body);
     let document:CourseDocument;
@@ -139,7 +142,7 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
       const result=await client.query('UPDATE courses SET document=$1,revision=revision+1,last_save_id=$2,last_save_hash=$3,updated_at=now() WHERE id=$4 RETURNING revision',[document,input.mutationId,digest,id]);
       await client.query('COMMIT');return {revision:result.rows[0].revision,updatedAt:document.course.updatedAt};
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
-  });
+  }));
   app.get('/courses/:id',async request => readProject(pool,courseId(request),request.author!.id));
   app.get('/courses/:id/download',async (request,reply) => reply.type('application/x-openscroll-project').header('Content-Disposition','attachment; filename="course.openscroll"').send(await exportProject(await readProject(pool,courseId(request),request.author!.id))));
   app.patch('/courses/:id',async request => {

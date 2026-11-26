@@ -13,6 +13,7 @@ import { ProjectError } from '../shared/course.js';
 import { HttpError } from './accounts/access.js';
 import { requestBytes } from '../shared/limits.js';
 import { instanceSizeLimits } from './config.js';
+import { installLargeRequestSlot, claimLargeRequest } from './large-requests.js';
 
 export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:string}) {
   // A whole course as JSON (every file in base64), sized from this instance's course limit.
@@ -21,16 +22,16 @@ export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:st
   app.addContentTypeParser('application/x-openscroll-project', { parseAs: 'buffer', bodyLimit: LIMITS.archive }, (_request,body,done) => done(null,body));
   app.addContentTypeParser('application/zip', { parseAs: 'buffer', bodyLimit: RISE_LIMITS.upload }, (_request,body,done) => done(null,body));
   app.decorateRequest('projectProcessing', false);
-  // One request owns the slot through body parsing and archive work.
-  let activeRequest: string | undefined;
-  const release = (request: FastifyRequest) => { if (activeRequest === request.id) activeRequest = undefined; };
+  // Every project request owns the process's large-request slot through body parsing and archive work, shared with
+  // the library's large saves and imports (large-requests.ts), so only one whole course is in memory at a time.
+  installLargeRequestSlot(app);
+  const release = (request: FastifyRequest) => { app.largeRequests.release(request.id); };
   async function processFile<T>(request: FastifyRequest, operation: () => Promise<T>) {
     request.projectProcessing = true;
     try { return await operation(); } finally { release(request); }
   }
   app.addHook('onRequest', async (request,reply) => {
-    if (activeRequest !== undefined) return reply.code(429).header('Retry-After','2').send({ error: 'Another project file is being processed. Please try again.' });
-    activeRequest = request.id;
+    if (!claimLargeRequest(app, request, reply, 'Another project file is being processed. Please try again.')) return reply;
     reply.header('Cache-Control','no-store');
   });
   app.addHook('onResponse', async request => { release(request); });

@@ -7,6 +7,7 @@ import { ProjectError } from '../shared/course.js';
 import { HttpError,requireAuthor } from './accounts/routes.js';
 import { requestBytes, sizeLabel } from '../shared/limits.js';
 import { instanceSizeLimits } from './config.js';
+import { installLargeRequestSlot, guardLargeBodies, withLargeRequest } from './large-requests.js';
 /** Saved content and snapshots per account: at least 256 MiB, and room for about three full-size course snapshots (stored in base64). */
 export const RETENTION={items:100,snapshots:10,get ownerBytes(){return Math.max(256*1024*1024,4*instanceSizeLimits().courseBytes);}};
 const uuid=z.string().uuid(),title=z.string().trim().min(1).max(300),kind=z.enum(['template','group','asset']);
@@ -15,10 +16,11 @@ const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).d
 async function budget(client:pg.PoolClient,owner:string,bytes:number){const result=await client.query('SELECT COALESCE((SELECT sum(stored_bytes) FROM reusable_items WHERE owner_id=$1),0)+COALESCE((SELECT sum(stored_bytes) FROM course_snapshots WHERE owner_id=$1),0) AS total',[owner]);if(Number(result.rows[0].total)+bytes>RETENTION.ownerBytes)throw new HttpError(409,`Saved content and snapshots exceed the ${sizeLabel(RETENTION.ownerBytes)} account limit. Download and delete an unneeded item first.`);}
 export async function reuseRoutes(app:FastifyInstance,{pool}:{pool:pg.Pool}){
  app.addHook('onRequest',async request=>{requireAuthor(request);});
+ installLargeRequestSlot(app);guardLargeBodies(app);
  app.setErrorHandler((error,_request,reply)=>{if(error instanceof HttpError)return reply.code(error.statusCode).send({error:error.message});if(error instanceof ProjectError)return reply.code(422).send({error:error.message});const code=typeof error==='object' && error!==null && 'statusCode' in error?error.statusCode:undefined;if(code===413)return reply.code(413).send({error:'This reusable content exceeds the upload limit.'});if(code===400||code===415)return reply.code(code).send({error:'The request body is invalid.'});return reply.code(500).send({error:'Saved content could not be processed. Your course is unchanged.'});});
  app.get('/reusable',async request=>{const query=parse(z.strictObject({kind:kind.optional(),search:z.string().max(200).default('')}),request.query);const rows=await pool.query(`SELECT id,kind,title,created_at,stored_bytes FROM reusable_items WHERE owner_id=$1 AND ($2::text IS NULL OR kind=$2) AND strpos(lower(title || ' ' || COALESCE(project#>>'{document,assets,0,fileName}','') || ' ' || COALESCE(project#>>'{document,assets,0,mediaType}','')),lower($3))>0 ORDER BY created_at DESC,id LIMIT 100`,[request.author!.id,query.kind??null,query.search]);return {items:rows.rows};});
  app.get('/reusable/:id',async request=>{const {id}=parse(z.strictObject({id:uuid}),request.params);const row=(await pool.query('SELECT id,kind,title,project FROM reusable_items WHERE id=$1 AND owner_id=$2',[id,request.author!.id])).rows[0];if(!row)throw new HttpError(404,'Reusable item not found.');return row;});
- app.post('/reusable',{bodyLimit:requestBytes(instanceSizeLimits())},async request=>{
+ app.post('/reusable',{bodyLimit:requestBytes(instanceSizeLimits()),config:{largeBody:true}},async request=>withLargeRequest(app,request,async()=>{
   const input=parse(z.strictObject({id:uuid,kind,title,project:z.unknown()}),request.body),project=validateProject(input.project),owner=request.author!.id;
   const blocks=project.document.course.sections.flatMap(s=>s.lessons).flatMap(l=>l.blocks);
   if(input.kind==='group' && (!blocks.length || blocks.length>100))throw new HttpError(422,'A saved group must contain 1–100 blocks.');
@@ -28,7 +30,7 @@ export async function reuseRoutes(app:FastifyInstance,{pool}:{pool:pg.Pool}){
    const count=(await client.query('SELECT count(*)::int AS total FROM reusable_items WHERE owner_id=$1',[owner])).rows[0].total;if(count>=RETENTION.items)throw new HttpError(409,'Keep up to 100 reusable items. Delete an unneeded item first.');await budget(client,owner,bytes);
    await client.query('INSERT INTO reusable_items(id,owner_id,kind,title,project,stored_bytes,request_hash) VALUES($1,$2,$3,$4,$5,$6,$7)',[input.id,owner,input.kind,input.title,project,bytes,digest]);await client.query('COMMIT');return {id:input.id};
   }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
- });
+ }));
  app.delete('/reusable/:id',async request=>{const {id}=parse(z.strictObject({id:uuid}),request.params);const result=await pool.query('DELETE FROM reusable_items WHERE id=$1 AND owner_id=$2',[id,request.author!.id]);if(!result.rowCount)throw new HttpError(404,'Reusable item not found.');return {message:'Reusable item deleted. Inserted copies are unchanged.'};});
  app.get('/courses/:id/snapshots',async request=>{const {id}=parse(z.strictObject({id:uuid}),request.params),owner=request.author!.id;const own=await pool.query('SELECT 1 FROM courses WHERE id=$1 AND owner_id=$2',[id,owner]);if(!own.rowCount)throw new HttpError(404,'Course not found.');return {snapshots:(await pool.query('SELECT id,title,source_revision,created_at,stored_bytes FROM course_snapshots WHERE course_id=$1 AND owner_id=$2 ORDER BY created_at DESC,id',[id,owner])).rows};});
  app.get('/courses/:id/snapshots/:snapshot',async request=>{const {id,snapshot}=parse(z.strictObject({id:uuid,snapshot:uuid}),request.params);const row=(await pool.query('SELECT s.id,s.title,s.source_revision,s.project FROM course_snapshots s JOIN courses c ON c.id=s.course_id AND c.owner_id=s.owner_id WHERE s.id=$1 AND s.course_id=$2 AND s.owner_id=$3',[snapshot,id,request.author!.id])).rows[0];if(!row)throw new HttpError(404,'Snapshot not found.');return row;});

@@ -36,6 +36,11 @@ listed in the order it should happen. Nothing here has been pushed, tagged or de
 - [ ] Review `npm audit`: the advisories for `@fastify/static`, `glob`, `minimatch` and `fast-xml-parser` were
   present before this branch. Update where a fixed version exists and record the rest.
 - [ ] `npm run licenses` passes with `@openstage/bank` 0.1.0 listed in the third-party notices.
+- [ ] Preview frames (security review of 2026-11-26, L1; first review, L4): the studio and classic previews load
+  `/player.html` with `allow-scripts allow-same-origin`. Dropping `allow-same-origin` makes the frame's origin
+  opaque, so its module scripts would need CORS headers and the preview messages a `*` target. The reviewer
+  found no way in, since course content reaches the page only as built elements. Decide whether to make that
+  change or accept the risk, and record the decision.
 
 ## Before tagging
 
@@ -44,6 +49,9 @@ listed in the order it should happen. Nothing here has been pushed, tagged or de
   attempt's interactions with its result. Test a written response larger than SCORM 1.2 can hold and confirm the
   learner is told it is kept on this device. Record the Brightspace release, browser and import options.
 - [ ] Recreate at least one of the five Rise courses in the studio from its import, then export and check it.
+- [ ] On the release image with the default limits: two authors save a course near the 160 MiB limit at the same
+  moment, and one exports it as SCORM while the other saves. The app stays up (no restart in `docker compose ps`),
+  one request waits for the other ("try again"), and both saves land. Watch memory with `docker stats`.
 - [ ] Accessibility session: keyboard only and with a screen reader (NVDA with Firefox or Chrome, and VoiceOver
   with Safari) through the library, the lesson editor and the learner player, including a scenario, the glossary
   term links and interactive video. Zero blockers to release.
