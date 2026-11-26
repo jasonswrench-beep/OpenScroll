@@ -1,4 +1,5 @@
-import { trustedProxyHops, studioEnabled, externalVideoEnabled } from './config.js';
+import { trustedProxyHops, studioEnabled, externalVideoEnabled, instanceSizeLimits } from './config.js';
+import { requestBytes, transferTimeout } from '../shared/limits.js';
 import Fastify from 'fastify';
 import staticFiles from '@fastify/static';
 import { projectRoutes } from './project-routes.js';
@@ -10,8 +11,10 @@ import { resolve, basename } from 'node:path';
 export interface Database { query: (text: string) => Promise<unknown>; }
 export async function buildApp(database: Database, staticRoot?: string, accounts?:AccountServices) {
   const hops=trustedProxyHops();
-  const studio=studioEnabled(),externalVideo=externalVideoEnabled();
-  const app = Fastify({ logger: false, trustProxy:hops ? (_address,hop)=>hop<hops : false, requestTimeout: 30_000, connectionTimeout: 30_000 });
+  const studio=studioEnabled(),externalVideo=externalVideoEnabled(),limits=instanceSizeLimits();
+  // A save or export carries the whole course, so a request may take as long as sending the largest course allowed;
+  // an idle connection still closes after 30 seconds.
+  const app = Fastify({ logger: false, trustProxy:hops ? (_address,hop)=>hop<hops : false, requestTimeout: transferTimeout(requestBytes(limits)), connectionTimeout: 30_000 });
   if(process.env.NODE_ENV==='production')app.addHook('onResponse',async(request,reply)=>{if(request.routeOptions.url==='/api/health'&&reply.statusCode===200)return;console.log(JSON.stringify({event:'http',requestId:request.id,method:request.method,route:request.routeOptions.url??'unmatched',status:reply.statusCode,durationMs:Math.round(reply.elapsedTime)}));});
   app.addHook('onSend',async (request,reply) => {
     const player=request.url.split('?')[0]==='/player.html';
@@ -47,7 +50,7 @@ export async function buildApp(database: Database, staticRoot?: string, accounts
     }
   });
   // Lets the classic workspace offer the new one only where the operator has turned it on.
-  app.get('/api/features',async()=>({studio,externalVideo}));
+  app.get('/api/features',async()=>({studio,externalVideo,limits}));
   if (accounts) await app.register(accountRoutes,{prefix:'/api',...accounts});
   await app.register(projectRoutes, { prefix: '/api/projects',playerRoot:staticRoot });
   if (staticRoot){

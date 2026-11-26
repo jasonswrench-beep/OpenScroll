@@ -1,6 +1,7 @@
 import { assetPath,parseCourse,eachBlock,relinkCheckpoints,type Block,type PortableProject,type CourseDocument } from './course.js';
 import { renewIds } from './block-catalog.js';
 import { newId } from './outline.js';
+import { instanceLimits,sizeLabel } from './limits.js';
 export type ReusableKind='template'|'group'|'asset';
 export function blockAssetIds(block:Block):string[]{
  if(block.type==='columns')return block.content.columns.flatMap(column=>column.blocks.flatMap(blockAssetIds));
@@ -73,4 +74,4 @@ export function restoredProject(current:PortableProject,snapshot:PortableProject
 }
 export type CourseTheme=CourseDocument['course']['theme'];
 
-export function assertProjectBudget(project:PortableProject){const bytes=new TextEncoder().encode(JSON.stringify(project.document,null,2)+'\n').length;if(bytes>2*1024*1024)throw new Error('The course document would exceed 2 MiB. Split the content into another course.');if(bytes+project.document.assets.reduce((n,a)=>n+a.byteLength,0)>64*1024*1024)throw new Error('The course would exceed 64 MiB with retained assets. Download a copy or use a new course so retained assets stay safe.');}
+export function assertProjectBudget(project:PortableProject){const bytes=new TextEncoder().encode(JSON.stringify(project.document,null,2)+'\n').length;if(bytes>2*1024*1024)throw new Error('The course document would exceed 2 MiB. Split the content into another course.');if(bytes+project.document.assets.reduce((n,a)=>n+a.byteLength,0)>instanceLimits.courseBytes)throw new Error(`The course would exceed ${sizeLabel(instanceLimits.courseBytes)} with retained assets. Download a copy or use a new course so retained assets stay safe.`);}

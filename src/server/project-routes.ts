@@ -11,8 +11,12 @@ import { sampleProject } from '../project/sample.js';
 import { importRiseExport, RISE_LIMITS } from '../project/rise-import.js';
 import { ProjectError } from '../shared/course.js';
 import { HttpError } from './accounts/access.js';
+import { requestBytes } from '../shared/limits.js';
+import { instanceSizeLimits } from './config.js';
 
 export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:string}) {
+  // A whole course as JSON (every file in base64), sized from this instance's course limit.
+  const courseRequest=requestBytes(instanceSizeLimits());
   app.addContentTypeParser('application/octet-stream',{parseAs:'buffer',bodyLimit:QUESTION_FILE_LIMIT},(_request,body,done)=>done(null,body));
   app.addContentTypeParser('application/x-openscroll-project', { parseAs: 'buffer', bodyLimit: LIMITS.archive }, (_request,body,done) => done(null,body));
   app.addContentTypeParser('application/zip', { parseAs: 'buffer', bodyLimit: RISE_LIMITS.upload }, (_request,body,done) => done(null,body));
@@ -62,13 +66,13 @@ export async function projectRoutes(app: FastifyInstance,options:{playerRoot?:st
     if (!Buffer.isBuffer(request.body)) throw new ProjectError('Upload an OpenAssess question bank (.openassess).');
     return processFile(request, () => importOpenAssess(request.body as Buffer));
   });
-  for(const [path,edition]of [['scorm-12','1.2'],['scorm-2004','2004']] as const)app.post('/'+path,{bodyLimit:90*1024*1024},async(request,reply)=>reply.type('application/zip').header('Content-Disposition',`attachment; filename="course-${path}.zip"`).send(await processFile(request,()=>exportScorm(request.body,options.playerRoot ?? resolve('dist/client'),edition))));
-  app.post('/pdf',{bodyLimit:90*1024*1024},async(request,reply)=>{
+  for(const [path,edition]of [['scorm-12','1.2'],['scorm-2004','2004']] as const)app.post('/'+path,{bodyLimit:courseRequest},async(request,reply)=>reply.type('application/zip').header('Content-Disposition',`attachment; filename="course-${path}.zip"`).send(await processFile(request,()=>exportScorm(request.body,options.playerRoot ?? resolve('dist/client'),edition))));
+  app.post('/pdf',{bodyLimit:courseRequest},async(request,reply)=>{
     const parsed=z.strictObject({project:z.unknown(),options:z.unknown().optional()}).safeParse(request.body);
     if(!parsed.success)throw new ProjectError('Send a course project and PDF options.');
     return reply.type('application/pdf').header('Content-Disposition','attachment; filename="course.pdf"').send(await processFile(request,()=>exportPdf(parsed.data.project,parsed.data.options)));
   });
-  app.post('/html', { bodyLimit:90 * 1024 * 1024 }, async (request,reply) => reply.type('application/zip').header('Content-Disposition','attachment; filename="course-html.zip"').send(await processFile(request,()=>exportHtml(request.body,options.playerRoot ?? resolve('dist/client')))));
-  app.post('/export', { bodyLimit: 90 * 1024 * 1024 }, async (request,reply) => reply.type('application/x-openscroll-project').header('Content-Disposition','attachment; filename="course.openscroll"').send(await processFile(request, () => exportProject(request.body))));
+  app.post('/html', { bodyLimit:courseRequest }, async (request,reply) => reply.type('application/zip').header('Content-Disposition','attachment; filename="course-html.zip"').send(await processFile(request,()=>exportHtml(request.body,options.playerRoot ?? resolve('dist/client')))));
+  app.post('/export', { bodyLimit: courseRequest }, async (request,reply) => reply.type('application/x-openscroll-project').header('Content-Disposition','attachment; filename="course.openscroll"').send(await processFile(request, () => exportProject(request.body))));
 }
 declare module 'fastify' { interface FastifyRequest { projectProcessing: boolean; } }

@@ -1,3 +1,4 @@
+import { courseTimeout,instanceLimits,sizeLabel } from '../shared/limits.js';
 import { plainToRich,richToPlain } from '../shared/rich-text.js';
 import { saveReusable,action as reuseAction } from './reusable-content.js';
 import { compactProject } from '../shared/reuse.js';
@@ -182,13 +183,13 @@ document.querySelector('#outline-cover-decorative')!.addEventListener('change',e
 document.querySelector<HTMLInputElement>('#outline-cover-file')!.addEventListener('change',async event=>{
   const input=event.target as HTMLInputElement;const file=input.files?.[0];const active=controller;if(!file || !active)return;
   try {
-    if(file.size===0 || file.size>16*1024*1024)throw new Error('Choose a PNG, JPEG, or WebP image up to 16 MiB.');
+    if(file.size===0 || file.size>instanceLimits.fileBytes)throw new Error(`Choose a PNG, JPEG, or WebP image up to ${sizeLabel(instanceLimits.fileBytes)}.`);
     const extensions:Record<string,Asset['mediaType']>={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp'};
     const extension=file.name.split('.').at(-1)!.toLowerCase();const mediaType=extensions[extension];if(!mediaType)throw new Error('Choose a PNG, JPEG, or WebP image.');
     const bytes=await file.arrayBuffer();const header=new Uint8Array(bytes).slice(0,12);
     const signature=mediaType==='image/png' ? [137,80,78,71,13,10,26,10].every((byte,index)=>header[index]===byte) : mediaType==='image/jpeg' ? header[0]===255 && header[1]===216 && header[2]===255 : new TextDecoder().decode(header.slice(0,4))==='RIFF' && new TextDecoder().decode(header.slice(8,12))==='WEBP';
     if(!signature)throw new Error('The image content does not match its file type. Choose another image.');
-    if(active.project.document.assets.reduce((size,asset)=>size+asset.byteLength,0)+file.size+jsonSize(active.project.document)>64*1024*1024)throw new Error('The project would exceed its 64 MiB expanded limit.');
+    if(active.project.document.assets.reduce((size,asset)=>size+asset.byteLength,0)+file.size+jsonSize(active.project.document)>instanceLimits.courseBytes)throw new Error(`The project would exceed its ${sizeLabel(instanceLimits.courseBytes)} course limit.`);
     const hash=await crypto.subtle.digest('SHA-256',bytes);const id=newId();
     const base64=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]!);reader.onerror=()=>reject(new Error('The cover could not be read.'));reader.readAsDataURL(file);});
     if(controller!==active)return;
@@ -207,7 +208,7 @@ document.querySelector<HTMLButtonElement>('#outline-html')!.addEventListener('cl
 document.querySelector('#outline-download')!.addEventListener('click',async ()=>{
   if(!controller)return;
   try {
-    const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(candidate?.project ?? controller.project),signal:AbortSignal.timeout(30000)});
+    const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(candidate?.project ?? controller.project),signal:AbortSignal.timeout(courseTimeout(candidate?.project ?? controller.project))});
     if(!response.ok){const data=await response.json();throw new Error(data.error ?? 'Download failed.');}
     const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.download='course.openscroll';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);notice.textContent='Download prepared. This does not overwrite the library course.';
   }catch(error){tell(error);}

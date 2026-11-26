@@ -107,7 +107,7 @@ note checkpoint pauses and shows its text with Continue the video. Every chapter
 the video as buttons, so learners who do not use the video controls reach the same content. Checks warns when a
 checkpoint's question is missing, above the video, or behind a Continue button.
 
-**Embedded YouTube and Vimeo video.** Off unless the server sets `OPENSCROLL_EXTERNAL_VIDEO=on`. When on, the block
+**Embedded YouTube and Vimeo video.** On unless the server sets `OPENSCROLL_EXTERNAL_VIDEO=off`. The block
 takes a YouTube or Vimeo address and a required transcript. Learners load nothing from the service until they press
 play; YouTube uses its privacy-enhanced player and Vimeo its do-not-track option. Exports that contain such a video
 add only those two hosts to the player's frame policy, and Checks lists each one under "Needs a person's review" so
@@ -128,5 +128,5 @@ saved as WebP; a target around the click; the instruction "Select the Save butto
 accessible name; and the keys typed before the next click as the text to type. Window titles from the log are never
 used, because they can contain private information. Review every instruction and describe every screenshot.
 
-**File sizes.** Exports keep today's limits (16 MB per file, 32 MB per package). Settings to raise them wait for the
-owner's decision and the server work in the release stage.
+**File sizes.** One file may be up to 64 MiB and a course up to 160 MiB by default; the server's operator can raise
+them (see [Self-hosting](SELF-HOSTING.md)). Long video belongs on YouTube or Vimeo, in an Embedded video block.

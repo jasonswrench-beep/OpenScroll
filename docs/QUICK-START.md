@@ -41,8 +41,8 @@ is changed in another tab, the conflict banner lets you keep both versions; noth
 
 ## 4. Add what belongs to the whole course
 
-**Course details, Open course resources** holds the glossary, question banks, characters for scenarios and the
-certificate. A "Questions from a bank" block draws questions at random for each learner; a results block shows
+**Course details, Open course resources** holds the glossary, question banks, characters for scenarios (choose people from
+the library, or upload your own) and the certificate. A "Questions from a bank" block draws questions at random for each learner; a results block shows
 the score, the questions missed and the certificate. See [COURSE-RESOURCES.md](COURSE-RESOURCES.md) and
 [SCENARIOS.md](SCENARIOS.md).
 

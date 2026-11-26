@@ -76,7 +76,7 @@ but their settings are only in the studio.
 
 Course details, Open course resources has four tabs: the glossary (terms, other names, definitions, CSV import and
 term links), question banks (new bank, OpenAssess import, spreadsheet import, Edit questions), characters (for
-scenarios) and the certificate.
+scenarios: Choose from the library, or Add your own character) and the certificate.
 Edit questions opens the bank in the lesson editor with the picker limited to questions. See
 [COURSE-RESOURCES.md](COURSE-RESOURCES.md).
 

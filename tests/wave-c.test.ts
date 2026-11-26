@@ -88,7 +88,8 @@ test('Checks: embedded video needs the server setting, an address and a transcri
   assert.ok(codes.includes('review:external-content'));
   of(p, 'video').content.checkpoints[0]!.questionId = 'item-gone';
   assert.ok(courseChecks(p).some(i => i.code === 'checkpoint-missing'));
-  assert.equal(externalVideoEnabled({}), false);
+  assert.equal(externalVideoEnabled({}), true, 'on unless the operator turns it off');
+  assert.equal(externalVideoEnabled({ OPENSCROLL_EXTERNAL_VIDEO: 'off' }), false);
   assert.equal(externalVideoEnabled({ OPENSCROLL_EXTERNAL_VIDEO: 'on' }), true);
   assert.throws(() => externalVideoEnabled({ OPENSCROLL_EXTERNAL_VIDEO: 'yes' }), /on or off/);
 });

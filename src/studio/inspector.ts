@@ -18,6 +18,7 @@ import { richToPlain } from '../shared/rich-text.js';
 import { h, button, icon, pickFile } from './dom.js';
 import { blockName, blockIcon, chooseBlock } from './block-picker.js';
 import { regionEditor } from './region-editor.js';
+import { instanceLimits, sizeLabel } from '../shared/limits.js';
 
 export type Tab = 'content' | 'style' | 'behavior' | 'access';
 export type UploadKind = 'image' | 'audio' | 'video' | 'attachment';
@@ -438,7 +439,7 @@ function imageChooser(ctx: InspectorContext, assetId: string, assign: (block: Bl
     asset ? h('img', { class: 'insp-thumb', attrs: { src: ctx.assetSource(asset.id), alt: '' } }) : null,
     h('div', { class: 'row' }, [upload]),
     images.length > 1 ? selectField('Or use an image already in this course', images.map(a => [a.id, a.fileName] as [string, string]), assetId, value => ctx.change(b => assign(b, value), { redraw: true })) : null,
-    note('PNG, JPEG or WebP, up to 16 MB. Large photos are fine; learners download them once.')]);
+    note(`PNG, JPEG or WebP, up to ${sizeLabel(instanceLimits.fileBytes).replace('MiB', 'MB')}. Large photos are fine; learners download them once.`)]);
 }
 
 /* ---------- Style ---------- */

@@ -86,7 +86,7 @@ test('unsafe ZIP paths, symlinks, duplicate names, encryption, and unsupported e
 
 test('corrupt ZIP, CRC, JSON, oversized entries, and excessive inventory fail safely', async () => {
   await assert.rejects(importProject(Buffer.from('not a zip')), /ZIP/);
-  await assert.rejects(importProject(Buffer.alloc(LIMITS.archive+1)), /32 MiB/);
+  await assert.rejects(importProject(Buffer.alloc(LIMITS.archive+1)), /no larger than 176 MiB/);
   const corrupt=rawZip(sampleEntries()); corrupt[30+'course.json'.length+1]! ^= 1;
   await assert.rejects(importProject(corrupt), /integrity/);
   await assert.rejects(importProject(rawZip([{name:'course.json',data:Buffer.from('{')} ])), /JSON/);

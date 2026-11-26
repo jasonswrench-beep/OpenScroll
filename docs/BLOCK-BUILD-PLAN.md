@@ -7,15 +7,16 @@ shapes joined it instead of starting version 5; later waves do the same until th
 with per-question LMS reporting (F3), Wave B's short answer, numeric, hotspot and survey, Checks, the export
 dialog, the device preview and the theme studio. Question banks and `.openassess` import moved to stage 7, because
 they need the course resources panel (F6) that stage 7 builds. Stage 6 added the timed cue editor (F5), audio
-description, interactive video, embedded video behind an instance setting that is off by default (F7, pending the
-owner's decision), software practice with OpenStage Capture import, and test results reported as `performance`.
-Size-limit settings wait for the owner's decision and move to the release stage with the server work they need.
+description, interactive video, embedded video behind an instance setting (F7; on by default since the owner's decision of
+2026-11-26), software practice with OpenStage Capture import, and test results reported as `performance`.
+Size-limit settings followed in the release stage (64 MiB per file and 160 MiB per course by default, raised by
+`OPENSCROLL_MAX_FILE_MIB` and `OPENSCROLL_MAX_COURSE_MIB`).
 Stage 7 added course resources (F6: glossary, question banks, certificate), the glossary, action plan, results and
 certificate and "Questions from a bank" blocks, glossary term links, bank editing in the lesson editor, and
 `.openassess` import through `@openstage/bank` 0.1.0, installed from its GitHub release and checked against the
 release's SHA-256 (npm cannot install one package from a monorepo folder, so the release tarball replaced the Git
 dependency in decision 5's default).
-Stage 8 added characters (upload-only, pending the owner's decision on character packs), the scenario block,
+Stage 8 added characters (upload-only at first; OpenStage Author's packs followed in the release stage), the scenario block,
 its editor with a route check and undo, the conversation player with "Your path", and scenario results reported
 to the LMS.
 Stage 9 added the compatibility fixtures (the original version 1 to 3 starters and an every-block version 4 file),
@@ -199,8 +200,8 @@ typed name, the date, and the issuer. Verifiable certificates are out of scope.
   needs dragging. Checks flags dead ends, unreachable nodes and endings with no route.
 - **Learner view.** A conversation column: each line shows the speaker's pose image and name. Choices are
   buttons, and focus moves to the newest line. At the end, "Your path" shows the choices made, with feedback.
-- **Characters.** Poses are uploaded images with alt text. OpenStage Author ships two character packs
-  (`pack.json` with WebP poses). Using them here depends on their license (see decisions).
+- **Characters.** Poses are images with alt text, uploaded or chosen from OpenStage Author's two packs (`pack.json`
+  with WebP poses), which ship in `public/character-packs` under the Apache License 2.0.
 - **Tracking.** Reaching an ending completes the block. Optional scoring sums points per choice and reports
   as `performance`.
 
@@ -240,7 +241,11 @@ Waves can ship to the VPS one at a time, each after its own backup-first upgrade
 - Scored blocks report to the LMS and resume correctly in both SCORM editions in Brightspace.
 - Checks covers its required fields, and the Access tab explains what assistive technology announces.
 
-## Decisions needed
+## Decisions (answered by the owner on 2026-11-26)
+
+Answers: 1, allow YouTube and Vimeo (on by default); 2, reuse OpenStage Author's packs; 3, yes, SCORM 2004 first
+for courses with written responses; 4, raise the defaults and add settings to raise them further. Decision 5 kept
+its default with the release tarball described above.
 
 1. **Embedded video.** Allow YouTube and Vimeo in exports on the terms above, or keep exports fully
    self-contained and offer only uploaded video?

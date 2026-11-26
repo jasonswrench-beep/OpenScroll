@@ -389,7 +389,7 @@ dialog.theme-dialog{width:min(1200px,calc(100vw - 24px))}
 .cue-editor{display:grid;gap:8px}.cue-editor video{width:100%;max-height:220px;border-radius:6px;background:#000}
 .cue .row{align-items:end}.cue-fld label{font-size:12px;font-weight:600;color:var(--muted)}.cue-time{width:96px!important;font-family:var(--mono)}.cues{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 /* Course resources (F6) */
-.res-paper{padding:20px 24px 32px;display:grid;gap:14px}.res-title{font-size:18px;margin:0;flex:1}.res-tabs{margin-bottom:4px}.res-panel{display:grid;gap:12px;color:var(--c-fg)}
+.res-paper{width:100%;padding:20px 24px 32px;display:grid;gap:14px}.res-title{font-size:18px;margin:0;flex:1}.res-tabs{margin-bottom:4px}.res-panel{display:grid;gap:12px;color:var(--c-fg)}
 .res-paper .item{background:#f7f8fa;border-color:#dde3ea;color:#1b2430}.res-paper .hint{color:#526075}.res-paper .inp{background:#fff;color:#1b2430;border-color:#c9d1db}.res-paper .btn{background:#fff;color:#22303f;border-color:#d3d9e1}.res-paper .btn-primary{background:#087a82;color:#fff;border-color:#087a82}.res-paper .ibtn{color:#526075}
 .gl-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}.gl-definition{border:1px solid #c9d1db;border-radius:6px;padding:.45rem .6rem;background:#fff;min-height:3rem}.gl-definition:focus{outline:2px solid var(--select);outline-offset:1px}
 .cert-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px;align-items:start}.cert-fields{display:grid;gap:10px}
@@ -404,5 +404,24 @@ dialog.theme-dialog{width:min(1200px,calc(100vw - 24px))}
 .scn-step .item-head select{width:auto;max-width:220px;margin-left:6px}.scn-step .ibtn,.scn-scene-bar .ibtn{color:#526075}.scn-step .btn,.scn-scene-bar .btn,.scn-main>.btn{background:#fff;color:#22303f;border-color:#d3d9e1}
 .scn-text{border:1px solid #c9d1db;border-radius:6px;padding:.45rem .6rem;min-height:2.6rem;background:#fff}.scn-text:focus{outline:2px solid var(--select)}.scn-speaker{align-items:center}.scn-speaker select{width:auto}.scn-pose{width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid #d3d9e1}
 .scn-options .item{background:#f7f8fa;border-color:#dde3ea;color:#1b2430}.scn-issues{margin:0;padding:0;list-style:none;display:grid;gap:6px}
-.char-list .item{gap:8px}.pose-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}.pose{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:start}.pose img{width:72px;height:72px;object-fit:cover;border-radius:50%;border:1px solid #d3d9e1;background:#fff}.pose-fields{display:grid;gap:6px}
+.char-list .item{gap:8px}.pose-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}.pose{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:start}.pose img{width:72px;height:72px;object-fit:cover;object-position:top;border-radius:50%;border:1px solid #d3d9e1;background:#fff}.pose-fields{display:grid;gap:6px}
 @media (max-width:899px){.scn-grid{grid-template-columns:1fr}.scn-scenes{position:static}}
+/* The character and background library (character-library.ts). */
+.lib-area{display:grid;gap:12px}
+.lib-grid{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.lib-people{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+.lib-places{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))}
+.lib-poses{grid-template-columns:repeat(auto-fill,minmax(112px,1fr))}
+.lib-pick{display:grid;gap:6px;justify-items:center;width:100%;padding:8px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);color:var(--fg);font:inherit;text-align:center;cursor:pointer}
+.lib-pick:hover{border-color:var(--accent)}
+.lib-pick:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lib-pick img{width:96px;height:96px;object-fit:cover;object-position:top;border-radius:50%;background:var(--panel-2)}
+.lib-places .lib-pick img{width:100%;height:auto;aspect-ratio:16/9;border-radius:var(--r-sm)}
+.lib-pick:disabled{opacity:.6;cursor:progress}
+.lib-group h3,.lib-name{margin:4px 0}
+.lib-set{border:0;margin:0;padding:0;min-width:0}
+.lib-set legend{font-weight:600;margin-bottom:8px}
+.lib-pose{display:grid;gap:4px;justify-items:center;padding:6px;border:1px solid var(--line);border-radius:var(--r);background:var(--panel);text-align:center;font-size:.92em;cursor:pointer}
+.lib-pose img{width:96px;height:128px;object-fit:contain;background:var(--panel-2);border-radius:var(--r-sm)}
+.lib-pose:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.lib-pose input{justify-self:start}

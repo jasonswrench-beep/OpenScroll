@@ -3,7 +3,7 @@
  * Glossary terms and their definitions feed the glossary block and optional term links in lesson text; banks feed
  * the "Questions from a bank" block; the certificate is what the results block prints.
  */
-import { ArrowLeft, Plus, Trash2, Upload, Pencil, ImagePlus } from 'lucide';
+import { ArrowLeft, Plus, Trash2, Upload, Pencil, ImagePlus, Users } from 'lucide';
 import { assetPath, type PortableProject, type Block } from '../shared/course.js';
 import { newId } from '../shared/outline.js';
 import { richToDom, RICH_TEXT_MAX } from '../shared/rich-text.js';
@@ -13,6 +13,7 @@ import { questionImportDialog } from '../client/question-import.js';
 import { projects } from './api.js';
 import { parseCsv } from '../shared/csv.js';
 import { h, button, openDialog, confirmAction, toast, announce, pickFile } from './dom.js';
+import { chooseLibraryCharacter, addLibraryCharacter } from './character-library.js';
 
 export type ResourceTab = 'glossary' | 'banks' | 'characters' | 'certificate';
 export interface ResourcesHost { project: () => PortableProject; edit: (change: (project: PortableProject) => void, assetsChanged?: boolean) => boolean; assetSource: (assetId: string) => string; goTo: (place?: string) => void; redraw: () => void }
@@ -169,8 +170,14 @@ function charactersTab(host: ResourcesHost): HTMLElement[] {
     ]);
   }));
   return [
-    h('p', { text: 'Characters speak in scenarios. Each has poses: pictures you upload, such as calm, pleased or worried. Describe every pose; screen readers read the description when the character speaks.' }),
-    h('div', { class: 'row' }, [button('Add a character', () => { if (host.edit(p => { p.document.course.characters.push({ id: newId(), name: 'New character', role: '', poses: [] }); })) host.redraw(); }, { icon: Plus, class: 'btn btn-sm btn-primary', disabled: course.characters.length >= 30 })]),
+    h('p', { text: 'Characters speak in scenarios. Each has poses, such as calm, pleased or worried: choose a person from the library, or add your own character and upload a picture for each pose. Describe every pose; screen readers read the description when the character speaks.' }),
+    h('div', { class: 'row' }, [
+      button('Choose from the library', async event => {
+        const character = await chooseLibraryCharacter(host.project, event.currentTarget as HTMLElement); if (!character) return;
+        if (host.edit(p => addLibraryCharacter(p, character), true)) { host.redraw(); toast(`${character.name} added with ${character.poses.length} ${character.poses.length === 1 ? 'pose' : 'poses'}.`); }
+      }, { icon: Users, class: 'btn btn-sm btn-primary', disabled: course.characters.length >= 30 }),
+      button('Add your own character', () => { if (host.edit(p => { p.document.course.characters.push({ id: newId(), name: 'New character', role: '', poses: [] }); })) host.redraw(); }, { icon: Plus, class: 'btn btn-sm', disabled: course.characters.length >= 30 }),
+    ]),
     course.characters.length ? list : h('p', { class: 'hint', text: 'No characters yet.' }),
   ];
 }

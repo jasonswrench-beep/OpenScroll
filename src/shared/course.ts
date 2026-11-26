@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isCanonicalRich, plainToRich, RICH_TEXT_MAX } from './rich-text.js';
 import { safeLink } from './links.js';
+import { FILE_CEILING } from './limits.js';
 export { safeLink };
 
 export const SCHEMA_VERSION = 4;
@@ -95,7 +96,8 @@ export const assetSchema = z.strictObject({
   id: idSchema,
   fileName: z.string().min(1).max(180).regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._-]*$/),
   mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'audio/mpeg', 'audio/wav', 'video/mp4', 'application/pdf', 'text/plain']),
-  byteLength: z.number().int().min(1).max(16 * 1024 * 1024),
+  // The format's ceiling; each instance accepts up to its own, lower limit (src/shared/limits.ts).
+  byteLength: z.number().int().min(1).max(FILE_CEILING),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 const bannerSchema = z.strictObject({ source: z.enum(['cover','image']), assetId: idSchema.nullable(), altText: z.string().max(2000), decorative: z.boolean() });

@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import yazl from 'yazl';
 import { LIMITS } from './archive.js';
+import { sizeLabel } from '../shared/limits.js';
 import { ProjectError } from '../shared/course.js';
 interface ManifestEntry {file:string;imports?:string[];css?:string[];}
 /** Only trusted build artifacts and validated canonical course assets enter the publication. */
@@ -29,7 +30,7 @@ export async function htmlFiles(input:unknown,playerRoot:string):Promise<Map<str
   // Constants avoid dependence on a source checkout in production containers.
   const licenseRoot=resolve(playerRoot,'../..');
   try{files.set('LICENSE.txt',await readFile(resolve(licenseRoot,'LICENSE')));files.set('NOTICE.txt',await readFile(resolve(licenseRoot,'NOTICE')));}catch{throw new ProjectError('Required publication license notices are unavailable.');}
-  if([...files.values()].reduce((total,data)=>total+data.length,0)>LIMITS.expanded)throw new ProjectError('The HTML publication exceeds the 64 MiB expanded limit. Remove unused assets or reduce media sizes.');
+  if([...files.values()].reduce((total,data)=>total+data.length,0)>LIMITS.expanded)throw new ProjectError(`The HTML publication exceeds this server's ${sizeLabel(LIMITS.expanded)} course limit. Remove unused files or reduce media sizes.`);
   return files;
 }
 export async function exportHtml(input:unknown,playerRoot:string){
@@ -38,6 +39,6 @@ export async function exportHtml(input:unknown,playerRoot:string){
 export async function zipPublication(files:Map<string,Buffer>){
   if([...files.values()].reduce((n,b)=>n+b.length,0)>LIMITS.expanded)throw new ProjectError("Publication exceeds the expanded size limit.");
   const zip=new yazl.ZipFile();const chunks:Buffer[]=[];let size=0;
-  const output=new Promise<Buffer>((resolve,reject)=>{zip.on('error',reject);zip.outputStream.on('error',reject);zip.outputStream.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>LIMITS.archive){(zip.outputStream as Readable).destroy(new ProjectError('The HTML publication exceeds the 32 MiB ZIP limit.'));return;}chunks.push(chunk);});zip.outputStream.on('end',()=>resolve(Buffer.concat(chunks)));});
+  const output=new Promise<Buffer>((resolve,reject)=>{zip.on('error',reject);zip.outputStream.on('error',reject);zip.outputStream.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>LIMITS.archive){(zip.outputStream as Readable).destroy(new ProjectError(`The HTML publication exceeds the ${sizeLabel(LIMITS.archive)} ZIP limit.`));return;}chunks.push(chunk);});zip.outputStream.on('end',()=>resolve(Buffer.concat(chunks)));});
   for(const [path,data]of files)zip.addBuffer(data,path,{mtime:new Date('1980-01-01T00:00:00Z'),mode:0o100644,compress:true});zip.end();return output;
 }

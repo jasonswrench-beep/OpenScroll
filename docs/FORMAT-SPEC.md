@@ -102,9 +102,13 @@ Binary type signatures, original extensions, lengths, and hashes are checked. Pl
 
 ## Validation and limits
 
-- Maximum compressed archive: 32 MiB.
-- Maximum total expanded content: 64 MiB.
-- Maximum individual asset: 16 MiB; assets cannot be empty.
+- Size limits are set by each instance, within the format's ceilings (version 4; earlier versions were fixed at
+  16 MiB per asset, 64 MiB expanded and a 32 MiB archive):
+  - individual asset: 64 MiB by default, at most 256 MiB (`OPENSCROLL_MAX_FILE_MIB`); assets cannot be empty;
+  - total expanded content: 160 MiB by default, at most 320 MiB (`OPENSCROLL_MAX_COURSE_MIB`);
+  - compressed archive: the expanded limit plus 16 MiB, since media hardly compresses.
+
+  A file made on one instance opens on another only if it fits the second instance's limits.
 - Maximum `course.json`: 2 MiB, including exported formatting.
 - Maximum entries: 256, including `course.json`.
 - At most 100 sections, 500 lessons total, and 5,000 blocks total; individual arrays have additional schema bounds.
@@ -181,7 +185,7 @@ The transient workspace uses `PortableProject = { document, files }`, where `fil
 - `POST /api/projects/import`: binary archive with the project content type; returns the validated in-memory representation.
 - `POST /api/projects/export`: JSON in-memory representation; returns the archive.
 
-The export JSON body limit is 90 MiB to accommodate base64 expansion. One project request is admitted at a time per application process, including upload parsing, with HTTP 429 on contention. Upload/connection timeouts are 30 seconds. No project route writes database records or disk assets. Files transit the instance for validation and packaging; the UI does not claim browser-only processing or durable saving.
+The export JSON body limit follows the instance's course limit, allowing for base64 expansion (221 MiB at the default 160 MiB course limit). One project request is admitted at a time per application process, including upload parsing, with HTTP 429 on contention. A request may take as long as sending the largest allowed course at about 4 Mbit/s; an idle connection closes after 30 seconds. No project route writes database records or disk assets. Files transit the instance for validation and packaging; the UI does not claim browser-only processing or durable saving.
 
 These are development endpoints, not a public hosting security sign-off. Step 4 adds authenticated, owner-scoped durable library endpoints separately; these transient packaging endpoints still do not store data. Production resource controls and deployment review remain future work. Reverse-proxy body limits must agree with the application limits when deployed.
 

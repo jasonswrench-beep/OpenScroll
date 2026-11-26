@@ -3,6 +3,7 @@ import { api, authorizedFetch } from '../client/account-api.js';
 import type { PortableProject, Block } from '../shared/course.js';
 import type { SaveAck, SavePayload } from '../client/save-controller.js';
 import type { RiseReport } from '../project/rise-import.js';
+import { courseTimeout,instanceLimits,packageBytes,transferTimeout } from '../shared/limits.js';
 
 export interface CourseSummary {
   id: string; revision: number; title: string; created_at: string; updated_at: string;
@@ -24,14 +25,14 @@ export const library = {
   save: (id: string, payload: SavePayload) => api<SaveAck>(`/api/library/courses/${id}/document`, 'PUT', payload),
   assetUrl: (id: string, assetId: string) => `/api/library/courses/${encodeURIComponent(id)}/assets/${encodeURIComponent(assetId)}`,
   async download(id: string) {
-    const response = await authorizedFetch(`/api/library/courses/${id}/download`, { signal: AbortSignal.timeout(60_000) });
+    const response = await authorizedFetch(`/api/library/courses/${id}/download`, { signal: AbortSignal.timeout(transferTimeout(packageBytes(instanceLimits), 60_000)) });
     if (!response.ok) await failure(response);
     return response.blob();
   },
 };
 export const projects = {
   async open(file: Blob) {
-    const response = await authorizedFetch('/api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/x-openscroll-project' }, body: file, signal: AbortSignal.timeout(60_000) });
+    const response = await authorizedFetch('/api/projects/import', { method: 'POST', headers: { 'Content-Type': 'application/x-openscroll-project' }, body: file, signal: AbortSignal.timeout(transferTimeout(file.size, 60_000)) });
     if (!response.ok) await failure(response);
     return response.json() as Promise<PortableProject>;
   },
@@ -41,12 +42,12 @@ export const projects = {
     return response.json() as Promise<{ name: string; questions: Block[]; report: { title: string; total: number; imported: number; skipped: { title: string; reason: string }[]; notes: string[] } }>;
   },
   async importRise(file: Blob) {
-    const response = await authorizedFetch('/api/projects/import-rise', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file, signal: AbortSignal.timeout(120_000) });
+    const response = await authorizedFetch('/api/projects/import-rise', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file, signal: AbortSignal.timeout(transferTimeout(file.size, 120_000)) });
     if (!response.ok) await failure(response);
     return response.json() as Promise<{ project: PortableProject; report: RiseReport }>;
   },
   async export(project: PortableProject) {
-    const response = await authorizedFetch('/api/projects/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(project), signal: AbortSignal.timeout(60_000) });
+    const response = await authorizedFetch('/api/projects/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(project), signal: AbortSignal.timeout(courseTimeout(project)) });
     if (!response.ok) await failure(response);
     return response.blob();
   },

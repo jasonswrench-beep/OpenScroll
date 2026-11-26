@@ -15,7 +15,8 @@ The command writes a new file, prints the report as JSON, and never changes the 
 
 A Rise web export stores the course in `content/runtime-data.js` as base64-encoded JSON and its media in
 `content/assets/`. The importer reads only those entries. The Rise player code in the ZIP is skipped unopened.
-Uploads are limited to 64 MiB; each media file to 16 MiB; the resulting project to the usual
+Uploads are limited to the course limit plus 32 MiB for Rise's own player (192 MiB by default); each media file to
+the instance's file limit (64 MiB by default); the resulting project to the usual
 [format limits](FORMAT-SPEC.md#validation-and-limits). Paths with `..`, absolute paths, encrypted entries and
 unsupported compression are refused. Every file's type is checked from its bytes, and the result passes the same
 validation as any uploaded `.openscroll` project.

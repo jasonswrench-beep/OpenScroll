@@ -205,7 +205,8 @@ export function courseView(root: HTMLElement, context: Context) {
     const snapshot = () => structuredClone(controller!.project);
     refreshChecks();
     const blocking = issues.filter(i => i.effect === 'blocks').length, warnings = issues.filter(i => i.effect === 'warning').length;
-    // Decision pending with the owner: SCORM 2004 is recommended, not forced, for courses with written responses.
+    // Owner decision of 2026-11-26: courses with written responses default to SCORM 2004 (listed first and marked
+    // recommended); authors can still choose 1.2.
     const written = hasWrittenResponses(controller.project);
     const next = (text: string) => h('small', { class: 'next-step', text });
     const scorm12 = option(GraduationCap, 'LMS package: SCORM 1.2', written ? 'Works in nearly every LMS. Long written responses may stay on the learner’s device.' : 'Works in nearly every LMS, including Brightspace. Upload the ZIP as it is.', b => void publishHtml(snapshot(), status, b, 'scorm-12'));

@@ -4,6 +4,7 @@ import { groupPacket,assetPacket,templateCopy,type ReusableKind } from '../share
 import { COURSE_TEMPLATES,courseTemplate,LEARNING_LAYOUTS,learningLayout } from '../shared/course-templates.js';
 import { prepareBlock } from '../shared/block-catalog.js';
 import './reusable.css';
+import { courseTimeout } from '../shared/limits.js';
 const dialogs=new Set<HTMLDialogElement>();
 export function element<K extends keyof HTMLElementTagNameMap>(tag:K,text?:string){const node=document.createElement(tag);if(text!==undefined)node.textContent=text;return node;}
 export function action(label:string,run:()=>void|Promise<void>){const button=element('button',label);button.type='button';button.addEventListener('click',()=>{button.disabled=true;void Promise.resolve().then(run).catch(error=>{const status=button.closest('dialog')?.querySelector('[role=status]');if(status)status.textContent=error instanceof Error?error.message:'The action could not be completed.';}).finally(()=>{button.disabled=false;});});return button;}
@@ -12,7 +13,7 @@ export function contentDialog(title:string,opener:HTMLElement){
  return {dialog,status,live:()=>dialog.open && dialog.isConnected && owner===account?.id,error:(error:unknown)=>{status.textContent=error instanceof Error?error.message:'The request could not be completed.';}};
 }
 window.addEventListener('openscroll:account',()=>{for(const d of dialogs)d.close();});window.addEventListener('openscroll:signed-out',()=>{for(const d of dialogs)d.close();});
-async function downloadProject(project:PortableProject,name:string,allowed:()=>boolean){const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(30000)});if(!response.ok){const data=await response.json();throw new Error(data.error??'Download failed.');}const blob=await response.blob();if(!allowed())return;const url=URL.createObjectURL(blob),link=element('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+async function downloadProject(project:PortableProject,name:string,allowed:()=>boolean){const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(courseTimeout(project))});if(!response.ok){const data=await response.json();throw new Error(data.error??'Download failed.');}const blob=await response.blob();if(!allowed())return;const url=URL.createObjectURL(blob),link=element('a');link.href=url;link.download=name;link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
 export function saveReusable(kind:ReusableKind,project:PortableProject,opener:HTMLElement,suggestion:string){
  const view=contentDialog(kind==='template'?'Save course template':kind==='group'?'Save block group':'Save reusable asset',opener);if(!account){view.status.textContent='Sign in to save reusable content.';return;}
  const form=element('form'),label=element('label','Name'),name=element('input');name.required=true;name.maxLength=300;name.value=suggestion.slice(0,300);label.append(name);const submit=element('button','Save reusable item');submit.type='submit';form.append(label,submit);view.dialog.append(form);name.focus();

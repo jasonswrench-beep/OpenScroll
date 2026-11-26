@@ -3,7 +3,7 @@
  * from a menu of step numbers, so authoring never needs dragging. Changes save like every other edit and have their
  * own undo.
  */
-import { ArrowLeft, ArrowUp, ArrowDown, Trash2, Plus, Undo2, Redo2, Flag, ImagePlus, Users } from 'lucide';
+import { ArrowLeft, ArrowUp, ArrowDown, Trash2, Plus, Undo2, Redo2, Flag, ImagePlus, Images, Users } from 'lucide';
 import { assetPath, type Block, type PortableProject } from '../shared/course.js';
 import { newId } from '../shared/outline.js';
 import { richToDom, richToPlain, plainToRich, RICH_TEXT_MAX } from '../shared/rich-text.js';
@@ -12,6 +12,7 @@ import { courseChecks } from '../project/checks.js';
 import { bindRich } from '../client/inline-text.js';
 import { readImage } from '../client/images.js';
 import { h, icon, button, toast, confirmAction, pickFile } from './dom.js';
+import { chooseLibraryBackground } from './character-library.js';
 
 type Scenario = Extract<Block, { type: 'scenario' }>;
 type Step = Scenario['content']['scenes'][number]['nodes'][number];
@@ -90,9 +91,13 @@ export class ScenarioEditor {
       try { const { asset, data } = await readImage(file, this.host.project()); const sceneIndex = this.scene; this.change((b, p) => { p.document.assets.push(asset); p.files[assetPath(asset)] = data; b.content.scenes[sceneIndex]!.backgroundId = asset.id; }, undefined, true, true); }
       catch (error) { toast(error instanceof Error ? error.message : 'The picture could not be added.'); }
     }, { icon: ImagePlus, class: 'btn btn-sm' });
+    const library = button('Choose a background from the library', async event => {
+      const picked = await chooseLibraryBackground(this.host.project, event.currentTarget as HTMLElement); if (!picked) return;
+      const sceneIndex = this.scene; this.change((b, p) => { p.document.assets.push(picked.asset); p.files[assetPath(picked.asset)] = picked.data; b.content.scenes[sceneIndex]!.backgroundId = picked.asset.id; }, undefined, true, true);
+    }, { icon: Images, class: 'btn btn-sm' });
     const sceneBar = h('div', { class: 'scn-scene-bar' }, [
       h('div', { class: 'fld' }, [h('label', { text: 'Scene title', attrs: { for: 'scn-scene-title' } }), sceneTitle]),
-      h('div', { class: 'row' }, [background,
+      h('div', { class: 'row' }, [library, background,
         scene.backgroundId ? button('Remove the background', () => this.change(b => { b.content.scenes[this.scene]!.backgroundId = null; }), { icon: Trash2, class: 'btn btn-sm' }) : null,
         button('Move scene earlier', () => this.change(b => { const s = b.content.scenes; const i = this.scene; if (i > 0) { [s[i - 1], s[i]] = [s[i]!, s[i - 1]!]; this.scene = i - 1; } }), { iconOnly: true, icon: ArrowUp, disabled: this.scene === 0 }),
         button('Move scene later', () => this.change(b => { const s = b.content.scenes; const i = this.scene; if (i < s.length - 1) { [s[i + 1], s[i]] = [s[i]!, s[i + 1]!]; this.scene = i + 1; } }), { iconOnly: true, icon: ArrowDown, disabled: this.scene === c.scenes.length - 1 }),
@@ -178,7 +183,7 @@ export class ScenarioEditor {
       h('h2', { class: 'side-h', text: 'Route check', attrs: { id: 'lesson-panel-heading', tabindex: -1 } }),
       h('p', { class: 'hint', text: `${steps.length} steps in ${block.content.scenes.length} ${block.content.scenes.length === 1 ? 'scene' : 'scenes'}, ${endings} ${endings === 1 ? 'ending' : 'endings'}.` }),
       issues.length ? h('ul', { class: 'scn-issues' }, issues.map(i => h('li', { class: i.effect === 'blocks' ? 'warn-note' : 'hint', text: i.message }))) : h('p', { class: 'hint', text: 'Every step leads somewhere, and an ending can be reached.' }),
-      h('section', { class: 'insp-sec' }, [h('h3', { class: 'insp-h', text: 'Characters' }), h('p', { class: 'hint', text: `${project.document.course.characters.length} in this course. Each has poses: pictures you upload, each with a description.` }), button('Manage characters', () => this.host.goTo('resources:characters'), { icon: Users, class: 'btn btn-sm' })]),
+      h('section', { class: 'insp-sec' }, [h('h3', { class: 'insp-h', text: 'Characters' }), h('p', { class: 'hint', text: `${project.document.course.characters.length} in this course. Each has poses, from the library or uploaded, each with a description.` }), button('Manage characters', () => this.host.goTo('resources:characters'), { icon: Users, class: 'btn btn-sm' })]),
       h('section', { class: 'insp-sec' }, [h('h3', { class: 'insp-h', text: 'Try it' }), h('p', { class: 'hint', text: `Preview the lesson “${lesson.title || 'Untitled lesson'}” to play the scenario as a learner.` })]),
     );
     void icon;

@@ -5,7 +5,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { assetPath, parseCourse, eachBlock, relinkCheckpoints, ProjectError, type CourseDocument, type PortableProject } from '../shared/course.js';
 import { remapDocumentAssets } from '../shared/reuse.js';
-import { validateProject, exportProject } from '../project/archive.js';
+import { validateProject, exportProject, LIMITS } from '../project/archive.js';
+import { requestBytes, sizeLabel } from '../shared/limits.js';
+import { instanceSizeLimits } from './config.js';
 import { HttpError, requireAuthor } from './accounts/routes.js';
 const idSchema=z.string().uuid();
 function courseId(request:FastifyRequest) {
@@ -81,6 +83,7 @@ async function saveNew(pool:pg.Pool,owner:string,project:PortableProject,assetLi
   } catch(error) {await client.query('ROLLBACK');throw error;} finally {client.release();}
 }
 export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=1024*1024*1024}:{pool:pg.Pool;assetLimitBytes?:number}) {
+  const courseRequest=requestBytes(instanceSizeLimits());
   app.addHook('onRequest',async request => {requireAuthor(request);});
   app.get('/courses',async request => {
     const query=parse(z.strictObject({search:z.string().max(200).default(''),sort:z.enum(['updated','created','title']).default('updated'),offset:z.coerce.number().int().min(0).max(10000).default(0)}),request.query);
@@ -93,12 +96,12 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
     const data=parse(z.strictObject({title:z.string().trim().min(1).max(300)}),request.body);
     return saveNew(pool,request.author!.id,freshProject(data.title,request.author!.name),assetLimitBytes);
   });
-  app.post('/courses/import',{bodyLimit:90*1024*1024,config:{rateLimit:{max:10,timeWindow:'1 minute',groupId:'course-import'}}},async request => {
+  app.post('/courses/import',{bodyLimit:courseRequest,config:{rateLimit:{max:10,timeWindow:'1 minute',groupId:'course-import'}}},async request => {
     try {return await saveNew(pool,request.author!.id,validateProject(request.body),assetLimitBytes);}
     catch(error) {if(error instanceof ProjectError) throw new HttpError(422,error.message);throw error;}
   });
   app.get('/courses/:id/edit',async request => readSnapshot(pool,courseId(request),request.author!.id));
-  app.put('/courses/:id/document',{bodyLimit:90*1024*1024},async request => {
+  app.put('/courses/:id/document',{bodyLimit:courseRequest},async request => {
     const id=courseId(request);
     const input=parse(z.strictObject({revision:z.number().int().positive(),mutationId:z.string().uuid(),document:z.unknown(),files:z.record(z.string(),z.string()).optional()}),request.body);
     let document:CourseDocument;
@@ -106,7 +109,7 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
     catch(error){if(error instanceof ProjectError)throw new HttpError(422,error.message);throw error;}
     const documentBytes=Buffer.byteLength(JSON.stringify(document,null,2)+'\n');
     if(documentBytes>2*1024*1024)throw new HttpError(422,'The course document exceeds 2 MiB.');
-    if(documentBytes+document.assets.reduce((size,asset)=>size+asset.byteLength,0)>64*1024*1024)throw new HttpError(422,'The expanded project exceeds 64 MiB.');
+    if(documentBytes+document.assets.reduce((size,asset)=>size+asset.byteLength,0)>LIMITS.expanded)throw new HttpError(422,`The expanded project exceeds this server's ${sizeLabel(LIMITS.expanded)} course limit.`);
     const sortedFiles=input.files===undefined ? null : Object.entries(input.files).sort(([a],[b])=>a<b ? -1 : a>b ? 1 : 0);
     const digestOf=(document:unknown)=>createHash('sha256').update(JSON.stringify({document,files:sortedFiles})).digest('hex');
     const digest=digestOf(document);

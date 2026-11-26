@@ -7176,7 +7176,7 @@
           "byteLength": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 16777216
+            "maximum": 268435456
           },
           "sha256": {
             "type": "string",

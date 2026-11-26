@@ -12,8 +12,10 @@ import yauzl from 'yauzl';
 import { ProjectError, SCHEMA_VERSION, assetPath, type Asset, type PortableProject } from '../shared/course.js';
 import { sanitizeRich, richToPlain, richIsEmpty } from '../shared/rich-text.js';
 import { validateProject, LIMITS } from './archive.js';
+import { riseUploadBytes, sizeLabel } from '../shared/limits.js';
+import { instanceSizeLimits } from '../server/config.js';
 
-export const RISE_LIMITS = { upload: 64 * 1024 * 1024, runtime: 16 * 1024 * 1024, entries: 4000 } as const;
+export const RISE_LIMITS = { get upload() { return riseUploadBytes(instanceSizeLimits()); }, runtime: 16 * 1024 * 1024, entries: 4000 };
 export type RiseResult = 'exact' | 'adjusted' | 'review';
 export interface RiseRow { rise: string; openscroll: string; count: number; result: RiseResult; note?: string }
 export interface RiseReport {
@@ -35,7 +37,7 @@ function safeAssetName(path: string) {
   return match && match[1] !== '.' && match[1] !== '..' ? match[1] : undefined;
 }
 async function readRiseZip(bytes: Buffer): Promise<{ runtime: string; assets: Map<string, Buffer> }> {
-  if (!bytes.length || bytes.length > RISE_LIMITS.upload) throw new ProjectError('Choose a Rise web export ZIP no larger than 64 MiB.');
+  if (!bytes.length || bytes.length > RISE_LIMITS.upload) throw new ProjectError(`Choose a Rise web export ZIP no larger than ${sizeLabel(RISE_LIMITS.upload)}.`);
   const assets = new Map<string, Buffer>();
   let runtime: Buffer | undefined;
   await new Promise<void>((resolve, reject) => {
@@ -55,7 +57,7 @@ async function readRiseZip(bytes: Buffer): Promise<{ runtime: string; assets: Ma
         const mode = (entry.externalFileAttributes >>> 16) & 0o170000;
         if ((mode !== 0 && mode !== 0o100000) || (entry.generalPurposeBitFlag & 1) || ![0, 8].includes(entry.compressionMethod)) { fail('The ZIP contains an unsupported or encrypted entry.'); return; }
         const limit = asset ? LIMITS.entry : RISE_LIMITS.runtime;
-        if (entry.uncompressedSize > limit || total + entry.uncompressedSize > LIMITS.expanded) { fail(asset ? `The file ${asset.slice(0, 80)} is larger than 16 MiB.` : 'The course data is too large.'); return; }
+        if (entry.uncompressedSize > limit || total + entry.uncompressedSize > LIMITS.expanded) { fail(asset ? `The file ${asset.slice(0, 80)} is larger than this server's ${sizeLabel(LIMITS.entry)} limit for one file.` : 'The course data is too large.'); return; }
         zip.openReadStream(entry, (streamError, stream) => {
           if (streamError || !stream) { fail('A ZIP entry could not be read.'); return; }
           const chunks: Buffer[] = []; let size = 0, checksum = 0;

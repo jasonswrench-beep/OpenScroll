@@ -4,7 +4,7 @@ Step 5 adds a stored-course outline editor. Sign in, find a course in the librar
 
 ## Course outline
 
-Edit the course title, description, displayed author, and language. Choose an existing image as the cover, upload a PNG/JPEG/WebP image up to 16 MiB, or select No cover. Alternative text and decorative status are stored on the cover usage. Empty descriptions, titles, sections, and lessons are valid drafts; invalid format fields are rejected with a message.
+Edit the course title, description, displayed author, and language. Choose an existing image as the cover, upload a PNG/JPEG/WebP image up to the instance's file limit (64 MiB by default), or select No cover. Alternative text and decorative status are stored on the cover usage. Empty descriptions, titles, sections, and lessons are valid drafts; invalid format fields are rejected with a message.
 
 The cover upload is checked before entering the draft and validated again on the server. Documents and asset bytes commit together. Removing/changing a cover keeps the previous asset in the course inventory because a lesson may still reference it. This step does not introduce asset garbage collection.
 

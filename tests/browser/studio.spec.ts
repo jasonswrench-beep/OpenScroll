@@ -71,6 +71,20 @@ test('a change made in another tab pauses saving and keeps the edits',async({pag
   await saved(page);
 });
 
+test('an author adds a person from the character library and every pose arrives described',async({page})=>{
+  await page.goto(`/studio/#course=${id}&resources=characters`);
+  await page.getByRole('button',{name:'Choose from the library',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Choose a character from the library'});
+  await dialog.getByRole('button',{name:'Aisyah, 23 poses',exact:true}).click();
+  await expect(dialog.getByRole('group',{name:'Poses for Aisyah'})).toBeVisible();
+  await axe(page);
+  await dialog.getByRole('button',{name:'Add Aisyah with 10 poses',exact:true}).click();
+  await expect(dialog).toBeHidden();await saved(page);
+  const document=(await snapshot()).project.document,aisyah=document.course.characters.find((c:{name:string})=>c.name==='Aisyah');
+  expect(aisyah.poses).toHaveLength(10);
+  for(const pose of aisyah.poses){expect(pose.alt).toMatch(/^Aisyah, /);expect(document.assets.find((a:{id:string})=>a.id===pose.imageId)?.mediaType).toBe('image/webp');}
+});
+
 test('the studio redirects people without authoring access to their account page',async({browser})=>{
   const context=await browser.newContext({storageState:{cookies:[],origins:[]}});const page=await context.newPage();
   await page.goto('/studio/');await expect(page).toHaveURL(/\/account\/?/);

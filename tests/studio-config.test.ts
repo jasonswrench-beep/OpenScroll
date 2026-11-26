@@ -12,9 +12,9 @@ test('the studio is on in development and off in production unless the instance 
   assert.throws(() => studioEnabled({ OPENSCROLL_STUDIO: 'yes' }), /on or off/);
 });
 
-test('the deployment files keep the studio off until an operator turns it on', async () => {
+test('the deployment files keep the studio off until an operator turns it on, and embedded video on', async () => {
   assert.match(await readFile('deploy/compose.yaml', 'utf8'), /OPENSCROLL_STUDIO: \$\{OPENSCROLL_STUDIO:-off\}/);
   assert.match(await readFile('deploy/env.example', 'utf8'), /^OPENSCROLL_STUDIO=off$/m);
-  assert.match(await readFile('deploy/compose.yaml', 'utf8'), /OPENSCROLL_EXTERNAL_VIDEO: \$\{OPENSCROLL_EXTERNAL_VIDEO:-off\}/);
-  assert.match(await readFile('deploy/env.example', 'utf8'), /^OPENSCROLL_EXTERNAL_VIDEO=off$/m);
+  assert.match(await readFile('deploy/compose.yaml', 'utf8'), /OPENSCROLL_EXTERNAL_VIDEO: \$\{OPENSCROLL_EXTERNAL_VIDEO:-on\}/);
+  assert.match(await readFile('deploy/env.example', 'utf8'), /^OPENSCROLL_EXTERNAL_VIDEO=on$/m);
 });

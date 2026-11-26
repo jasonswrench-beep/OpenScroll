@@ -18,16 +18,14 @@ listed in the order it should happen. Nothing here has been pushed, tagged or de
 - [x] Browser checks with axe (WCAG 2.2 A and AA) on every studio page, dialog, inspector tab and new player,
   run locally against the in-memory test server.
 
-## Decisions the owner still has open
+## Owner decisions (answered 2026-11-26)
 
-Posted on the production board; the build uses the safe default until answered.
-
-| Decision | Default in this build |
-| --- | --- |
-| Embedded YouTube and Vimeo video | Built, off unless `OPENSCROLL_EXTERNAL_VIDEO=on` |
-| Character art for scenarios | Upload-only characters |
-| SCORM default for written responses | Export recommends SCORM 2004; nothing is forced |
-| Size limits | Unchanged: 16 MB per file and 32 MB per package. Settings to raise them are not built; they touch archive limits, upload checks, request body limits and the reverse proxy, and wait for the answer |
+| Decision | Answer | In this build |
+| --- | --- | --- |
+| Embedded YouTube and Vimeo video | Allow it | On by default; `OPENSCROLL_EXTERNAL_VIDEO=off` keeps exports self-contained |
+| Character art for scenarios | Reuse OpenStage Author's packs | Both packs ship in `public/character-packs`; Choose from the library for people and scene backgrounds ([Scenarios](SCENARIOS.md)) |
+| SCORM default for written responses | Default to SCORM 2004 | Export lists SCORM 2004 first and marks it recommended for courses with written responses; 1.2 stays available |
+| Size limits | Raise them, with a way to raise them further | 64 MiB per file and 160 MiB per course by default; `OPENSCROLL_MAX_FILE_MIB` (to 256) and `OPENSCROLL_MAX_COURSE_MIB` (to 320) raise them ([Self-hosting](SELF-HOSTING.md)) |
 
 ## Before merging
 
@@ -64,6 +62,7 @@ Follow the backup-first plan in `DEPLOYMENT-HANDOFF.md`, with these additions:
    author saves them, so rolling back to the previous image pair keeps working for unsaved courses. A course saved
    by the new version cannot be opened by the old one: if rollback is needed after authors have saved, restore the
    backup.
-3. Deploy with `OPENSCROLL_STUDIO=off` and `OPENSCROLL_EXTERNAL_VIDEO=off` first. Check the classic workspace and
-   existing courses, then turn the studio on and restart. Turn external video on only if the owner approved it.
+3. Deploy with `OPENSCROLL_STUDIO=off` first. Check the classic workspace and existing courses, then turn the
+   studio on and restart. Embedded video is on by default (approved by the owner); the size limits start at 64 MiB
+   per file and 160 MiB per course, and the edge proxy now allows requests up to 440 MiB.
 4. Recheck the other services on the VPS, as the handoff requires.

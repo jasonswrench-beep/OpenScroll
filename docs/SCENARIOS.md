@@ -6,12 +6,23 @@ reach one of several endings. It is the Wave E block of the [block build plan](B
 ## Characters
 
 Characters belong to the course (Course resources, Characters). Each has a name, an optional role, and up to 20
-poses: pictures you upload, such as calm, pleased or worried, each with a description. Screen readers read the pose
-description when the character speaks, so describe the expression and anything that matters ("Sam frowning at the
-report"). Checks warns about a pose with no description.
+poses, such as calm, pleased or worried, each with a description. Screen readers read the pose description when the
+character speaks, so describe the expression and anything that matters ("Sam frowning at the report"). Checks warns
+about a pose with no description.
 
-OpenScroll does not ship character art. Authors upload their own pictures; reusing OpenStage Author's character
-packs, or drawing new ones, waits for the owner's decision on their licence.
+**The library.** OpenScroll ships OpenStage Author's two packs (owner decision of 2026-11-26), in
+`public/character-packs`:
+
+- *OpenStage people, set 1*: fifteen people in everyday work clothes, each in 15 to 23 poses. **Choose from the
+  library** (Course resources, Characters) picks a person and the poses you need, up to 20, with one of each kind
+  chosen to start. Each pose comes with the pack's description, which you can edit.
+- *OpenStage offices and workplaces, set 1*: fifty-eight empty offices and workplaces. **Choose a background from the
+  library** in the scenario editor sets a scene's background.
+
+The pictures are copied into the course, like an upload, so a published course needs nothing from the library. They
+were made by Jason S. Wrench with an AI picture service from written descriptions and are released under the Apache
+License 2.0; the NOTICE file that every published course carries says so. **Add your own character** still works for
+your own pictures.
 
 ## Writing a scenario
 

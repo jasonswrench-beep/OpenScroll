@@ -1,3 +1,4 @@
+import { courseTimeout,instanceLimits,packageBytes,riseUploadBytes,sizeLabel,transferTimeout } from '../shared/limits.js';
 import { ThemeControls } from './theme-controls.js';
 import { previewCourse,publishHtml,publishPdf } from './publishing.js';
 import { api, account, authorizedFetch } from './account-api.js';
@@ -46,11 +47,11 @@ function showProject(data:PortableProject,fromLibrary:boolean) {
   privateProject=fromLibrary;
 }
 async function openProject(file: Blob) {
-  if (file.size > 32 * 1024 * 1024) { status.textContent='Choose a project no larger than 32 MiB. Your current project is unchanged.'; return; }
+  if (file.size > packageBytes(instanceLimits)) { status.textContent=`Choose a project no larger than ${sizeLabel(packageBytes(instanceLimits))}. Your current project is unchanged.`; return; }
   if (dirty && !window.confirm('Replace the current project? Download it first if you want to keep your changes.')) { fileInput.value=''; return; }
   setBusy(true); status.textContent='Opening and checking the project…';
   try {
-    const response=await authorizedFetch('/api/projects/import',{method:'POST',headers:{'Content-Type':'application/x-openscroll-project'},body:file,signal:AbortSignal.timeout(30_000)});
+    const response=await authorizedFetch('/api/projects/import',{method:'POST',headers:{'Content-Type':'application/x-openscroll-project'},body:file,signal:AbortSignal.timeout(transferTimeout(file.size))});
     if (!response.ok) await responseError(response);
     const data = await response.json() as PortableProject;
     showProject(data,false);
@@ -80,11 +81,11 @@ function showRiseReport(report:RiseReport){
   riseReport.hidden=false;
 }
 async function openRise(file: Blob) {
-  if (file.size > 64 * 1024 * 1024) { status.textContent='Choose a Rise export no larger than 64 MiB. Your current project is unchanged.'; return; }
+  if (file.size > riseUploadBytes(instanceLimits)) { status.textContent=`Choose a Rise export no larger than ${sizeLabel(riseUploadBytes(instanceLimits))}. Your current project is unchanged.`; return; }
   if (dirty && !window.confirm('Replace the current project? Download it first if you want to keep your changes.')) { riseInput.value=''; return; }
   setBusy(true); status.textContent='Importing the Rise course…';
   try {
-    const response=await authorizedFetch('/api/projects/import-rise',{method:'POST',headers:{'Content-Type':'application/zip'},body:file,signal:AbortSignal.timeout(120_000)});
+    const response=await authorizedFetch('/api/projects/import-rise',{method:'POST',headers:{'Content-Type':'application/zip'},body:file,signal:AbortSignal.timeout(transferTimeout(file.size,120_000))});
     if (!response.ok) await responseError(response);
     const data = await response.json() as {project:PortableProject;report:RiseReport};
     showProject(data.project,false);showRiseReport(data.report);
@@ -115,7 +116,7 @@ download.addEventListener('click', async () => {
   if (!project) return;
   setBusy(true); status.textContent='Preparing the editable project…';
   try {
-    const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(30_000)});
+    const response=await authorizedFetch('/api/projects/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project),signal:AbortSignal.timeout(courseTimeout(project))});
     if (!response.ok) await responseError(response);
     const url=URL.createObjectURL(await response.blob());
     const link=document.createElement('a'); link.href=url; link.download='course.openscroll'; link.click();

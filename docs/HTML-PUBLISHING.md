@@ -54,7 +54,7 @@ Exports include:
 | `README.txt` | Hosting, progress, and editing guidance |
 | `LICENSE.txt`, `NOTICE.txt`, `THIRD-PARTY-NOTICES.txt` | Runtime and bundled-dependency notices; authored content retains its own rights |
 
-The archive is limited to 32 MiB compressed and 64 MiB expanded, including runtime and notices. A project near its maximum may need smaller media or fewer unused assets to fit the additional runtime. Validation/export failures leave the draft intact and display an actionable message. Only one transient project-file operation runs at a time per server instance; another request can return a retryable busy response.
+The archive is limited by the instance's course limit (160 MiB expanded by default, plus 16 MiB for the ZIP), including runtime and notices. A project near its maximum may need smaller media or fewer unused assets to fit the additional runtime. Validation/export failures leave the draft intact and display an actionable message. Only one transient project-file operation runs at a time per server instance; another request can return a retryable busy response.
 
 ## Local learner progress
 

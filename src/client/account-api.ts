@@ -1,3 +1,4 @@
+import { transferTimeout } from '../shared/limits.js';
 export interface Account {id:string;email:string;name:string;role:'owner'|'author';approvalStatus:'pending'|'approved'|'revoked';verified:boolean;}
 export interface Session {author:Account|null;csrf:string|null;registrationEnabled:boolean;verificationRequired:boolean;}
 export let account:Account|null=null;
@@ -23,7 +24,9 @@ export async function authorizedFetch(path:string,options:RequestInit={}):Promis
   return response;
 }
 export async function api<T>(path:string,method='GET',body?:unknown):Promise<T> {
-  const response=await authorizedFetch(path,{method,headers:body===undefined?undefined:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(30_000)});
+  // A save can carry every file in the course, so the time allowed grows with what is sent.
+  const text=body===undefined?undefined:JSON.stringify(body);
+  const response=await authorizedFetch(path,{method,headers:text===undefined?undefined:{'Content-Type':'application/json'},...(text===undefined?{}:{body:text}),signal:AbortSignal.timeout(transferTimeout(text?.length ?? 0))});
   const data=await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401 && account) setAccount(null,null);
