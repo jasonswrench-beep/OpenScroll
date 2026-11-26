@@ -57,8 +57,9 @@ export function renderBlock(block:Block,project:PortableProject,bind?:TextBinder
       if(block.variant==='with-heading')root.append(field('h3',block.content.heading,'heading','Paragraph heading',300,false));
       root.append(rich('div',block.content.text,'text','Paragraph text'));break;
     case 'statement':{
-      const body=block.variant==='note' ? document.createElement('aside') : document.createElement('div');
-      if(block.variant==='note')body.setAttribute('aria-label','Note');body.append(rich('div',block.content.text,'text',block.variant==='note' ? 'Note text' : 'Statement text'));root.append(body);break;
+      // A note is ancillary text inside the lesson, not a page region: role=note keeps lessons with several notes free of duplicate landmarks.
+      const body=document.createElement('div');
+      if(block.variant==='note'){body.className='os-note';body.setAttribute('role','note');body.setAttribute('aria-label','Note');}body.append(rich('div',block.content.text,'text',block.variant==='note' ? 'Note text' : 'Statement text'));root.append(body);break;
     }
     case 'quote':{
       const figure=document.createElement('figure');const quote=document.createElement('blockquote');quote.append(rich('div',block.content.text,'text','Quotation text'));
