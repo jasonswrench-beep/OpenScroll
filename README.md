@@ -18,7 +18,7 @@ Steps 1–12 are implemented; Step 13 production preparation is available, with 
 - [Learner responses and My workbook](docs/LEARNER-RESPONSES.md)
 - [Course resources: glossary, question banks, characters, certificate](docs/COURSE-RESOURCES.md)
 - [Scenarios: branching conversations](docs/SCENARIOS.md)
-- [Redesign plan](docs/REDESIGN-PLAN.md) and [block build plan](docs/BLOCK-BUILD-PLAN.md)
+- [Block build plan](docs/BLOCK-BUILD-PLAN.md)
 - [Importing Rise 360 courses](docs/RISE-IMPORT.md)
 - [Spreadsheet assessment import: Excel and CSV templates](docs/QUESTION-IMPORT.md)
 - [Production installation, backups and operator guide](docs/SELF-HOSTING.md)

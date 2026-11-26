@@ -1,6 +1,6 @@
 # Block build plan
 
-Status: built through stage 9, 2026-11-25. Companion to [REDESIGN-PLAN.md](REDESIGN-PLAN.md). Stages 1, 3 and 4 are built
+Status: built through stage 9, 2026-11-25. Stages 1, 3 and 4 are built
 on the `feature/schema-4` branch: schema 4, the studio shell, and the new lesson editor with Wave A, learner
 responses and My workbook (F2) and the region editor (F4). Because schema 4 is not yet released, Wave A's block
 shapes joined it instead of starting version 5; later waves do the same until the release stage. Stage 5 added the question engine
@@ -35,7 +35,7 @@ This build delivers every block shown in the redesign prototype, including the o
   questions, question banks, and results with a certificate.
 - **The lesson banner** and **My workbook**.
 
-Graded quizzes as outline items, charts, and other Rise-only extras are listed at the end as optional.
+Graded quizzes as outline items, charts, and other extras are listed at the end as optional.
 
 ## How a block reaches every output
 
@@ -61,7 +61,7 @@ These are built once and used by many blocks. Each is listed with the blocks tha
 
 | ID | Foundation | What it adds | Used by |
 | --- | --- | --- | --- |
-| F1 | Schema 4 | Rich text, the new fields from REDESIGN-PLAN, course-level `glossary`, `banks`, `characters` and `certificate` collections | Everything |
+| F1 | Schema 4 | Rich text, the new course and block fields, course-level `glossary`, `banks`, `characters` and `certificate` collections | Everything |
 | F2 | Learner responses | One saved-response store for text, ticks, ratings and grids, shown on My workbook, kept in resume data, with a size estimate in Checks | Reflection, activity, checklist, self-assessment, action plan, survey, short answer |
 | F3 | Question engine | One scoring, attempts and feedback model for all question kinds, plus per-question `cmi.interactions` reporting (today the player sends only the overall score) | All questions, hotspot, banks, interactive video, software practice test mode |
 | F4 | Region editor | Draw, label and nudge rectangles and circles on an image with mouse or arrow keys, with numeric fields | Labeled graphic (exists), hotspot, software practice, interactive video hotspots |
@@ -223,7 +223,7 @@ new-editor instance setting.
 | 8. Scenario | Scenario editor and player | Wave E |
 | 9. Release | Compatibility fixtures, Brightspace checks for both SCORM editions, accessibility and usability sessions, VPS cutover | — |
 
-Stage 1 (done) added the fields the Rise courses need, the lesson banner and objectives, per-choice feedback,
+Stage 1 (done) added the fields imported courses need, the lesson banner and objectives, per-choice feedback,
 and the sort-into-groups question. Each later wave adds its own block shapes in a new schema version with a
 non-destructive migration, designed when that wave starts rather than guessed now. Older servers reject newer
 files with a clear message and keep the file unchanged, as the format policy already requires.
@@ -258,8 +258,8 @@ its default with the release tarball described above.
    listed in the third-party notices and checked by `npm run licenses`. A vendored copy is the fallback if
    the license check or the container build objects.
 
-## Optional extras from Rise
+## Optional extras
 
 Not in this build unless added: charts (bar, line, pie), quote carousel, gallery carousel, button stack,
 text over an image and a banner image block, a sandboxed code block, and graded quizzes as outline items.
-None of the five Rise courses uses them; several Rise templates do.
+None of the courses tested so far uses them.

@@ -1,7 +1,7 @@
 # OpenScroll Studio
 
 OpenScroll Studio is the redesigned authoring workspace at `/studio/`. It is being built in stages (see the
-[redesign plan](REDESIGN-PLAN.md) and the [block build plan](BLOCK-BUILD-PLAN.md)). The classic workspace at `/app/`
+[block build plan](BLOCK-BUILD-PLAN.md)). The classic workspace at `/app/`
 stays available and keeps every current tool while the studio grows; both work on the same library and the same
 saved courses, so an author can move between them at any time.
 
