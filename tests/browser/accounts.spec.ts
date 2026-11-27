@@ -40,7 +40,9 @@ async function signup(page:Page,email:string,name:string) {
 async function login(page:Page,email:string,pass=password) {
   await page.locator('#login-email').fill(email);await page.locator('#login-password').fill(pass);
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
-  await expect(page).toHaveURL(/\/app\/$/);
+  // With the studio on, signing in opens it; these checks use the classic workspace, a link away.
+  await expect(page).toHaveURL(/\/studio\/$/);
+  await page.goto('/app/');
   await expect(page.locator('#library-panel')).toBeVisible();
 }
 test('author manages persistent library with accessible controls and no cross-account content',async ({page,browser}) => {

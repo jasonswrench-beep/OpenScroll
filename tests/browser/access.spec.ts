@@ -126,7 +126,13 @@ test('requesting and verifying an account leaves authoring pending until an owne
     // Approval invalidates the pending session; it never upgrades a stale cookie.
     expect((await page.request.get('/api/library/courses')).status()).toBe(401);
     await signIn(page, email);
-    await expect(page).toHaveURL(/\/app\/$/);
+    await expect(page).toHaveURL(/\/studio\/$/);
+    await expect(page.getByRole('heading', { name: 'Library', level: 1 })).toBeVisible();
+    // The account page offers the studio first and the classic workspace beside it.
+    await page.goto('/account/');
+    await expect(page.getByRole('link', { name: 'Open the studio', exact: true })).toHaveAttribute('href', '/studio/');
+    await expect(page.getByRole('link', { name: 'Classic workspace', exact: true })).toHaveAttribute('href', '/app/');
+    await page.goto('/app/');
     await expect(page.locator('#library-panel')).toBeVisible();
     const approvedSession = await (await page.request.get('/api/account/session')).json();
     expect(approvedSession.author).toMatchObject({ approvalStatus: 'approved', role: 'author' });

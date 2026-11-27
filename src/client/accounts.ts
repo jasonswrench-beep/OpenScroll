@@ -6,6 +6,7 @@ const signedIn=document.querySelector<HTMLElement>('#signed-in')!;
 const register=document.querySelector<HTMLFormElement>('#register-form')!;
 const access=document.querySelector<HTMLElement>('#account-access')!;
 const openAuthoring=document.querySelector<HTMLAnchorElement>('#open-authoring')!;
+const openClassic=document.querySelector<HTMLAnchorElement>('#open-classic')!;
 const ownerPanel=document.querySelector<HTMLElement>('#owner-accounts-panel')!;
 const ownerList=document.querySelector<HTMLElement>('#owner-account-list')!;
 const ownerStatus=document.querySelector<HTMLElement>('#owner-accounts-status')!;
@@ -24,6 +25,21 @@ async function session(){
     ?`You can request an account on this instance. ${data.verificationRequired?'Verify your email and choose a password, then wait for its owner to approve authoring access.':'Its owner must approve authoring access.'}`
     :'New account requests are closed on this instance. Existing authors can sign in.';
 }
+// Authoring starts in the studio where this instance has turned it on, and in the classic workspace otherwise.
+// The features endpoint answers only signed-in authors, so a refusal is not remembered.
+let studioOn:boolean|undefined;
+async function studioAvailable(){
+  if(studioOn!==undefined)return studioOn;
+  try{const response=await fetch('/api/features',{credentials:'same-origin'});if(!response.ok)return false;studioOn=!!(await response.json() as {studio?:boolean}).studio;return studioOn;}
+  catch{return false;}
+}
+async function showWorkspaces(){
+  const allowed=hasAuthoringAccess(account);openClassic.hidden=true;
+  if(!allowed)return;
+  const studio=await studioAvailable();
+  if(!hasAuthoringAccess(account))return;
+  openAuthoring.href=studio?'/studio/':'/app/';openAuthoring.textContent=studio?'Open the studio':'Open authoring workspace';openClassic.hidden=!studio;
+}
 function renderAccount(){
   signedIn.hidden=!account;signedOut.hidden=!!account;
   document.querySelector('#signed-in-name')!.textContent=account?`Signed in as ${account.name} (${account.email})`:'';
@@ -33,6 +49,7 @@ function renderAccount(){
     ?'Your account is waiting for this instance owner’s approval. Authoring tools are locked until access is approved. After approval, sign in again.'
     :account.approvalStatus==='revoked'?'Authoring access on this instance has been revoked. Contact its owner if you need access again.'
     :account.role==='owner'?'You are an owner of this instance. You can author courses and review account access below.':'Your authoring access on this instance is approved.';
+  void showWorkspaces();
   ownerPanel.hidden=!isOwner();
   if(!isOwner()){ownerGeneration++;ownerList.replaceChildren();nextCursor=undefined;more.hidden=true;}
 }
@@ -89,7 +106,7 @@ for(const [id,path]of [['login-form','login'],['register-form','register'],['res
       const data=await api<{author?:Account;csrf?:string;message?:string}>(`/api/account/${path}`,'POST',Object.fromEntries(new FormData(form)));
       if(data.author&&data.csrf){
         setAccount(data.author,data.csrf);status.textContent=hasAuthoringAccess(data.author)?'Signed in. Your authoring access is approved.':'Signed in. Your account is waiting for owner approval.';
-        if(hasAuthoringAccess(data.author)&&!(isOwner()&&location.hash==='#requests'))location.assign('/app/');
+        if(hasAuthoringAccess(data.author)&&!(isOwner()&&location.hash==='#requests'))location.assign(await studioAvailable()?'/studio/':'/app/');
         else if(!isOwner())access.focus();
       }
       else status.textContent=data.message??'Request completed.';
