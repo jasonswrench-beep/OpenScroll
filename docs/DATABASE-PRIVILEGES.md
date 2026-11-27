@@ -240,7 +240,7 @@ PostgreSQL binary at the current volume, restoring the obsolete 17.7 pin, or
 loosening HBA rules. An older dump is not permission to downgrade the target
 server; select and verify a compatible recovery version explicitly. See
 [self-hosting](SELF-HOSTING.md) and
-the [deployment handoff](../DEPLOYMENT-HANDOFF.md).
+the [deployment record](../DEPLOYMENT-HANDOFF.md).
 
 Database role separation does not repair the remaining upstream Chromium/native
 vulnerabilities. Browser patch availability, both final-image scans, renderer

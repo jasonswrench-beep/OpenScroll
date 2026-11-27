@@ -1,198 +1,126 @@
-# OpenScroll security draft deployment handoff
+# OpenScroll deployment record
 
-This is preparation for review, not a deployment authorization or a new release.
-The database-privilege draft is based on renderer-isolation PR #6 at
-`3a0e43c7143e6e058b418896ca4f1595649483e7`, following the dependency and
-owner-approval changes. Record the final reviewed head and its own terminal CI
-before considering any deployment. Existing alpha tags, release archives and
-checksums describe their original commits; do not move or replace them and do
-not treat the former alpha.3 handoff as evidence for this draft.
+How the project's own OpenScroll instance runs, as of 2026-11-27. General instructions for installing, backing up
+and upgrading OpenScroll on any server are in [self-hosting](docs/SELF-HOSTING.md); this file records the choices
+made for this instance. Private values stay out of the repository: the server's address, its settings files,
+passwords, mail credentials and account listings.
 
-No production inspection, role provisioning, account promotion, migration, mail
-send, Hostinger change or deployment is implied by this file. Public sample
-courses remain deferred. Other products and existing host services are outside
-this change.
+This file replaces the October 2026 security-draft handoff. That text remains in the repository history, including
+at tag `v0.2.0-alpha.1`.
 
-## What must travel together
+## What runs
 
-Retain an app and renderer image built from the same reviewed source commit.
-The app uses Node 24.22.2 and the restricted `openscroll_app` database login.
-The credential-free renderer communicates through the private Unix socket,
-without a database connection or network access. Its process/resource boundaries
-remain required; there is no in-process PDF fallback.
+- **Release:** [v0.2.0-alpha.2](docs/releases/v0.2.0-alpha.2.md) (commit `b904d38`), live at
+  <https://openscroll.openstageauthor.com> since 2026-11-27, 12:25 UTC.
+- **Images:** the app and `renderer-chrome` images were built on the server from an exact copy of the tag. The
+  v0.2.0-alpha.1 pair (commit `e64d932`) is kept for rollback.
+- **Database:** PostgreSQL 17.11 as pinned in `deploy/compose.yaml`, at database migration 5. The app connects with
+  the restricted runtime login, and migrations run with the separate migrator login
+  ([database privileges](docs/DATABASE-PRIVILEGES.md)).
+- **Settings:** the studio is on (`OPENSCROLL_STUDIO=on`), so signing in opens it. Registration is closed
+  (`REGISTRATION_ENABLED=false`). The size limits are the defaults, embedded video is on (the default), and mail goes
+  through the hosting provider's SMTP service.
 
-The database now has three credential tiers:
+## Server layout
 
-| Tier | Service purpose |
-| --- | --- |
-| Existing `openscroll` bootstrap administrator | Dedicated provisioning and trusted backup/restore only; existing `POSTGRES_PASSWORD` retained |
-| `openscroll_migrator` / `ADMIN_DATABASE_URL` | Migrations and separate maintenance account/admin commands |
-| `openscroll_app` / app-only `DATABASE_URL` | Reviewed runtime table/column operations; no privileged memberships, ownership, DDL or migration/audit rewriting |
+- **Host:** a shared VPS running Docker and Compose. A Traefik proxy shared by every site on the host owns ports 80
+  and 443 and obtains the certificates. OpenScroll doesn't use the bundled Caddy edge. Upgrades touch only
+  the `openscroll-production` Compose project, never the proxy or the other sites' containers.
+- **Network:** the app publishes only `127.0.0.1:3100`, for health checks on the server. Traefik reaches it over the
+  `openscroll-production_application` network. The database, provisioning, migration and maintenance services stay on
+  the internal `openscroll-production_database` network. The renderer has no network.
+- **Release directories:** each release has its own directory under `/opt/openscroll/release-prep/`, and
+  `/opt/openscroll/current` links to the one that is running. Each release directory holds:
+  - `source/`: an exact copy of the tag, unpacked with LF line endings;
+  - `production/`: that release's settings file (mode 600) and its Compose overlay.
+- **Overlay:** it adds the Traefik route for the hostname, using the `websecure` entry point and the proxy's
+  Let's Encrypt resolver, with container port 3000. It maps the Compose file's `internal` and `edge` networks to the
+  two existing networks above. It also marks the database volume `openscroll-production_database` as external, so no
+  release can replace it.
+- **Old release directories stay.** The database container mounts `deploy/pg_hba.conf` from the release it was
+  created in (v0.2.0-alpha.1). The v0.2.0-alpha.2 files name their own copy, which is identical. The next time the
+  database service is brought up from newer files, Compose will recreate the container: a short cold restart, with
+  the volume untouched.
 
-This changes privileges and object ownership, not application rows or the current
-schema version **5**. It does not delete accounts/course data or reassign the
-OpenScroll owner account. Read [database privileges](docs/DATABASE-PRIVILEGES.md),
-[instance-owner activation](docs/INSTANCE-ACCESS.md) and
-[renderer isolation](docs/RENDERER-ISOLATION.md) before preparing a live cutover.
+## Making a release
 
-Before release, record privately or in appropriate non-secret release evidence:
+1. Merge into `main` locally and push. Tag the release commit with an annotated tag before building anything.
+2. Pack the tag with `git -c core.autocrlf=false -c core.eol=lf archive --format=tar <tag>`. A plain archive made on
+   Windows converts the shell scripts to CRLF line endings, and they then fail on Linux. Compare the unpacked files
+   with `git ls-tree -r <tag>`; the v0.2.0-alpha.2 pack matched all 711 files.
+3. Upload it as the new release's `source/` and remove group and world write permission from it.
+4. Build both images on the server with `--pull`: `--target runtime` for the app and `--target renderer-chrome`
+   (with `--build-arg ACCEPT_GOOGLE_CHROME_TERMS=true`) for the renderer. Tag them with the version and commit, for
+   example `openscroll:app-v0.2.0-alpha.2-b904d382`.
+5. Switch to the new images (below), check the site, then push the tag and publish the release notes from
+   `docs/releases/` as a GitHub pre-release.
 
-- Final source commit and terminal exact-head CI links, including failures or
-  unrun checks; do not reuse the alpha importer's historical test totals.
-- App and renderer image IDs/digests, build source and full inventories for both
-  images. A single application image is no longer a complete installation.
-- Reviewed database role/column policy and negative privilege checks, plus
-  renderer credential/network/deadline checks and PDF quality regressions.
-- Compatible retained rollback image pair, actual PostgreSQL version/image and
-  HBA policy, protected configuration location, fresh database backup/checksum
-  and successful isolated restore evidence.
-- Remaining native vulnerabilities and the accepted browser patch path. Debian's
-  currently available Chromium `.73` remains below the upstream `.79` security
-  release; isolation and a passing fix-availability scan gate do not install
-  those fixes. Optional alternative browser-provider work is a separate review
-  and terms decision, not an approved dependency of this handoff.
+A tag that has been pushed never moves. If a build has to change after that, it gets a new version and a new tag.
 
-## Inspect the actual installation before approval
+## Switching images only
 
-The deployment owner must identify the real OpenScroll project, current image
-pair, protected configuration, PostgreSQL cluster/volume, public hostname,
-private app port, proxy route, actual PostgreSQL version/image, current schema
-version and host capacity. Check existing service health before changing anything. Do not guess the live state,
-create a parallel installation by assumption, take over ports 80/443 or replace
-an existing reverse proxy.
+Use this when a release changes only the app and renderer: the same database definition, no new migration and no
+new settings. v0.2.0-alpha.2 was this kind of release.
 
-Use a dedicated PostgreSQL cluster for this OpenScroll instance. PostgreSQL roles
-are cluster-wide; this provisioning workflow must not be pointed at another
-product's cluster. If unexpected application objects, conflicting designated
-roles or unsupported schema customizations are found, preserve them and stop for
-review. The code deliberately avoids `REASSIGN OWNED` or automatic deletion.
+1. Copy the running release's settings file and overlay into the new release's `production/` directory, changing
+   only `OPENSCROLL_IMAGE` and `OPENSCROLL_RENDERER_IMAGE` to the new image IDs.
+2. Validate the copy with `OPENSCROLL_ENV_FILE=<new settings> python3 source/deploy/configure.py --check-hba` and
+   `docker compose ... config --quiet`.
+3. Check that the database service is unchanged. Compare `docker compose ... config --format json db` for the old
+   and new release, looking only at `services.db` with the release directory path normalized. Top-level fields such
+   as `x-image` always change. If the database definition differs, do a full upgrade instead.
+4. Recreate only the renderer and the app. The database keeps running:
 
-The reviewed database image is PostgreSQL **17.11-bookworm**, pinned by digest
-`839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5`.
-Do not reintroduce the old 17.7 pin or downgrade a newer observed installation
-merely to match a checkout. Production also adopts an explicit read-only
-`deploy/pg_hba.conf` bind mount: the ordered SCRAM rules restrict app/migrator TCP
-logins to the `openscroll` database. The bootstrap operator's trusted local
-socket remains inside the database container, without an app/renderer mount.
-The public HBA file must be a regular readable **0644** file without group/world
-write access, while protected environment and password-input files stay **0600**.
-The operator commands preflight this policy file; do not resolve a failure by
-making secrets readable or applying blanket recursive permissions.
+   ```bash
+   docker compose -p openscroll-production \
+     --env-file production/.env.<version> \
+     -f source/deploy/compose.yaml \
+     -f production/overlay-<version>.yaml \
+     up -d --no-build --no-deps --wait renderer app
+   ```
 
-Review this concrete installation/cutover/rollback plan and obtain the required
-production authorization before executing it. Engineering draft authorization
-does not authorize live credential, role, configuration or account changes.
+   The site is offline for about 15 seconds (12 seconds for v0.2.0-alpha.2).
+5. Check `/api/health` on the server and at the public address, and check the renderer log for "PDF renderer ready".
+   Check that the other sites on the host still answer.
+6. Point `/opt/openscroll/current` at the new release, and point the backup service's `OPENSCROLL_ENV_FILE` at the
+   new settings file.
 
-## Backup-first cutover plan
+## Full upgrade
 
-1. Record the exact current installation, app/renderer and database image/version,
-   configuration/HBA identities and health. Privately identify the intended existing owner by actual account UUID
-   and matching verified email. Preserve that account, password hash and authored
-   data; do not guess an ID or select the first public signup.
-2. Take a fresh consistent database backup; verify its checksum, successful
-   restoration into an isolated empty target and encrypted off-host availability.
-   Retain the protected configuration and compatible app/renderer image pair.
-   For the schema 4 release, run `npm run db:rehearse` against the restored copy
-   and continue only when every stored course, snapshot and reusable item opens
-   (see `docs/RELEASE-0.2-CHECKLIST.md`).
-   Keep the current installation/volumes intact. Do not use `down --volumes`.
-3. Build or transfer the reviewed replacement image pair and verify its recorded
-   identities. Preserve normal CA/TLS verification. Do not substitute a mutable
-   `latest` tag or infer provenance from a successful source-only test.
-4. In the verified existing protected configuration, run the additive
-   `deploy/ops.sh db-credentials` step when approved. It generates only missing
-   runtime/migrator password values and preserves the existing bootstrap password
-   and existing configuration values. Do not run `init` over an existing file.
-   Set the retained `OPENSCROLL_IMAGE` and `OPENSCROLL_RENDERER_IMAGE`; preserve
-   unrelated origin, mail, quota, port, volume and registration settings.
-5. Validate with `deploy/ops.sh config`, which avoids printing expanded secrets.
-   Use the approved `deploy/ops.sh upgrade` workflow: HBA preflight, backup, stop
-   app/renderer, reapply the reviewed database image/HBA service configuration and
-   wait for database health, provision the dedicated roles, migrate/reapply runtime
-   grants, then start the app/renderer and check health. The changed image, HBA
-   bind mount and PostgreSQL command require planned database-container
-   recreation/restart; this is a cold database change, not merely an online HBA
-   reload. Compose retains the existing database volume and bootstrap password.
-   Do not create a fresh volume, remove data or rotate that password implicitly.
-   The privileged provisioning service is one-shot;
-   migrations/admin commands use only the migrator connection. The long-running
-   app must receive no bootstrap/migrator credential. Leave it stopped if any
-   provisioning or migration precondition fails.
-6. If the previous schema predates migration 5, that migration preserves all
-   account/course data while invalidating old sessions/tokens and making legacy
-   accounts pending. Keep authoring unavailable, privately review unexpected
-   accounts and explicitly bootstrap only the intended existing verified owner
-   with its UUID plus matching email. If schema 5 was already applied, the role
-   cutover does not reset approvals or repeat account demotion; confirm existing
-   owner access without changing account rows unnecessarily.
-7. Sign in afresh, verify the existing owner's course inventory and run the
-   controlled acceptance checks below. Unexpected accounts remain pending with
-   their data preserved. Verification/password reset do not grant approval.
-   Request-notification recipient and owner login remain separate private values;
-   no new SMTP credential or real email is created by the database draft.
-8. Recheck all identified existing host services. Record actual image/role/schema
-   identities, backup evidence and acceptance results privately. Claim deployment
-   only after those checks and the production authorization are complete.
+A release that changes the database definition, the database roles or the migrations follows the backup-first
+`deploy/ops.sh upgrade` workflow in [self-hosting](docs/SELF-HOSTING.md#upgrades-and-rollback). It takes a fresh
+backup, stops the app and renderer, brings the database up under the new definition (a short cold restart),
+provisions the roles, migrates, and starts the new pair. The move from the October 2026 installation to
+v0.2.0-alpha.1 was done this way, with 20 seconds offline. Before that switch, a copy of the live data was upgraded
+in a separate Compose project. All of its courses opened, sign-in, SCORM 2004 and 1.2 export and PDF publishing
+worked, and the rollback was tested; the copy was then removed.
 
-For a fresh installation, use the separate first-install procedure in
-[SELF-HOSTING](docs/SELF-HOSTING.md). New independent self-hosters choose their own
-owner and notification recipient; no personal/global owner authority is built in.
+## Rollback
 
-## Controlled acceptance checks
+Each release directory keeps its own settings, overlay and image IDs, so going back means recreating the renderer
+and app from the previous release's directory with the same command as above, then pointing `current` and the backup
+service back at it. v0.2.0-alpha.1 and v0.2.0-alpha.2 use the same database, so either can run against it.
 
-Use a designated synthetic test account/course and remove only that test data
-through the established operator workflow. Inspect existing owner data without
-altering it merely to run a test.
+After a release that migrates the database, an older image can't be pointed at the migrated data. Restore the
+pre-upgrade backup into a separate Compose project instead, as described in
+[self-hosting](docs/SELF-HOSTING.md#upgrades-and-rollback).
 
-- Verify HTTPS/proxy behavior, `/api/health`, schema compatibility and the actual
-  served assets. Confirm the runtime connects as `openscroll_app` and cannot use
-  privileged membership, schema/table/temporary-object creation, owner-role
-  writes, migration-history writes or audit update/delete. Use the reviewed
-  negative-check harness; also verify TCP denial when app/migrator logins target
-  another database. Do not grant a missing permission or loosen HBA to make it
-  green.
-- Confirm fresh intended-owner login and preserved existing courses/assets.
-  Anonymous, unverified, pending and revoked access must fail closed. Exercise a
-  controlled request → verification → pending → approval → fresh login flow;
-  revoke it and verify old sessions stop working. No public signup becomes owner.
-- Exercise stored-course editing/reload, portable import/download/reopen,
-  spreadsheet preview/cancel/import/undo and representative HTML/SCORM export.
-  Author content, answers and feedback must remain intact; use controlled test
-  data rather than mutating real courses for acceptance.
-- Produce a real authorized PDF containing Latin/CJK text with embedded fonts.
-  Verify the renderer's actual process identity, private mounts, absent synthetic
-  app credentials, denied network access and timeout/crash cleanup separately
-  from browser JavaScript policy. A working PDF alone does not prove isolation.
-- Perform the approved mail/backup/monitoring checks. SMTP handshake/acceptance
-  is not proof of human delivery, and app health is not a complete security or
-  renderer readiness check. Real mail testing remains a separately authorized
-  production acceptance action.
+## Backups
 
-## Failure and rollback
+- **Daily dumps:** a systemd timer (`openscroll-backup.timer`) runs `deploy/ops.sh backup` from the current release
+  every day at about 08:30 UTC, with up to 15 minutes' random delay. Each run writes a checked dump and its SHA-256
+  file to `/opt/openscroll/backups`, and the last 14 days of daily dumps are kept. The first unattended run, on
+  2026-11-27, succeeded.
+- **Pre-upgrade dumps:** the dumps taken by hand before each switch are kept indefinitely, with a copy off the server.
+- **Not done yet:** the backups are not encrypted, and there is no automatic copy off the server. Until there is,
+  losing the server would lose every backup newer than the last manual copy.
 
-A failed provision/migration must leave the app stopped. Preserve the error and
-inventory for review without exposing passwords, dumps or account listings.
-Never solve it by restoring the bootstrap URL to the app, making roles superuser,
-adding role memberships, accepting unknown objects or disabling the privilege
-checks. A renderer failure must not trigger in-process PDF rendering or a broader
-network/host mount.
+## Open items
 
-Retain a matched compatible image pair and configuration for rollback. Ownership
-and grants can differ from an older release, even when the application schema
-number is still 5; do not assume an arbitrary older binary/URL is a safe rollback.
-Retain the database version and HBA policy too. Do not blindly restore a
-historical Compose definition that downgrades PostgreSQL to 17.7, start an older
-binary against the current volume or relax cross-database HBA restrictions. A
-major-version or otherwise incompatible database recovery needs its own reviewed
-procedure.
-
-For data/schema recovery, use a separate empty target and the verified backup,
-restore with no owners/ACLs, revoke restored sessions/tokens, then provision the
-roles and run compatible migrations/grants before starting it. Verify owner/data
-and the acceptance checks before any approved traffic switch. Keep the previous
-installation until recovery is accepted; never overwrite its live database.
-
-Full residual review, a supported patched browser, verified encrypted off-host
-backup/recovery, production host/capacity inspection, DNS/TLS, real mail and
-manual/broader-browser accessibility acceptance remain release prerequisites.
-Draft CI and local disposable tests do not substitute for those live checks.
+- **Large uploads through the proxy:** Traefik sets no request size limit by default, but its default read timeout
+  of 60 seconds is shorter than the 8 minutes that [self-hosting](docs/SELF-HOSTING.md#https-on-a-shared-vps) asks
+  for. A full-size course saved over a slow connection may be cut off. Raising it is a change to the shared proxy,
+  so it waits for the owner's decision.
+- **Encrypted off-host backups:** the destination is still to be chosen.
+- **Checks that follow the alpha:** a scored quiz and a SCORM 1.2 package in Brightspace, the screen reader session
+  and the usability session ([release checklist](docs/RELEASE-0.2-CHECKLIST.md)).

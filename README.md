@@ -23,7 +23,7 @@ Steps 1–12 are implemented; Step 13 production preparation is available, with 
 - [Spreadsheet assessment import: Excel and CSV templates](docs/QUESTION-IMPORT.md)
 - [Production installation, backups and operator guide](docs/SELF-HOSTING.md)
 - [Database runtime/migration privileges and credential separation](docs/DATABASE-PRIVILEGES.md)
-- [Current security draft deployment handoff](DEPLOYMENT-HANDOFF.md)
+- [Deployment record for the project's own instance](DEPLOYMENT-HANDOFF.md)
 - [Step 13 preparation and validation](docs/STEP-13-VALIDATION.md)
 - [Themes, templates, reusable assets and snapshots](docs/THEMES-AND-REUSE.md)
 - [Block compatibility matrix](docs/BLOCK-COMPATIBILITY.md)

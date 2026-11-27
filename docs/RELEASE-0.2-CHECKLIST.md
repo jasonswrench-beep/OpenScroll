@@ -1,9 +1,15 @@
-# Release checklist: v0.2.0-alpha.1 (schema 4 and OpenScroll Studio)
+# Release checklist: v0.2.0 (schema 4 and OpenScroll Studio)
 
 Stage 9 of the [block build plan](BLOCK-BUILD-PLAN.md). The work was built on the `feature/schema-4` branch and
 squash-merged into `main` (pull request #11). The owner decided on 2026-11-26 to release this alpha once it runs on
 the production server, with the screen reader, usability and remaining Brightspace checks to follow. The tag goes
 on the commit that is running there after the cutover checks pass.
+
+**Status, 2026-11-27:** both alphas are deployed and tagged. [v0.2.0-alpha.1](releases/v0.2.0-alpha.1.md)
+(commit `e64d932`) went live on the production server, and its tag was pushed once the cutover checks passed.
+[v0.2.0-alpha.2](releases/v0.2.0-alpha.2.md) (commit `b904d38`), which opens the studio after sign-in, replaced it
+the same day by switching images only. The [deployment record](../DEPLOYMENT-HANDOFF.md) describes the running
+installation. The open items below follow the alpha.
 
 ## Done in the repository
 
@@ -67,21 +73,30 @@ on the commit that is running there after the cutover checks pass.
 - [ ] Usability session: at least two authors build a short lesson from the Quick Start without help. Record where
   they stopped. Follows the alpha.
 - [x] Bump `package.json` to `0.2.0-alpha.1` and finish the release notes.
-- [ ] After the cutover checks pass, tag the commit running on the server and push the tag. A pushed tag never
-  moves: a later fix takes a new version.
+- [x] After the cutover checks pass, tag the commit running on the server and push the tag. A pushed tag never
+  moves: a later fix takes a new version. Done for `v0.2.0-alpha.1` (`e64d932`) and `v0.2.0-alpha.2` (`b904d38`),
+  each with a GitHub pre-release page.
 
-## Cutover (needs the owner's go-ahead and VPS access)
+## Cutover (done 2026-11-27)
 
-Follow the backup-first plan in `DEPLOYMENT-HANDOFF.md`, with these additions:
+The owner approved the backup-first plan, and the production server moved from its October 2026 installation to
+v0.2.0-alpha.1 through the `deploy/ops.sh upgrade` steps, with 20 seconds offline. The
+[deployment record](../DEPLOYMENT-HANDOFF.md) has the details.
 
-1. After the backup is restored into an isolated database for verification, run `npm run db:rehearse` against
-   that copy. Every row must open (`"ok": true`); a failure names the row id to investigate before going on.
-2. There is no new course migration in this release. Stored courses stay at their schema version until an author
-   saves them, so rolling back to the previous image pair keeps working for unsaved courses. A course saved by
-   the new version cannot be opened by the old one: if rollback is needed after authors have saved, restore the
-   backup. A server that predates database migration 5 also gets the owner-approval migration from the October
-   security work, which keeps all data but signs everyone out and leaves accounts pending until the owner is named.
-3. Deploy with `OPENSCROLL_STUDIO=off` first. Check the classic workspace and existing courses, then turn the
-   studio on and restart. Embedded video is on by default (approved by the owner); the size limits start at 64 MiB
-   per file and 160 MiB per course, and the edge proxy now allows requests up to 440 MiB.
-4. Recheck the other services on the VPS, as the handoff requires.
+- [x] A fresh backup was restored into a separate Compose project and upgraded there first. The course check behind
+  `npm run db:rehearse` opened every stored course, snapshot and reusable item. A test author signed in, made a
+  course and exported SCORM 2004, SCORM 1.2 and PDF. Rolling the copy back was tested, and the copy was then
+  removed.
+- [x] There is no new course migration in this release. Stored courses stay at their schema version until an
+  author saves them. A course saved by the new version cannot be opened by an older one, so a rollback after
+  authors have saved means restoring the backup. The server already had database migration 5, so no accounts were
+  reset.
+- [x] Production runs with the studio on (`OPENSCROLL_STUDIO=on`); the classic workspace stays one link away.
+  Embedded video is on by default (approved by the owner), and the size limits are the defaults of 64 MiB per file
+  and 160 MiB per course.
+- [x] The other sites on the server were rechecked after each switch and still answer.
+- [ ] The shared proxy's request timeout is still at its 60-second default, below the 8 minutes that
+  [self-hosting](SELF-HOSTING.md#https-on-a-shared-vps) asks for. Changing it affects every site on the server, so
+  it waits for the owner's decision.
+- [ ] Daily backups run on the server, but they are not encrypted, and there is no automatic copy off the server
+  yet.
