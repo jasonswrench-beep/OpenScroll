@@ -13,6 +13,11 @@ Edit the prompt and choices, matching terms, or sorting items directly in the le
 | Fill in the blank | A typed answer matches one accepted answer; Unicode NFC normalization, trimmed/collapsed whitespace, and optional case sensitivity apply; punctuation remains significant |
 | Matching | Every term receives its correct distinct match |
 | Sorting | Every item appears in the authored order |
+| True or false | The chosen option is the correct one of the two |
+| Short answer | A typed answer matches an accepted answer, as for fill in the blank; or, as a self-check, any answer, compared by the learner with a model answer (never scored) |
+| Numeric | The typed number equals the value within the tolerance, or falls in the range; a comma decimal mark and the unit after the number are accepted |
+| Hotspot | The chosen areas are exactly the correct ones; with one correct area learners choose one |
+| Sort into groups | Every card is in its correct group |
 
 There is no partial credit. Choice/pair/sorting entries must be distinct and nonempty to publish; matching and sorting need at least two entries. Fill in the blank needs a nonempty accepted answer. Empty/incomplete drafts can be saved, but publishing rejects unusable questions with an actionable message. Preview disables an unconfigured question. Switching question formats preserves hidden content and settings, so review the answer key after changing formats.
 

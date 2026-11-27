@@ -3,8 +3,12 @@ import type pg from 'pg';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { assetPath, parseCourse, ProjectError, type CourseDocument, type PortableProject } from '../shared/course.js';
-import { validateProject, exportProject } from '../project/archive.js';
+import { assetPath, parseCourse, eachBlock, relinkCheckpoints, ProjectError, type CourseDocument, type PortableProject } from '../shared/course.js';
+import { remapDocumentAssets } from '../shared/reuse.js';
+import { validateProject, exportProject, LIMITS } from '../project/archive.js';
+import { requestBytes, sizeLabel } from '../shared/limits.js';
+import { instanceSizeLimits } from './config.js';
+import { installLargeRequestSlot, guardLargeBodies, withLargeRequest } from './large-requests.js';
 import { HttpError, requireAuthor } from './accounts/routes.js';
 const idSchema=z.string().uuid();
 function courseId(request:FastifyRequest) {
@@ -27,19 +31,19 @@ export function duplicateProject(source:PortableProject):PortableProject {
   document.course.id=replace(document.course.id);
   const files:Record<string,string>={};
   for (const asset of document.assets) {const old=assetPath(asset);asset.id=replace(asset.id);files[assetPath(asset)]=source.files[old]!;}
-  if (document.course.cover) document.course.cover.assetId=ids.get(document.course.cover.assetId)!;
   for (const section of document.course.sections) {
     section.id=replace(section.id);
     for (const lesson of section.lessons) {
       lesson.id=replace(lesson.id);
-      for (const block of lesson.blocks) {
+      for (const objective of lesson.objectives) objective.id=replace(objective.id);
+      for (const block of eachBlock(lesson.blocks)) {
         block.id=replace(block.id);
-        if (block.type === 'image' || block.type === 'image-text' || block.type==='labeled-graphic') block.content.assetId=ids.get(block.content.assetId)!;
-        if(block.type==='gallery')for(const image of block.content.items)image.assetId=ids.get(image.assetId)!;
-        if((block.type==='audio' || block.type==='video' || block.type==='attachment') && block.content.assetId)block.content.assetId=ids.get(block.content.assetId)!;
+        if(block.type==='objectives')for(const item of block.content.items)item.id=replace(item.id);
       }
     }
   }
+  remapDocumentAssets(document.course,ids);
+  for (const lesson of document.course.sections.flatMap(s=>s.lessons)) relinkCheckpoints(lesson.blocks,ids);
   document.course.title=`Copy of ${document.course.title}`.slice(0,300);
   document.course.createdAt=document.course.updatedAt=new Date().toISOString();
   return validateProject({document,files});
@@ -80,23 +84,27 @@ async function saveNew(pool:pg.Pool,owner:string,project:PortableProject,assetLi
   } catch(error) {await client.query('ROLLBACK');throw error;} finally {client.release();}
 }
 export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=1024*1024*1024}:{pool:pg.Pool;assetLimitBytes?:number}) {
+  const courseRequest=requestBytes(instanceSizeLimits());
   app.addHook('onRequest',async request => {requireAuthor(request);});
+  // Saves and imports that carry a whole course share the process's one large-request slot (large-requests.ts).
+  installLargeRequestSlot(app);guardLargeBodies(app);
   app.get('/courses',async request => {
     const query=parse(z.strictObject({search:z.string().max(200).default(''),sort:z.enum(['updated','created','title']).default('updated'),offset:z.coerce.number().int().min(0).max(10000).default(0)}),request.query);
     const ordering={updated:'updated_at DESC, id',created:'created_at DESC, id',title:"lower(document->'course'->>'title'), id"}[query.sort];
-    const result=await pool.query(`SELECT id,revision,document->'course'->>'title' AS title,created_at,updated_at,jsonb_array_length(document->'course'->'sections') AS sections FROM courses WHERE owner_id=$1 AND strpos(lower(document->'course'->>'title'),lower($2))>0 ORDER BY ${ordering} LIMIT 100 OFFSET $3`,[request.author!.id,query.search,query.offset]);
+    // Card details for the library: cover, accent, and lesson and block counts read from the stored document.
+    const result=await pool.query(`SELECT id,revision,document->'course'->>'title' AS title,created_at,updated_at,jsonb_array_length(document->'course'->'sections') AS sections,document->'course'->'cover'->>'assetId' AS cover_asset,document->'course'->'theme'->>'accentColor' AS accent,(SELECT count(*)::int FROM jsonb_array_elements(document->'course'->'sections') s,jsonb_array_elements(s->'lessons') l) AS lessons,(SELECT COALESCE(sum(jsonb_array_length(l->'blocks')),0)::int FROM jsonb_array_elements(document->'course'->'sections') s,jsonb_array_elements(s->'lessons') l) AS blocks FROM courses WHERE owner_id=$1 AND strpos(lower(document->'course'->>'title'),lower($2))>0 ORDER BY ${ordering} LIMIT 100 OFFSET $3`,[request.author!.id,query.search,query.offset]);
     return {courses:result.rows};
   });
   app.post('/courses',async request => {
     const data=parse(z.strictObject({title:z.string().trim().min(1).max(300)}),request.body);
     return saveNew(pool,request.author!.id,freshProject(data.title,request.author!.name),assetLimitBytes);
   });
-  app.post('/courses/import',{bodyLimit:90*1024*1024,config:{rateLimit:{max:10,timeWindow:'1 minute',groupId:'course-import'}}},async request => {
+  app.post('/courses/import',{bodyLimit:courseRequest,config:{largeBody:true,rateLimit:{max:10,timeWindow:'1 minute',groupId:'course-import'}}},async request => withLargeRequest(app,request,async () => {
     try {return await saveNew(pool,request.author!.id,validateProject(request.body),assetLimitBytes);}
     catch(error) {if(error instanceof ProjectError) throw new HttpError(422,error.message);throw error;}
-  });
+  }));
   app.get('/courses/:id/edit',async request => readSnapshot(pool,courseId(request),request.author!.id));
-  app.put('/courses/:id/document',{bodyLimit:90*1024*1024},async request => {
+  app.put('/courses/:id/document',{bodyLimit:courseRequest,config:{largeBody:true}},async request => withLargeRequest(app,request,async () => {
     const id=courseId(request);
     const input=parse(z.strictObject({revision:z.number().int().positive(),mutationId:z.string().uuid(),document:z.unknown(),files:z.record(z.string(),z.string()).optional()}),request.body);
     let document:CourseDocument;
@@ -104,12 +112,15 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
     catch(error){if(error instanceof ProjectError)throw new HttpError(422,error.message);throw error;}
     const documentBytes=Buffer.byteLength(JSON.stringify(document,null,2)+'\n');
     if(documentBytes>2*1024*1024)throw new HttpError(422,'The course document exceeds 2 MiB.');
-    if(documentBytes+document.assets.reduce((size,asset)=>size+asset.byteLength,0)>64*1024*1024)throw new HttpError(422,'The expanded project exceeds 64 MiB.');
+    if(documentBytes+document.assets.reduce((size,asset)=>size+asset.byteLength,0)>LIMITS.expanded)throw new HttpError(422,`The expanded project exceeds this server's ${sizeLabel(LIMITS.expanded)} course limit.`);
     const sortedFiles=input.files===undefined ? null : Object.entries(input.files).sort(([a],[b])=>a<b ? -1 : a>b ? 1 : 0);
     const digestOf=(document:unknown)=>createHash('sha256').update(JSON.stringify({document,files:sortedFiles})).digest('hex');
     const digest=digestOf(document);
     // Preserve acknowledgements for exact v1 requests retained before the portable-v2 upgrade.
-    const legacyDigest=[1,2].includes((input.document as {schemaVersion:number}).schemaVersion) ? digestOf({...document,schemaVersion:(input.document as {schemaVersion:number}).schemaVersion}) : undefined;
+    // A v3 request saved by the previous release was stored and hashed as the v3 document itself; schema 4
+    // migration adds fields, so that retry is recognized by hashing the request as sent.
+    const sentVersion=(input.document as {schemaVersion:number}).schemaVersion;
+    const legacyDigest=[1,2].includes(sentVersion) ? digestOf({...document,schemaVersion:sentVersion}) : sentVersion===3 ? digestOf(input.document) : undefined;
     const client=await pool.connect();
     try {
       await client.query('BEGIN');
@@ -131,7 +142,7 @@ export async function libraryRoutes(app:FastifyInstance,{pool,assetLimitBytes=10
       const result=await client.query('UPDATE courses SET document=$1,revision=revision+1,last_save_id=$2,last_save_hash=$3,updated_at=now() WHERE id=$4 RETURNING revision',[document,input.mutationId,digest,id]);
       await client.query('COMMIT');return {revision:result.rows[0].revision,updatedAt:document.course.updatedAt};
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
-  });
+  }));
   app.get('/courses/:id',async request => readProject(pool,courseId(request),request.author!.id));
   app.get('/courses/:id/download',async (request,reply) => reply.type('application/x-openscroll-project').header('Content-Disposition','attachment; filename="course.openscroll"').send(await exportProject(await readProject(pool,courseId(request),request.author!.id))));
   app.patch('/courses/:id',async request => {

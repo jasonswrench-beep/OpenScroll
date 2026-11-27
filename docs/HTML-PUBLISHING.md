@@ -12,6 +12,15 @@ The player uses the same semantic core block renderer and styles as the editor, 
 
 The iframe runs trusted OpenScroll player code and inert authored text. It permits its own scripts and origin for module loading, plus sandboxed form events for trusted assessment controls, while disallowing popups and top navigation. Message exchange verifies the parent/frame source and same origin. This is not a sandbox for arbitrary uploaded HTML or custom scripts; those remain unsupported. The built server permits same-origin framing only for `player.html`, retaining framing denial on the authoring shell.
 
+## What learners see
+
+The published course (standalone HTML and SCORM alike) follows the course theme set in the theme studio:
+
+- **Cover.** A new learner starts on the course cover, laid out as the theme's cover layout chooses (image beside the text, split, two-thirds, image behind the text, or centered with no image), with the author, description, lesson count and **Start course**. A returning learner goes straight back to their lesson; the course title in the menu returns to the cover, where the button reads **Resume course**. The author's lesson preview opens on the lesson.
+- **Course menu.** A sidebar carries the course title and progress on the accent colour, the numbered lessons with a mark for complete, current and locked, then **My workbook**, **Reset progress** and, in SCORM, the LMS status and buttons. On narrow screens it folds behind **Show course menu**; the LMS status line stays visible.
+- **Lessons.** Each lesson opens with "Lesson N of M" and its title, over the lesson banner when there is one (or on the accent colour when the lesson header is set to accent). Each Continue says the lesson goes on below and which part comes next ("This lesson continues below: part 2 of 4"). The lesson's end (what comes next and **Complete lesson and go to Lesson N**) appears only once every part of the lesson is open, so it is never mistaken for the next part. An opened Continue leaves a quiet divider.
+- **Type.** Headings use the font pairing's heading face and body text the pairing's serif when the body is set to serif. Courses carry no font files, so each pairing names its typeface first (Lato and Merriweather, Work Sans and Source Serif, Figtree and Literata, Atkinson Hyperlegible) and falls back to a close system face on devices without it.
+
 ## Navigation, review, and completion
 
 Choose **Lesson navigation** in the course outline:
@@ -29,7 +38,7 @@ Continue blocks reveal a lesson in sections. The first unopened Continue is show
 
 Paragraphs, statements/notes, quotes, lists, images, and image/text blocks required by a rule receive a labeled **Mark as reviewed** button. Review is an explicit learner acknowledgement, not proof of reading or comprehension. Headings, dividers, and spacers need no confirmation. An empty preceding set is already satisfied, so a Continue at the start cannot deadlock. A checklist is a visual list in this version, not an assessment or required checklist interaction.
 
-**Complete lesson and continue** finishes the current lesson and opens the next one in a single action. The last lesson uses **Complete lesson**. A Continue at the very end is folded into this action because it reveals no more content; its authored requirements still apply. Interior Continue blocks still reveal sections. Required questions/interactions/reviews must be satisfied, and remaining requirements appear as named links that jump to the relevant content. An empty lesson also finishes without deadlock. A previously completed lesson offers **Next lesson** for review navigation. Completion is separate from assessment success; assessment scoring is implemented in Step 9, while generated audio narration, LMS reporting, and secure access restrictions remain outside this player. Gates are a learner flow, not content protection: the public course JSON contains the full authored course.
+**Complete lesson and go to Lesson N** finishes the current lesson and opens the next one in a single action. It appears, with what comes next, once every Continue in the lesson is open. Until then a course with **Free** navigation offers only **Skip the rest of this lesson and go to Lesson N**, which leaves the lesson incomplete; a **Sequential** course offers nothing there, and the course menu still lists every lesson. The last lesson uses **Complete lesson**. A Continue at the very end is folded into this action because it reveals no more content; its authored requirements still apply. Interior Continue blocks still reveal sections. Required questions/interactions/reviews must be satisfied, and remaining requirements appear as named links that jump to the relevant content. An empty lesson also finishes without deadlock. A previously completed lesson offers **Next lesson** for review navigation. Completion is separate from assessment success; assessment scoring is implemented in Step 9, while generated audio narration, LMS reporting, and secure access restrictions remain outside this player. Gates are a learner flow, not content protection: the public course JSON contains the full authored course.
 
 ## Publishing and hosting
 
@@ -54,7 +63,7 @@ Exports include:
 | `README.txt` | Hosting, progress, and editing guidance |
 | `LICENSE.txt`, `NOTICE.txt`, `THIRD-PARTY-NOTICES.txt` | Runtime and bundled-dependency notices; authored content retains its own rights |
 
-The archive is limited to 32 MiB compressed and 64 MiB expanded, including runtime and notices. A project near its maximum may need smaller media or fewer unused assets to fit the additional runtime. Validation/export failures leave the draft intact and display an actionable message. Only one transient project-file operation runs at a time per server instance; another request can return a retryable busy response.
+The archive is limited by the instance's course limit (160 MiB expanded by default, plus 16 MiB for the ZIP), including runtime and notices. A project near its maximum may need smaller media or fewer unused assets to fit the additional runtime. Validation/export failures leave the draft intact and display an actionable message. Only one transient project-file operation runs at a time per server instance; another request can return a retryable busy response.
 
 ## Local learner progress
 

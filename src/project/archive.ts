@@ -5,8 +5,16 @@ import { TextDecoder } from 'node:util';
 import yauzl from 'yauzl';
 import yazl from 'yazl';
 import { assetPath, parseCourse, ProjectError, type Asset, type PortableProject } from '../shared/course.js';
+import { packageBytes, sizeLabel } from '../shared/limits.js';
+import { instanceSizeLimits } from '../server/config.js';
 
-export const LIMITS = { archive: 32 * 1024 * 1024, expanded: 64 * 1024 * 1024, entry: 16 * 1024 * 1024, json: 2 * 1024 * 1024, entries: 256 } as const;
+/** Byte limits. `entry`, `expanded` and `archive` follow this instance's size settings (see src/shared/limits.ts). */
+export const LIMITS = {
+  /** One asset file. */ get entry() { return instanceSizeLimits().fileBytes; },
+  /** The course document and all its files, unpacked. */ get expanded() { return instanceSizeLimits().courseBytes; },
+  /** A ZIP of the course: the project archive and the published packages. */ get archive() { return packageBytes(instanceSizeLimits()); },
+  json: 2 * 1024 * 1024, entries: 256,
+};
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 function hash(bytes: Buffer) { return createHash('sha256').update(bytes).digest('hex'); }
 function validateAsset(asset: Asset, bytes: Buffer) {
@@ -39,12 +47,13 @@ export function validateProject(input: unknown): PortableProject {
   for (const asset of document.assets) {
     const path = assetPath(asset);
     const encoded = files[path];
+    if (asset.byteLength > LIMITS.entry) throw new ProjectError(`The file ${asset.fileName} is larger than this server's ${sizeLabel(LIMITS.entry)} limit for one file.`);
     if (typeof encoded !== 'string' || encoded.length > Math.ceil(LIMITS.entry / 3) * 4) throw new ProjectError(`Invalid asset encoding: ${asset.id}.`);
     const bytes = Buffer.from(encoded,'base64');
     if (bytes.toString('base64') !== encoded) throw new ProjectError(`Invalid asset encoding: ${asset.id}.`);
     validateAsset(asset,bytes);
     total += bytes.length;
-    if (total > LIMITS.expanded) throw new ProjectError('The expanded project exceeds 64 MiB.');
+    if (total > LIMITS.expanded) throw new ProjectError(`The expanded project exceeds this server's ${sizeLabel(LIMITS.expanded)} course limit.`);
     output[path] = encoded;
   }
   return { document, files: output };
@@ -56,7 +65,7 @@ export async function exportProject(input: unknown): Promise<Buffer> {
   const options = { mtime: new Date('1980-01-01T00:00:00Z'), mode: 0o100644, compress: true };
   const json = Buffer.from(JSON.stringify(project.document,null,2) + '\n');
   if (json.length > LIMITS.json) throw new ProjectError('The formatted course document exceeds 2 MiB.');
-  if (json.length + Object.values(project.files).reduce((size,data) => size + Buffer.byteLength(data,'base64'),0) > LIMITS.expanded) throw new ProjectError('The expanded project exceeds 64 MiB.');
+  if (json.length + Object.values(project.files).reduce((size,data) => size + Buffer.byteLength(data,'base64'),0) > LIMITS.expanded) throw new ProjectError(`The expanded project exceeds this server's ${sizeLabel(LIMITS.expanded)} course limit.`);
   zip.addBuffer(json,'course.json',options);
   for (const path of Object.keys(project.files).sort()) zip.addBuffer(Buffer.from(project.files[path]!,'base64'),path,options);
   const chunks: Buffer[] = [];
@@ -64,7 +73,7 @@ export async function exportProject(input: unknown): Promise<Buffer> {
   const output = new Promise<Buffer>((resolve,reject) => {
     zip.outputStream.on('data', (chunk: Buffer) => {
       size += chunk.length;
-      if (size > LIMITS.archive) { (zip.outputStream as Readable).destroy(new ProjectError('The project archive exceeds 32 MiB.')); return; }
+      if (size > LIMITS.archive) { (zip.outputStream as Readable).destroy(new ProjectError(`The project archive exceeds ${sizeLabel(LIMITS.archive)}.`)); return; }
       chunks.push(chunk);
     });
     zip.outputStream.on('end', () => resolve(Buffer.concat(chunks)));
@@ -76,7 +85,7 @@ export async function exportProject(input: unknown): Promise<Buffer> {
 }
 
 export async function importProject(bytes: Buffer): Promise<PortableProject> {
-  if (!bytes.length || bytes.length > LIMITS.archive) throw new ProjectError('Choose an OpenScroll archive no larger than 32 MiB.');
+  if (!bytes.length || bytes.length > LIMITS.archive) throw new ProjectError(`Choose an OpenScroll archive no larger than ${sizeLabel(LIMITS.archive)}.`);
   const files = await new Promise<Map<string,Buffer>>((resolve,reject) => {
     yauzl.fromBuffer(bytes,{ lazyEntries:true, validateEntrySizes:true, strictFileNames:true },(error,zip) => {
       if (error || !zip) { reject(new ProjectError('The file is not a readable ZIP project.')); return; }

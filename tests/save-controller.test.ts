@@ -55,5 +55,21 @@ test('restoring a v1 recovery draft migrates local content while retrying its ex
  const legacy={...sampleProject(),document:{...sampleProject().document,schemaVersion:1}};const original={revision:1,mutationId:crypto.randomUUID(),document:structuredClone(legacy.document)};
  const draft={project:legacy,revision:1,generation:1,assetGeneration:0,savedAssetGeneration:0,pending:{generation:1,assetGeneration:0,payload:original}} as unknown as RecoveryDraft;
  const calls:SavePayload[]=[];const controller=new SaveController({project:sampleProject(),revision:2,delay:60000,persist:async()=>{},changed:()=>{},send:async payload=>{calls.push(structuredClone(payload));return {revision:calls.length+1,updatedAt};}});
- try{controller.restore(draft,false);assert.equal(controller.project.document.schemaVersion,3);await controller.save();assert.deepEqual(calls[0],original);assert.equal(controller.state,'saved');controller.edit(p=>{p.document.course.title='An upgraded edit';});await controller.save();assert.equal(calls[1]!.document.schemaVersion,3);assert.notEqual(calls[1]!.mutationId,original.mutationId);}finally{controller.dispose();}
+ try{controller.restore(draft,false);assert.equal(controller.project.document.schemaVersion,4);await controller.save();assert.deepEqual(calls[0],original);assert.equal(controller.state,'saved');controller.edit(p=>{p.document.course.title='An upgraded edit';});await controller.save();assert.equal(calls[1]!.document.schemaVersion,4);assert.notEqual(calls[1]!.mutationId,original.mutationId);}finally{controller.dispose();}
+});
+test('a busy server is retried quietly with the same request, then reported if it stays busy',async ()=>{
+  const sent:SavePayload[]=[];let busy=2;
+  const c=new SaveController({project:sampleProject(),revision:1,delay:60000,busyDelay:()=>1,persist:async ()=>{},changed:()=>{},send:async payload=>{sent.push(payload);if(busy-->0)throw Object.assign(new Error('The server is busy with another large course.'),{status:429});return {revision:2,updatedAt};}});
+  try{
+    c.edit(p=>{p.document.course.title='Saved after a wait';});await c.save();assert.equal(c.state,'pending');assert.equal(c.error,'');
+    const state=()=>c.state as string;for(let i=0;i<200 && state()!=='saved';i++)await new Promise(resolve=>setTimeout(resolve,2));
+    assert.equal(c.state,'saved');assert.equal(sent.length,3);assert.equal(new Set(sent.map(p=>p.mutationId)).size,1,'every retry is the same request');
+  }finally{c.dispose();}
+  let tries=0;
+  const stuck=new SaveController({project:sampleProject(),revision:1,delay:60000,busyDelay:()=>1,persist:async ()=>{},changed:()=>{},send:async ()=>{tries++;throw Object.assign(new Error('The server is busy with another large course.'),{status:429});}});
+  try{
+    stuck.edit(p=>{p.document.course.title='Still waiting';});await stuck.save();
+    for(let i=0;i<300 && stuck.state!=='error';i++)await new Promise(resolve=>setTimeout(resolve,2));
+    assert.equal(stuck.state,'error');assert.equal(tries,7);assert.match(stuck.error,/busy/);assert.equal(stuck.project.document.course.title,'Still waiting');
+  }finally{stuck.dispose();}
 });

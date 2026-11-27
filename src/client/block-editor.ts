@@ -9,7 +9,7 @@ import { BLOCK_TEMPLATES,prepareBlock,duplicateBlock,switchVariant,templatesFor 
 import { renderBlock,type TextField } from '../shared/block-renderer.js';
 import { LessonHistory } from '../shared/lesson-history.js';
 import { moveItem } from '../shared/outline.js';
-import { bindInline,caretAtEnd } from './inline-text.js';
+import { bindInline,bindRich,caretAtEnd } from './inline-text.js';
 import { readImage } from './images.js';
 interface Host {
   project:()=>PortableProject|undefined;
@@ -109,8 +109,8 @@ export class BlockEditor {
       const duplicate=this.button('Duplicate',()=>{if(this.mutate(items=>{const at=items.findIndex(item=>item.id===block.id);const copy=duplicateBlock(items[at]!);items.splice(at+1,0,copy);this.selected=copy.id;})){this.render();this.focusBlock(this.selected);this.announce('Block duplicated.');}});duplicate.setAttribute('aria-label',`Duplicate block ${index+1}`);
       const remove=this.button('Delete',()=>{if(this.mutate(items=>{const at=items.findIndex(item=>item.id===block.id);items.splice(at,1);this.selected=items[Math.min(at,items.length-1)]?.id;})){this.render();this.focusBlock(this.selected);this.announce('Block deleted. Undo can restore it.');}});remove.setAttribute('aria-label',`Delete block ${index+1}`);
       const selection=document.createElement('label');selection.className='block-group-select';const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=this.groupSelection.has(block.id);checkbox.setAttribute('aria-label',`Select block ${index+1} for saved group`);checkbox.addEventListener('change',()=>{if(checkbox.checked)this.groupSelection.add(block.id);else this.groupSelection.delete(block.id);});selection.append(checkbox,document.createTextNode('Reuse'));header.append(title,selection,variant,settings,up,down,duplicate,remove);card.append(header);
-      card.append(renderBlock(block,project,(element,field)=>bindInline(element,field,text=>{
-        this.mutate(items=>{const target=items.find(item=>item.id===block.id)!;if(field.key.startsWith('items-') && target.type==='list')target.content.items[Number(field.key.slice(6))]=text;else setBlockValue(target,field.key,text);},`${block.id}:${field.key}`);
+      card.append(renderBlock(block,project,(element,field)=>(field.rich ? bindRich : bindInline)(element,field,text=>{
+        this.mutate(items=>{const target=items.find(item=>item.id===block.id)!;setBlockValue(target,field.key,text);},`${block.id}:${field.key}`);
       },()=>{if(this.selected!==block.id)this.select(block.id);})));
       if(block.type==='spacer'){const marker=document.createElement('p');marker.className='spacer-description';marker.textContent=`${block.variant} spacer`;card.append(marker);}
       if(block.type==='continue'){const note=document.createElement('p');note.className='block-edit-note';note.textContent='Continue rule is authored here; learner gating is not active in the editor.';card.append(note);}
@@ -145,7 +145,7 @@ export class BlockEditor {
     const label=document.createElement('label');label.htmlFor='block-library-search';label.textContent='Search block templates';
     const search=document.createElement('input');search.id=label.htmlFor;search.type='search';search.value=this.search;search.dataset.historyIgnore='true';
     const categories=document.createElement('div');categories.className='block-categories';categories.setAttribute('role','group');categories.setAttribute('aria-label','Block categories');
-    for(const category of ['All','Text','Images','Structure','Media','Interactive','Assessment']){const b=this.button(category,()=>{this.category=category;this.renderLibrary();this.library.querySelector<HTMLButtonElement>(`[data-category="${category}"]`)?.focus();});b.dataset.category=category;b.setAttribute('aria-pressed',String(this.category===category));categories.append(b);}
+    for(const category of ['All','Text','Images','Structure','Media','Interactive','Activities','Assessment']){const b=this.button(category,()=>{this.category=category;this.renderLibrary();this.library.querySelector<HTMLButtonElement>(`[data-category="${category}"]`)?.focus();});b.dataset.category=category;b.setAttribute('aria-pressed',String(this.category===category));categories.append(b);}
     const results=document.createElement('div');results.className='block-template-grid';
     const draw=()=>{
       results.replaceChildren();const templates=BLOCK_TEMPLATES.filter(t=>(this.category==='All' || t.category===this.category) && `${t.label} ${t.description}`.toLowerCase().includes(this.search.toLowerCase()));
@@ -189,7 +189,7 @@ export class BlockEditor {
     }
     if(block.type==='list'){
       const controls=document.createElement('div');controls.className='list-item-controls';
-      const add=this.button('Add list item',()=>{if(change(b=>{if(b.type==='list')b.content.items.push('A new point to explore.');},undefined,true)){this.focusBlock(block.id,`items-${(this.blocks().find((b):b is Extract<Block,{type:'list'}>=>b.id===block.id && b.type==='list')!.content.items.length-1)}`);}});add.disabled=block.content.items.length>=100;controls.append(add);
+      const add=this.button('Add list item',()=>{if(change(b=>{if(b.type==='list')b.content.items.push('A new point to explore.');},undefined,true)){this.focusBlock(block.id,`items.${(this.blocks().find((b):b is Extract<Block,{type:'list'}>=>b.id===block.id && b.type==='list')!.content.items.length-1)}`);}});add.disabled=block.content.items.length>=100;controls.append(add);
       block.content.items.forEach((_item,index)=>controls.append(this.button(`Remove list item ${index+1}`,()=>{change(b=>{if(b.type==='list')b.content.items.splice(index,1);},undefined,true);this.inspector.querySelector<HTMLButtonElement>('.list-item-controls button')?.focus();})));
       this.inspector.append(controls);
     }

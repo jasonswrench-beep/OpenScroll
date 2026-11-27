@@ -1,6 +1,6 @@
 # OpenScroll editable project format
 
-Version: **3** (version 1/2 import supported). Extension: **`.openscroll`**. Content type: `application/x-openscroll-project`.
+Version: **4** (versions 1–3 import supported). Extension: **`.openscroll`**. Content type: `application/x-openscroll-project`.
 
 This is an editable authoring package, not a learner-facing HTML, SCORM, or PDF export. The format has no dependency on an OpenScroll server, account, database ID, domain, browser framework, or AI provider.
 
@@ -102,9 +102,13 @@ Binary type signatures, original extensions, lengths, and hashes are checked. Pl
 
 ## Validation and limits
 
-- Maximum compressed archive: 32 MiB.
-- Maximum total expanded content: 64 MiB.
-- Maximum individual asset: 16 MiB; assets cannot be empty.
+- Size limits are set by each instance, within the format's ceilings (version 4; earlier versions were fixed at
+  16 MiB per asset, 64 MiB expanded and a 32 MiB archive):
+  - individual asset: 64 MiB by default, at most 256 MiB (`OPENSCROLL_MAX_FILE_MIB`); assets cannot be empty;
+  - total expanded content: 160 MiB by default, at most 320 MiB (`OPENSCROLL_MAX_COURSE_MIB`);
+  - compressed archive: the expanded limit plus 16 MiB, since media hardly compresses.
+
+  A file made on one instance opens on another only if it fits the second instance's limits.
 - Maximum `course.json`: 2 MiB, including exported formatting.
 - Maximum entries: 256, including `course.json`.
 - At most 100 sections, 500 lessons total, and 5,000 blocks total; individual arrays have additional schema bounds.
@@ -115,9 +119,59 @@ Import reads entries lazily and counts actual streamed bytes, not just declared 
 
 Exports use fixed ZIP metadata and stable entry ordering. Identical validated source produces identical bytes with the same pinned implementation; byte identity across future ZIP library changes is not a compatibility promise.
 
+## Version 4 additions
+
+Version 4 adds formatted text and the fields needed to recreate Rise 360 courses. [schema/course-v4.schema.json](../schema/course-v4.schema.json) is the generated structural schema; [src/shared/course.ts](../src/shared/course.ts) and [src/shared/rich-text.ts](../src/shared/rich-text.ts) are the runtime sources.
+
+**Rich text.** These fields hold formatted text: course `description`; paragraph, statement, quote and image-and-text `text`; list `items`; accordion, tabs, process and timeline item `text`; process `intro`/`summary` text; flashcard `front` and `back`; labeled-graphic marker `text`; assessment `prompt`, `feedbackCorrect`, `feedbackIncorrect` and `choiceFeedback`. Titles, labels, captions, transcripts, options and alternative text stay plain.
+
+Formatted text is a canonical subset of HTML: `<p>`, `<h3>`, `<h4>`, `<ul>`, `<ol>` (optionally `start="N"`), `<li>` (lists nest at most three deep), `<strong>`, `<em>`, `<br>`, and `<a href>` with a complete HTTP or HTTPS address. Text escapes `&`, `<` and `>`; attribute values also escape `"`; whitespace runs are single spaces. A value that is one paragraph is stored without its `<p>` wrapper, so ordinary plain text is already valid. A stored value must already be canonical: validation rejects anything else instead of rewriting it. Imported and pasted HTML passes through `sanitizeRich`, which drops scripts, styles, event attributes, unsafe links and unknown elements. Renderers build DOM nodes from the parsed tree and never assign authored HTML to `innerHTML`.
+
+**New fields.**
+
+| Where | Field | Default |
+| --- | --- | --- |
+| Course | `authorImage: { assetId } \| null` (an image asset) | `null` |
+| Theme | `coverLayout`: `stacked`, `split-left`, `split-right`, `two-thirds-left`, `overlay`, `centered` | `stacked` |
+| Theme | `lessonHeader`: `plain`, `image`, `accent` | `plain` |
+| Theme | `fontPairing`: `lato-merriweather`, `worksans-sourceserif`, `figtree-literata`, `atkinson` or `null` | `null` |
+| Lesson | `banner: { source: cover \| image, assetId, altText, decorative } \| null` | `null` |
+| Lesson | `objectives: [{ id, text, level }]`, level one of Bloom's six or `null` | `[]` |
+| Process | `intro`, `summary`: `{ title, text } \| null` | `null` |
+| Timeline item | `date` (a short label such as "Phase 1") | `""` |
+| Continue | `hint` (shown until learners can continue) | `""` |
+| Assessment | `feedbackMode`: `none`, `correct-incorrect`, `per-choice` | `correct-incorrect` |
+| Assessment | `choiceFeedback` (formatted, one per option, at most as many as options) | `[]` |
+| Assessment | variant `categorize` with `groups` (2–10 labels) and `placements` (each card's group) | `[]` |
+
+The assessment variant `sorting` is renamed `ordering` so it cannot be confused with sorting cards into groups. A banner that uses the course cover names no asset; one that uses its own image must name an image asset. Section titles may be empty, in which case learner outputs show no section heading.
+
+**Wave A blocks.** Version 4 is not yet released, so the first block wave joins it rather than starting version 5. Older files never contain these types; a version 1–3 file that names one is rejected.
+
+| Block | Variants | Content |
+| --- | --- | --- |
+| `objectives` | `list`, `cards` | `heading`, `intro` (formatted), `items` (1–30 `{ id, text, level }`, level as for lesson objectives) |
+| `table` | `lined`, `striped` | `caption`, `head` (0–8 plain column headings), `rows` (1–60 rows of 1–8 formatted cells), `headerColumn` |
+| `reflection` | `plain`, `journal` | `prompt` and `sample` (formatted), `placeholder`, `minWords` (0–1000), `required`, `workbook` |
+| `activity` | `card` | `title`, `minutes` (0–600), `steps` (1–20 formatted), `output` (writing box label, empty for none), `required`, `workbook` |
+| `checklist` | `ticks` | `title`, `items` (1–50 plain), `required`, `workbook` |
+| `self-assessment` | `scale` | `title`, `intro` (formatted), `scale` (2–7 labels), `items` (1–30 statements), `bands` (0–8 `{ min, max, text }`), `required`, `workbook` |
+| `columns` | `1-1`, `1-1-1`, `2-1`, `1-2` | `columns` (2, or 3 for `1-1-1`), each `{ blocks }` with at most 20 heading, paragraph, list, statement, quote, image or button blocks |
+| `assessment` | adds `true-false` | exactly two `options` and one `correct` answer |
+
+**Wave B questions and survey.** Assessment content gains `selfCheck` (default `false`) and `model` (formatted, default empty) for `short-answer`; `numeric` `{ mode: exact | range, value, tolerance, min, max, unit }` for `numeric`; and `image` `{ assetId, altText } | null` with `areas` (up to 20 `{ x, y, w, h, label }` in percent of the image) for `hotspot`, where `correct` and `choiceFeedback` refer to areas instead of options. The `survey` block (variant `form`) has `title`, `intro` (formatted), `scale` (2–7 labels), `items` (1–30 `{ id, kind: rating | differential | choice | comment, prompt, options }`), `required` and `workbook`. Areas must stay inside the image, and a hotspot's image must be an image asset.
+
+**Wave C.** The video block gains the variant `interactive` and the fields `describedAssetId` (an MP4 asset or `null`), `descriptions` (timed cues like captions), `pauseForDescriptions`, `chapters` (`{ time, title }`), `checkpoints` (`{ id, time, kind: question | note, questionId, title, note }`, where `questionId` names a question block in the same lesson) and `noSkipAhead`, all with empty defaults. New blocks: `embed-video` (variant `facade`) with `provider` (`youtube` or `vimeo`), `videoId` (an 11-character YouTube id or a numeric Vimeo id, or empty until set), `title`, `transcript` and `start`; and `software-practice` (variant `steps`) with `title`, `intro`, `steps` (1–60 `{ id, imageId, alt, instruction, target: { x, y, w, h }, typed, hint }`, the target in percent of the screenshot), `modes` (`watch`, `try`, `test`, at least one on), `required` and `workbook`. Copies of lessons and courses re-point checkpoints at the copied questions.
+
+**Wave D and course resources.** The course gains `glossary` (up to 500 `{ id, term, definition (formatted), aliases }`), `banks` (up to 50 `{ id, name, questions }`, each question an assessment block), `certificate` (`{ title, issuer, signerName, signerTitle, logoId, signatureId, showScore }` or `null`) and `settings.glossaryLinks`, all with empty defaults. New blocks: `glossary` (variants `a-z`, `list`; `title`, `showLetters`, `search`), `action-plan` (variant `table`; `title`, `intro`, `columns` 1–6 `{ label, kind: text | date }`, `starterRows`, `maxRows`, `required`, `workbook`), `results` (variant `summary`; `title`, `showReview`, `showCertificate`) and `bank-draw` (variant `random`; `title`, `bankId`, `count` 1–50). Bank question identifiers are unique across the course; certificate pictures must be image assets. A `bank-draw` naming a missing bank is valid in the file and blocked by Checks.
+
+**Wave E.** The course gains `characters` (up to 30 `{ id, name, role, poses }`, each pose `{ id, name, imageId, alt }`). The `scenario` block (variant `conversation`) has `title`, `intro`, `scenes` (1–20 `{ id, title, backgroundId, nodes }`), `start`, `allowTakeBack`, `showPathReview`, `scoring`, `passPoints`, `required` and `workbook`. Each node (step) is `{ id, kind: line | narration | choice | ending, characterId, poseId, text (formatted), next, choices (up to 6 `{ text, next, feedback, points }`), outcome: positive | neutral | negative }`. Links between steps are checked by Checks rather than the format, so deleting a step never makes a file unreadable. Copies give every scene and step a new id and map each link.
+
+Integrity checks: every table row has the same number of cells as the header; the column count matches the layout; a score band's `min` is not above its `max`; identifiers are unique across blocks inside columns and objective items; images inside columns must name image assets. Learner responses to reflection, activity, checklist and self-assessment blocks are learner state, never part of the course file (see [LEARNER-RESPONSES.md](LEARNER-RESPONSES.md)).
+
 ## Version and migration policy
 
-Version 1 is the initial development format; version 2 adds the Step 8 media/interaction families; version 3 adds assessments and exploration requirements. `parseCourse` validates supported v1 input and copies it into v3 by changing only the version. It rejects new block types incorrectly labeled v1. The original archive and stored database row remain unchanged on read; an explicit save/download targets v3. The v1/v2 schemas and original starter fixtures are retained. Unknown properties/types are never silently stripped. Version 0 and newer unsupported versions fail explicitly and preserve their sources.
+Version 1 is the initial development format; version 2 adds the Step 8 media/interaction families; version 3 adds assessments and exploration requirements; version 4 adds formatted text and the fields above. Migration to version 4 runs on a copy: plain text is escaped and line breaks become paragraphs or `<br>`, `sorting` becomes `ordering`, and new fields take their defaults. `parseCourse` validates supported v1 input and copies it into v3 by changing only the version. It rejects new block types incorrectly labeled v1. The original archive and stored database row remain unchanged on read; an explicit save/download targets v3. The v1/v2 schemas and original starter fixtures are retained. Unknown properties/types are never silently stripped. Version 0 and newer unsupported versions fail explicitly and preserve their sources.
 
 Stored-course recovery retains exact legacy pending payloads. The server accepts either the current canonical digest or the matching legacy v1/v2 digest only for the latest unchanged acknowledged mutation/revision. This preserves lost-acknowledgement retry behavior without permitting stale overwrites.
 
@@ -131,7 +185,7 @@ The transient workspace uses `PortableProject = { document, files }`, where `fil
 - `POST /api/projects/import`: binary archive with the project content type; returns the validated in-memory representation.
 - `POST /api/projects/export`: JSON in-memory representation; returns the archive.
 
-The export JSON body limit is 90 MiB to accommodate base64 expansion. One project request is admitted at a time per application process, including upload parsing, with HTTP 429 on contention. Upload/connection timeouts are 30 seconds. No project route writes database records or disk assets. Files transit the instance for validation and packaging; the UI does not claim browser-only processing or durable saving.
+The export JSON body limit follows the instance's course limit, allowing for base64 expansion (221 MiB at the default 160 MiB course limit). One project request is admitted at a time per application process, including upload parsing, with HTTP 429 on contention. A request may take as long as sending the largest allowed course at about 4 Mbit/s; an idle connection closes after 30 seconds. No project route writes database records or disk assets. Files transit the instance for validation and packaging; the UI does not claim browser-only processing or durable saving.
 
 These are development endpoints, not a public hosting security sign-off. Step 4 adds authenticated, owner-scoped durable library endpoints separately; these transient packaging endpoints still do not store data. Production resource controls and deployment review remain future work. Reverse-proxy body limits must agree with the application limits when deployed.
 

@@ -27,7 +27,7 @@ Each card has labeled **Move up**, **Move down**, **Duplicate**, **Delete**, and
 
 Block settings choose reading/wide/full width, small/medium/large spacing, and page/soft surface/course accent backgrounds. Accent backgrounds select black or white text based on contrast. At narrow widths the library and settings stack above the canvas, and image/text layouts become one column.
 
-Choose an existing image asset or upload PNG, JPEG, or WebP up to 16 MiB, within the project package limits. The browser checks the file signature and server validation checks the complete project and asset bytes. Meaningful images use alternative text; decorative images render with empty alternative text while retaining the stored description. Captions are editable in the canvas. Starter images and text are original OpenScroll content; no vendor artwork or screen captures are embedded.
+Choose an existing image asset or upload PNG, JPEG, or WebP up to the instance's file limit (64 MiB by default), within the project package limits. The browser checks the file signature and server validation checks the complete project and asset bytes. Meaningful images use alternative text; decorative images render with empty alternative text while retaining the stored description. Captions are editable in the canvas. Starter images and text are original OpenScroll content; no vendor artwork or screen captures are embedded.
 
 Narration settings preserve an optional script, course language default, and speed. Existing narration metadata survives compatible edits. This step stores scripts only; it does not generate or play audio. Continue completion rules are authored data; the Step 7 player applies them in preview and HTML output, while the editor keeps every block visible.
 

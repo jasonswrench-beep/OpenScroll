@@ -16,4 +16,10 @@ The Node.js container runtime includes its own license and third-party notices.
 See docs/DEPENDENCIES.md and package-lock.json for the dependency inventory.
 
 Bundled starter illustrations, starter text, and synthetic tone/video test fixtures
-are original OpenScroll material. No assets from other software are included.
+are original OpenScroll material.
+
+The character and background pictures in public/character-packs ("OpenStage people,
+set 1" and "OpenStage offices and workplaces, set 1") come from OpenStage Author.
+They were made by Jason S. Wrench with an AI picture service from written
+descriptions (AI-generated) and are released under the Apache License 2.0.
+A course that uses them carries this notice in its published files.

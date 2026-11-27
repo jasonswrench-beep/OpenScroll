@@ -1,66 +1,162 @@
 import { z } from 'zod';
+import { isCanonicalRich, plainToRich, RICH_TEXT_MAX } from './rich-text.js';
+import { safeLink } from './links.js';
+import { FILE_CEILING } from './limits.js';
+export { safeLink };
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const FORMAT = 'openscroll';
 export const idSchema = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const text = z.string().max(100_000);
 const label = z.string().max(300);
+/** Schema 4 rich text: the canonical HTML subset from rich-text.ts. A single plain paragraph is already canonical. */
+const rich = z.string().max(RICH_TEXT_MAX).refine(isCanonicalRich,{message:'Use supported formatting only: paragraphs, subheadings, lists, bold, italic and web links.'});
 const narration = z.strictObject({ script: text, language: z.string().min(2).max(35), voice: z.string().max(100).optional(), speed: z.number().min(0.5).max(2) });
 const appearance = z.strictObject({ width: z.enum(['reading', 'wide', 'full']), padding: z.enum(['small', 'medium', 'large']), background: z.enum(['page', 'surface', 'accent']) });
 const base = { id: idSchema, appearance, narration: narration.optional(), requiredInteraction:z.boolean().optional() };
 const imageContent = { assetId: idSchema, altText: z.string().max(2000), decorative: z.boolean(), caption: text };
-const item = z.strictObject({title:label,text});
+const item = z.strictObject({title:label,text:rich});
+const card = z.strictObject({title:label,text:rich});
 const cue = z.strictObject({start:z.number().min(0).max(86400),end:z.number().min(0).max(86400),text:z.string().max(5000)}).refine(c=>c.end>c.start,{message:'Caption end must follow its start.'});
-export function safeLink(value:string){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol) && !url.username && !url.password;}catch{return false;}}
 const link = z.string().max(2048).refine(value=>value==='' || safeLink(value),{message:'Use a complete HTTP or HTTPS address without embedded credentials.'});
+const headingBlock = z.strictObject({ ...base, type: z.literal('heading'), variant: z.enum(['heading', 'subheading']), content: z.strictObject({ text }) });
+const paragraphBlock = z.strictObject({ ...base, type: z.literal('paragraph'), variant: z.enum(['plain', 'with-heading']), content: z.strictObject({ text: rich, heading: label }) });
+const listBlock = z.strictObject({ ...base, type: z.literal('list'), variant: z.enum(['bulleted', 'numbered', 'checklist']), content: z.strictObject({ items: z.array(rich).max(100) }) });
+const statementBlock = z.strictObject({ ...base, type: z.literal('statement'), variant: z.enum(['statement', 'note']), content: z.strictObject({ text: rich }) });
+const quoteBlock = z.strictObject({ ...base, type: z.literal('quote'), variant: z.literal('plain'), content: z.strictObject({ text: rich, attribution: label }) });
+const imageBlock = z.strictObject({ ...base, type: z.literal('image'), variant: z.enum(['centered', 'full-width']), content: z.strictObject(imageContent) });
+const buttonBlock = z.strictObject({...base,type:z.literal('button'),variant:z.literal('link'),content:z.strictObject({label,url:link})});
+/** Blocks that may sit inside a column: text, pictures and links only, so tracking and phone reflow stay simple. */
+export const COLUMN_CHILD_TYPES = ['heading','paragraph','list','statement','quote','image','button'] as const;
+const columnChildSchema = z.discriminatedUnion('type', [headingBlock, paragraphBlock, listBlock, statementBlock, quoteBlock, imageBlock, buttonBlock]);
+const percent = z.number().min(0).max(100);
+const seconds = z.number().min(0).max(86400);
+const region = z.strictObject({ x: percent, y: percent, w: percent, h: percent });
+const numericSchema = z.strictObject({ mode: z.enum(['exact', 'range']), value: z.number().min(-1e12).max(1e12), tolerance: z.number().min(0).max(1e12), min: z.number().min(-1e12).max(1e12), max: z.number().min(-1e12).max(1e12), unit: z.string().max(40) });
+/** One step of a branching scenario: a line spoken by a character, narration, a choice, or an ending. Node links are
+ * checked by Checks rather than the format, so deleting a step never makes a course unreadable. */
+const scenarioNode = z.strictObject({ id: idSchema, kind: z.enum(['line', 'narration', 'choice', 'ending']), characterId: idSchema.nullable().default(null), poseId: idSchema.nullable().default(null), text: rich, next: idSchema.nullable().default(null),
+  choices: z.array(z.strictObject({ text: label, next: idSchema.nullable(), feedback: rich, points: z.number().int().min(-100).max(100) })).max(6).default([]), outcome: z.enum(['positive', 'neutral', 'negative']).default('neutral') });
+/** Shared by blocks that collect a learner response: whether one is needed to finish, and whether it appears in My workbook. */
+const responseOptions = { required: z.boolean(), workbook: z.boolean() };
+export const OBJECTIVE_LEVELS = ['remember','understand','apply','analyze','evaluate','create'] as const;
+const objectiveSchema = z.strictObject({ id: idSchema, text: label, level: z.enum(OBJECTIVE_LEVELS).nullable() });
+/** A question. Lessons and course question banks hold the same shape. */
+export const assessmentBlock = z.strictObject({...base,type:z.literal('assessment'),variant:z.enum(['single-choice','multiple-response','true-false','fill-blank','short-answer','numeric','hotspot','matching','ordering','categorize']),
+    content:z.strictObject({prompt:rich,options:z.array(label).max(20),correct:z.array(z.number().int().min(0).max(19)).max(20),accepted:z.array(label).max(20),caseSensitive:z.boolean(),pairs:z.array(z.strictObject({left:label,right:label})).max(20),items:z.array(label).max(20),feedbackCorrect:rich,feedbackIncorrect:rich,
+      feedbackMode:z.enum(['none','correct-incorrect','per-choice']).default('correct-incorrect'),choiceFeedback:z.array(rich).max(20).default([]),groups:z.array(label).max(10).default([]),placements:z.array(z.number().int().min(0).max(9)).max(20).default([]),
+      // Wave B: short answer (exact match or self-check against a model answer), numeric, and hotspot.
+      selfCheck:z.boolean().default(false),model:rich.default(''),
+      numeric:numericSchema.default({mode:'exact',value:0,tolerance:0,min:0,max:0,unit:''}),
+      image:z.strictObject({assetId:idSchema,altText:z.string().max(2000)}).nullable().default(null),
+      areas:z.array(z.strictObject({x:percent,y:percent,w:percent,h:percent,label})).max(20).default([])}),
+    assessment:z.strictObject({graded:z.boolean(),points:z.number().int().min(1).max(100),required:z.boolean(),completion:z.enum(['submitted','correct']),maxAttempts:z.number().int().min(0).max(20)})});
 export const blockSchema = z.discriminatedUnion('type', [
-  z.strictObject({ ...base, type: z.literal('heading'), variant: z.enum(['heading', 'subheading']), content: z.strictObject({ text }) }),
-  z.strictObject({ ...base, type: z.literal('paragraph'), variant: z.enum(['plain', 'with-heading']), content: z.strictObject({ text, heading: label }) }),
-  z.strictObject({ ...base, type: z.literal('list'), variant: z.enum(['bulleted', 'numbered', 'checklist']), content: z.strictObject({ items: z.array(text).max(100) }) }),
-  z.strictObject({ ...base, type: z.literal('statement'), variant: z.enum(['statement', 'note']), content: z.strictObject({ text }) }),
-  z.strictObject({ ...base, type: z.literal('quote'), variant: z.literal('plain'), content: z.strictObject({ text, attribution: label }) }),
-  z.strictObject({ ...base, type: z.literal('image'), variant: z.enum(['centered', 'full-width']), content: z.strictObject(imageContent) }),
-  z.strictObject({ ...base, type: z.literal('image-text'), variant: z.enum(['image-left', 'image-right']), content: z.strictObject({ ...imageContent, heading: label, text }) }),
+  headingBlock, paragraphBlock, listBlock, statementBlock, quoteBlock, imageBlock, buttonBlock,
+  z.strictObject({ ...base, type: z.literal('image-text'), variant: z.enum(['image-left', 'image-right']), content: z.strictObject({ ...imageContent, heading: label, text: rich }) }),
   z.strictObject({ ...base, type: z.literal('divider'), variant: z.enum(['line', 'numbered']), content: z.strictObject({ label }) }),
   z.strictObject({ ...base, type: z.literal('spacer'), variant: z.enum(['small', 'medium', 'large']), content: z.strictObject({}) }),
   z.strictObject({...base,type:z.literal('gallery'),variant:z.literal('grid'),content:z.strictObject({items:z.array(z.strictObject(imageContent)).min(1).max(30)})}),
   z.strictObject({...base,type:z.literal('audio'),variant:z.literal('player'),content:z.strictObject({title:label,assetId:idSchema.nullable(),transcript:text})}),
-  z.strictObject({...base,type:z.literal('video'),variant:z.literal('player'),content:z.strictObject({title:label,assetId:idSchema.nullable(),transcript:text,captionLanguage:z.string().min(2).max(35),captions:z.array(cue).max(500)})}),
+  z.strictObject({...base,type:z.literal('video'),variant:z.enum(['player','interactive']),content:z.strictObject({title:label,assetId:idSchema.nullable(),transcript:text,captionLanguage:z.string().min(2).max(35),captions:z.array(cue).max(500),
+    // Wave C: audio description (a described version and/or timed description text) and interactive video.
+    describedAssetId:idSchema.nullable().default(null),descriptions:z.array(cue).max(500).default([]),pauseForDescriptions:z.boolean().default(false),
+    chapters:z.array(z.strictObject({time:seconds,title:label})).max(50).default([]),
+    checkpoints:z.array(z.strictObject({id:idSchema,time:seconds,kind:z.enum(['question','note']),questionId:idSchema.nullable(),title:label,note:rich})).max(50).default([]),
+    noSkipAhead:z.boolean().default(false)})}),
   z.strictObject({...base,type:z.literal('attachment'),variant:z.literal('download'),content:z.strictObject({label,description:text,assetId:idSchema.nullable()})}),
-  z.strictObject({...base,type:z.literal('button'),variant:z.literal('link'),content:z.strictObject({label,url:link})}),
   z.strictObject({...base,type:z.literal('accordion'),variant:z.literal('stacked'),content:z.strictObject({items:z.array(item).min(1).max(50)})}),
   z.strictObject({...base,type:z.literal('tabs'),variant:z.literal('horizontal'),content:z.strictObject({items:z.array(item).min(1).max(50)})}),
-  z.strictObject({...base,type:z.literal('flashcards'),variant:z.literal('grid'),content:z.strictObject({cards:z.array(z.strictObject({front:text,back:text})).min(1).max(50)})}),
-  z.strictObject({...base,type:z.literal('process'),variant:z.literal('steps'),content:z.strictObject({items:z.array(item).min(1).max(50)})}),
-  z.strictObject({...base,type:z.literal('timeline'),variant:z.literal('vertical'),content:z.strictObject({items:z.array(item).min(1).max(50)})}),
-  z.strictObject({...base,type:z.literal('labeled-graphic'),variant:z.literal('markers'),content:z.strictObject({...imageContent,markers:z.array(z.strictObject({label,text,x:z.number().min(0).max(100),y:z.number().min(0).max(100)})).min(1).max(30)})}),
-  z.strictObject({...base,type:z.literal('assessment'),variant:z.enum(['single-choice','multiple-response','fill-blank','matching','sorting']),
-    content:z.strictObject({prompt:text,options:z.array(label).max(20),correct:z.array(z.number().int().min(0).max(19)).max(20),accepted:z.array(label).max(20),caseSensitive:z.boolean(),pairs:z.array(z.strictObject({left:label,right:label})).max(20),items:z.array(label).max(20),feedbackCorrect:text,feedbackIncorrect:text}),
-    assessment:z.strictObject({graded:z.boolean(),points:z.number().int().min(1).max(100),required:z.boolean(),completion:z.enum(['submitted','correct']),maxAttempts:z.number().int().min(0).max(20)})}),
-  z.strictObject({ ...base, type: z.literal('continue'), variant: z.literal('button'), content: z.strictObject({ label }), completion: z.enum(['none', 'previous', 'all-previous']) }),
+  z.strictObject({...base,type:z.literal('flashcards'),variant:z.literal('grid'),content:z.strictObject({cards:z.array(z.strictObject({front:rich,back:rich})).min(1).max(50)})}),
+  z.strictObject({...base,type:z.literal('process'),variant:z.literal('steps'),content:z.strictObject({intro:card.nullable().default(null),items:z.array(item).min(1).max(50),summary:card.nullable().default(null)})}),
+  z.strictObject({...base,type:z.literal('timeline'),variant:z.literal('vertical'),content:z.strictObject({items:z.array(z.strictObject({title:label,text:rich,date:label.default('')})).min(1).max(50)})}),
+  z.strictObject({...base,type:z.literal('labeled-graphic'),variant:z.literal('markers'),content:z.strictObject({...imageContent,markers:z.array(z.strictObject({label,text:rich,x:z.number().min(0).max(100),y:z.number().min(0).max(100)})).min(1).max(30)})}),
+  assessmentBlock,
+  z.strictObject({ ...base, type: z.literal('continue'), variant: z.literal('button'), content: z.strictObject({ label, hint: label.default('') }), completion: z.enum(['none', 'previous', 'all-previous']) }),
+  // Wave A (stage 4). Learner responses to these blocks live in learner state, never in the document.
+  z.strictObject({...base,type:z.literal('objectives'),variant:z.enum(['list','cards']),content:z.strictObject({heading:label,intro:rich,items:z.array(objectiveSchema).min(1).max(30)})}),
+  z.strictObject({...base,type:z.literal('table'),variant:z.enum(['lined','striped']),content:z.strictObject({caption:label,head:z.array(label).max(8),rows:z.array(z.array(rich).min(1).max(8)).min(1).max(60),headerColumn:z.boolean()})}),
+  z.strictObject({...base,type:z.literal('reflection'),variant:z.enum(['plain','journal']),content:z.strictObject({prompt:rich,placeholder:label,sample:rich,minWords:z.number().int().min(0).max(1000),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('activity'),variant:z.literal('card'),content:z.strictObject({title:label,minutes:z.number().int().min(0).max(600),steps:z.array(rich).min(1).max(20),output:label,...responseOptions})}),
+  z.strictObject({...base,type:z.literal('checklist'),variant:z.literal('ticks'),content:z.strictObject({title:label,items:z.array(label).min(1).max(50),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('self-assessment'),variant:z.literal('scale'),content:z.strictObject({title:label,intro:rich,scale:z.array(label).min(2).max(7),items:z.array(label).min(1).max(30),bands:z.array(z.strictObject({min:z.number().int().min(0).max(1000),max:z.number().int().min(0).max(1000),text:rich})).max(8),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('survey'),variant:z.literal('form'),content:z.strictObject({title:label,intro:rich,scale:z.array(label).min(2).max(7),items:z.array(z.strictObject({id:idSchema,kind:z.enum(['rating','differential','choice','comment']),prompt:label,options:z.array(label).max(10)})).min(1).max(30),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('embed-video'),variant:z.literal('facade'),content:z.strictObject({provider:z.enum(['youtube','vimeo']),videoId:z.string().regex(/^(?:[A-Za-z0-9_-]{11}|\d{5,12})?$/,'The embedded video address is not a YouTube or Vimeo video.'),title:label,transcript:text,start:z.number().int().min(0).max(86400)})}),
+  z.strictObject({...base,type:z.literal('software-practice'),variant:z.literal('steps'),content:z.strictObject({title:label,intro:rich,steps:z.array(z.strictObject({id:idSchema,imageId:idSchema,alt:z.string().max(2000),instruction:label,target:region,typed:label,hint:label})).min(1).max(60),modes:z.strictObject({watch:z.boolean(),try:z.boolean(),test:z.boolean()}),...responseOptions})}),
+  // Wave D (stage 7): course-level resources in use, and the learner's own plan and results.
+  z.strictObject({...base,type:z.literal('glossary'),variant:z.enum(['a-z','list']),content:z.strictObject({title:label,showLetters:z.boolean(),search:z.boolean()})}),
+  z.strictObject({...base,type:z.literal('action-plan'),variant:z.literal('table'),content:z.strictObject({title:label,intro:rich,columns:z.array(z.strictObject({label,kind:z.enum(['text','date'])})).min(1).max(6),starterRows:z.number().int().min(1).max(20),maxRows:z.number().int().min(1).max(50),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('results'),variant:z.literal('summary'),content:z.strictObject({title:label,showReview:z.boolean(),showCertificate:z.boolean()})}),
+  z.strictObject({...base,type:z.literal('bank-draw'),variant:z.literal('random'),content:z.strictObject({title:label,bankId:idSchema,count:z.number().int().min(1).max(50)})}),
+  // Wave E (stage 8): a branching conversation with the course's characters.
+  z.strictObject({...base,type:z.literal('scenario'),variant:z.literal('conversation'),content:z.strictObject({title:label,intro:rich,scenes:z.array(z.strictObject({id:idSchema,title:label,backgroundId:idSchema.nullable(),nodes:z.array(scenarioNode).max(150)})).min(1).max(20),start:idSchema,allowTakeBack:z.boolean(),showPathReview:z.boolean(),scoring:z.boolean(),passPoints:z.number().int().min(-1000).max(1000),...responseOptions})}),
+  z.strictObject({...base,type:z.literal('columns'),variant:z.enum(['1-1','1-1-1','2-1','1-2']),content:z.strictObject({columns:z.array(z.strictObject({blocks:z.array(columnChildSchema).max(20)})).min(2).max(3)})}),
 ]);
 export const assetSchema = z.strictObject({
   id: idSchema,
   fileName: z.string().min(1).max(180).regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._-]*$/),
   mediaType: z.enum(['image/png', 'image/jpeg', 'image/webp', 'audio/mpeg', 'audio/wav', 'video/mp4', 'application/pdf', 'text/plain']),
-  byteLength: z.number().int().min(1).max(16 * 1024 * 1024),
+  // The format's ceiling; each instance accepts up to its own, lower limit (src/shared/limits.ts).
+  byteLength: z.number().int().min(1).max(FILE_CEILING),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
+const bannerSchema = z.strictObject({ source: z.enum(['cover','image']), assetId: idSchema.nullable(), altText: z.string().max(2000), decorative: z.boolean() });
+export const lessonSchema = z.strictObject({ id: idSchema, title: label, blocks: z.array(blockSchema).max(2000), banner: bannerSchema.nullable().default(null), objectives: z.array(objectiveSchema).max(30).default([]) });
 export const courseSchema = z.strictObject({
   format: z.literal(FORMAT), schemaVersion: z.literal(SCHEMA_VERSION),
   course: z.strictObject({
-    id: idSchema, title: label, description: text, author: label,
+    id: idSchema, title: label, description: rich, author: label,
     language: z.string().min(2).max(35), createdAt: z.iso.datetime(), updatedAt: z.iso.datetime(),
     cover: z.strictObject({ assetId: idSchema, altText: z.string().max(2000), decorative: z.boolean() }).nullable(),
-    theme: z.strictObject({ accentColor: z.string().regex(/^#[a-fA-F0-9]{6}$/), font: z.enum(['sans', 'serif']), pageWidth: z.enum(['standard', 'wide']) }),
-    settings: z.strictObject({ navigation: z.enum(['free', 'sequential']), completion: z.literal('all-lessons'), passingScore: z.number().int().min(0).max(100) }),
-    sections: z.array(z.strictObject({ id: idSchema, title: label, lessons: z.array(z.strictObject({ id: idSchema, title: label, blocks: z.array(blockSchema).max(2000) })).max(200) })).max(100),
+    authorImage: z.strictObject({ assetId: idSchema }).nullable().default(null),
+    theme: z.strictObject({ accentColor: z.string().regex(/^#[a-fA-F0-9]{6}$/), font: z.enum(['sans', 'serif']), pageWidth: z.enum(['standard', 'wide']),
+      coverLayout: z.enum(['stacked','split-left','split-right','two-thirds-left','overlay','centered']).default('stacked'), lessonHeader: z.enum(['plain','image','accent']).default('plain'),
+      fontPairing: z.enum(['lato-merriweather','worksans-sourceserif','figtree-literata','atkinson']).nullable().default(null) }),
+    settings: z.strictObject({ navigation: z.enum(['free', 'sequential']), completion: z.literal('all-lessons'), passingScore: z.number().int().min(0).max(100), glossaryLinks: z.boolean().default(false) }),
+    // Course resources (F6): one glossary, question banks, and the certificate the results block can print.
+    glossary: z.array(z.strictObject({ id: idSchema, term: label, definition: rich, aliases: z.array(label).max(10) })).max(500).default([]),
+    banks: z.array(z.strictObject({ id: idSchema, name: label, questions: z.array(assessmentBlock).max(500) })).max(50).default([]),
+    characters: z.array(z.strictObject({ id: idSchema, name: label, role: label, poses: z.array(z.strictObject({ id: idSchema, name: label, imageId: idSchema, alt: z.string().max(2000) })).max(20) })).max(30).default([]),
+    certificate: z.strictObject({ title: label, issuer: label, signerName: label, signerTitle: label, logoId: idSchema.nullable(), signatureId: idSchema.nullable(), showScore: z.boolean() }).nullable().default(null),
+    sections: z.array(z.strictObject({ id: idSchema, title: label, lessons: z.array(lessonSchema).max(200) })).max(100),
   }),
   assets: z.array(assetSchema).max(255),
 });
 export type CourseDocument = z.infer<typeof courseSchema>;
 export type Asset = z.infer<typeof assetSchema>;
 export type Block = z.infer<typeof blockSchema>;
+export type ColumnChild = z.infer<typeof columnChildSchema>;
+/**
+ * Gives a block, and everything inside it that has an identifier, new identifiers from `next`: blocks in columns,
+ * objectives, survey questions, practice steps, video checkpoints, and scenario scenes and steps (with every link
+ * between steps mapped). Used for copies, so a copy can sit in the same course as its original.
+ */
+export function renewBlockIds<T extends Block>(block: T, next: () => string): T {
+  block.id = next();
+  if (block.type === 'columns') for (const column of block.content.columns) for (const child of column.blocks) child.id = next();
+  if (block.type === 'objectives' || block.type === 'survey') for (const item of block.content.items) item.id = next();
+  if (block.type === 'software-practice') for (const step of block.content.steps) step.id = next();
+  if (block.type === 'video') for (const checkpoint of block.content.checkpoints) checkpoint.id = next();
+  if (block.type === 'scenario') {
+    const ids = new Map<string, string>();
+    for (const scene of block.content.scenes) { scene.id = next(); for (const node of scene.nodes) { const fresh = next(); ids.set(node.id, fresh); node.id = fresh; } }
+    const map = (id: string | null) => id ? ids.get(id) ?? id : id;
+    for (const node of block.content.scenes.flatMap(s => s.nodes)) { node.next = map(node.next); for (const choice of node.choices) choice.next = map(choice.next); }
+    block.content.start = map(block.content.start) ?? block.content.start;
+  }
+  return block;
+}
+/** After blocks get new identifiers, points each interactive video checkpoint at its question's new identifier. */
+export function relinkCheckpoints(blocks: readonly Block[], ids: ReadonlyMap<string, string>) {
+  for (const block of blocks) if (block.type === 'video') for (const checkpoint of block.content.checkpoints) if (checkpoint.questionId && ids.has(checkpoint.questionId)) checkpoint.questionId = ids.get(checkpoint.questionId)!;
+}
+/** Every block in reading order, including the blocks inside columns. */
+export function eachBlock(blocks: readonly Block[]): Block[] {
+  const all: Block[] = [];
+  for (const block of blocks) { all.push(block); if (block.type === 'columns') for (const column of block.content.columns) all.push(...column.blocks); }
+  return all;
+}
+export type Lesson = z.infer<typeof lessonSchema>;
 export class ProjectError extends Error {
   constructor(message: string) { super(message); this.name = 'ProjectError'; }
 }
@@ -69,11 +165,45 @@ const extensions: Record<Asset['mediaType'], string> = {
 };
 export function assetPath(asset: Asset) { return `assets/${asset.id}.${extensions[asset.mediaType]}`; }
 
-/** Version 1 migrates by copying; original archives and stored rows remain untouched until explicit save. */
+// Loose JSON from an older file; fields are checked by the schema after migration.
+type Loose = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+/**
+ * Versions 1-3 stored plain text. Version 4 stores rich text in body fields, where a single plain paragraph is
+ * already valid, so migration only escapes &, < and >, turns line breaks into paragraphs or <br>, and renames the
+ * ordering question from 'sorting' to 'ordering'. It works on a copy; the original file is never changed.
+ */
+export function migrateToCurrent(input: Loose): Loose {
+  const doc = structuredClone(input);
+  const rich = (value: unknown) => typeof value === 'string' ? plainToRich(value) : value;
+  const course = doc.course;
+  if (course && typeof course === 'object') {
+    course.description = rich(course.description);
+    for (const section of Array.isArray(course.sections) ? course.sections : []) for (const lesson of Array.isArray(section?.lessons) ? section.lessons : []) for (const block of Array.isArray(lesson?.blocks) ? lesson.blocks : []) {
+      const content = block?.content;
+      if (!content || typeof content !== 'object') continue;
+      switch (block.type) {
+        case 'paragraph': case 'statement': case 'quote': case 'image-text': content.text = rich(content.text); break;
+        case 'list': if (Array.isArray(content.items)) content.items = content.items.map(rich); break;
+        case 'accordion': case 'tabs': case 'process': case 'timeline': for (const item of Array.isArray(content.items) ? content.items : []) if (item && typeof item === 'object') item.text = rich(item.text); break;
+        case 'flashcards': for (const card of Array.isArray(content.cards) ? content.cards : []) if (card && typeof card === 'object') { card.front = rich(card.front); card.back = rich(card.back); } break;
+        case 'labeled-graphic': for (const marker of Array.isArray(content.markers) ? content.markers : []) if (marker && typeof marker === 'object') marker.text = rich(marker.text); break;
+        case 'assessment':
+          content.prompt = rich(content.prompt); content.feedbackCorrect = rich(content.feedbackCorrect); content.feedbackIncorrect = rich(content.feedbackIncorrect);
+          if (block.variant === 'sorting') block.variant = 'ordering';
+          break;
+      }
+    }
+  }
+  doc.schemaVersion = SCHEMA_VERSION;
+  return doc;
+}
+const WAVE_A_TYPES = new Set(['objectives','table','reflection','activity','checklist','self-assessment','columns','survey','embed-video','software-practice','glossary','action-plan','results','bank-draw','scenario']);
+/** Older versions migrate by copying; original archives and stored rows remain untouched until explicit save. */
 export function parseCourse(input: unknown): CourseDocument {
   if (input === null || typeof input !== 'object' || !('schemaVersion' in input)) throw new ProjectError('The course is missing its schema version.');
-  if (![1,2,SCHEMA_VERSION].includes(input.schemaVersion as number)) throw new ProjectError(`Unsupported project version ${String(input.schemaVersion).slice(0,30)}. This release supports versions 1, 2, and 3. The original file has not been changed.`);
-  const migrated=input.schemaVersion!==SCHEMA_VERSION ? {...structuredClone(input),schemaVersion:SCHEMA_VERSION} : input;
+  if (![1,2,3,SCHEMA_VERSION].includes(input.schemaVersion as number)) throw new ProjectError(`Unsupported project version ${String(input.schemaVersion).slice(0,30)}. This release supports versions 1 to 4. The original file has not been changed.`);
+  const version = input.schemaVersion as number;
+  const migrated=version!==SCHEMA_VERSION ? migrateToCurrent(input as Loose) : input;
   const result = courseSchema.safeParse(migrated);
   if (!result.success) {
     const issue = result.error.issues[0]!;
@@ -92,18 +222,55 @@ export function parseCourse(input: unknown): CourseDocument {
     if (!assets.get(assetId)?.mediaType.startsWith('image/')) throw new ProjectError(`Missing or incompatible image asset: ${assetId}.`);
   };
   if (doc.course.cover) checkImage(doc.course.cover.assetId);
+  if (doc.course.authorImage) checkImage(doc.course.authorImage.assetId);
+  for (const term of doc.course.glossary) claim(term.id);
+  for (const character of doc.course.characters) { claim(character.id); for (const pose of character.poses) { claim(pose.id); checkImage(pose.imageId); } }
+  const certificate = doc.course.certificate;
+  if (certificate?.logoId) checkImage(certificate.logoId);
+  if (certificate?.signatureId) checkImage(certificate.signatureId);
+  for (const bank of doc.course.banks) {
+    claim(bank.id);
+    for (const question of bank.questions) {
+      claim(question.id);
+      const choices = question.variant === 'hotspot' ? question.content.areas.length : question.content.options.length;
+      if (new Set(question.content.correct).size !== question.content.correct.length || question.content.correct.some(i => i >= choices) || question.content.choiceFeedback.length > choices) throw new ProjectError('Bank question answers must be unique and match existing choices.');
+      if (question.content.image) checkImage(question.content.image.assetId);
+    }
+  }
   let blockCount = 0;
   let lessonCount = 0;
   for (const section of doc.course.sections) {
     claim(section.id);
     for (const lesson of section.lessons) {
       claim(lesson.id); lessonCount++;
-      for (const block of lesson.blocks) {
+      if (lesson.banner) {
+        if (lesson.banner.source === 'image') { if (!lesson.banner.assetId) throw new ProjectError('A lesson banner image is missing.'); checkImage(lesson.banner.assetId); }
+        else if (lesson.banner.assetId !== null) throw new ProjectError('A lesson banner that uses the course cover cannot name another image.');
+      }
+      for (const objective of lesson.objectives) claim(objective.id);
+      for (const block of eachBlock(lesson.blocks)) {
         claim(block.id); blockCount++;
-        if(input.schemaVersion===1 && !['heading','paragraph','list','statement','quote','image','image-text','divider','spacer','continue'].includes(block.type))throw new ProjectError('Version 1 does not support this block type. Use a version 2 project.');
-        if(input.schemaVersion!==3 && (block.type==='assessment' || block.requiredInteraction!==undefined))throw new ProjectError('Assessment and interaction requirements need a version 3 project.');
+        if(version<4 && WAVE_A_TYPES.has(block.type))throw new ProjectError('This block type needs a version 4 project.');
+        if(block.type==='assessment' && block.variant==='true-false' && (block.content.options.length!==2 || block.content.correct.length>1))throw new ProjectError('A true or false question has exactly two choices and one answer.');
+        if(block.type==='objectives')for(const objective of block.content.items)claim(objective.id);
+        if(block.type==='table'){const width=block.content.rows[0]!.length;if(block.content.rows.some(row=>row.length!==width) || (block.content.head.length && block.content.head.length!==width))throw new ProjectError('Every table row needs the same number of cells as the header.');}
+        if(block.type==='self-assessment' && block.content.bands.some(band=>band.min>band.max))throw new ProjectError('Each self-assessment score band needs a lowest score no higher than its highest score.');
+        if(block.type==='columns' && block.content.columns.length!==(block.variant==='1-1-1' ? 3 : 2))throw new ProjectError('The column layout does not match the number of columns.');
+        if(version===1 && !['heading','paragraph','list','statement','quote','image','image-text','divider','spacer','continue'].includes(block.type))throw new ProjectError('Version 1 does not support this block type. Use a version 2 project.');
+        if(version<3 && (block.type==='assessment' || block.requiredInteraction!==undefined))throw new ProjectError('Assessment and interaction requirements need a version 3 project.');
         if(block.requiredInteraction && !['accordion','tabs','flashcards','process','labeled-graphic'].includes(block.type))throw new ProjectError('This block does not support required item exploration.');
-        if(block.type==='assessment' && (new Set(block.content.correct).size!==block.content.correct.length || block.content.correct.some(i=>i>=block.content.options.length)))throw new ProjectError('Assessment answer references must be unique and match existing choices.');
+        // A hotspot's choices are its areas; every other question's choices are its options.
+        const choices=block.type==='assessment' ? (block.variant==='hotspot' ? block.content.areas.length : block.content.options.length) : 0;
+        if(block.type==='assessment' && (new Set(block.content.correct).size!==block.content.correct.length || block.content.correct.some(i=>i>=choices)))throw new ProjectError('Assessment answer references must be unique and match existing choices.');
+        if(block.type==='assessment' && block.content.choiceFeedback.length>choices)throw new ProjectError('Choice feedback must match existing choices.');
+        if(block.type==='assessment' && block.content.image)checkImage(block.content.image.assetId);
+        if(block.type==='assessment' && block.content.areas.some(a=>a.x+a.w>100.001 || a.y+a.h>100.001))throw new ProjectError('Hotspot areas must stay inside the image.');
+        if(block.type==='survey')for(const item of block.content.items)claim(item.id);
+        if(block.type==='scenario')for(const scene of block.content.scenes){claim(scene.id);if(scene.backgroundId)checkImage(scene.backgroundId);for(const node of scene.nodes)claim(node.id);}
+        if(block.type==='video'){for(const checkpoint of block.content.checkpoints)claim(checkpoint.id);if(block.content.describedAssetId && assets.get(block.content.describedAssetId)?.mediaType!=='video/mp4')throw new ProjectError(`Missing or incompatible described video: ${block.content.describedAssetId}.`);}
+        if(block.type==='embed-video' && block.content.videoId && !(block.content.provider==='youtube' ? /^[A-Za-z0-9_-]{11}$/ : /^\d{5,12}$/).test(block.content.videoId))throw new ProjectError('The embedded video address is not a YouTube or Vimeo video.');
+        if(block.type==='software-practice'){for(const step of block.content.steps){claim(step.id);checkImage(step.imageId);if(step.target.x+step.target.w>100.001 || step.target.y+step.target.h>100.001)throw new ProjectError('A practice target must stay inside its screenshot.');}if(!block.content.modes.watch && !block.content.modes.try && !block.content.modes.test)throw new ProjectError('Turn on at least one software practice mode.');}
+        if(block.type==='assessment' && (block.content.placements.length>block.content.items.length || block.content.placements.some(i=>i>=Math.max(1,block.content.groups.length))))throw new ProjectError('Sorting placements must match existing cards and groups.');
         if (block.type === 'image' || block.type === 'image-text' || block.type==='labeled-graphic') checkImage(block.content.assetId);
         if(block.type==='gallery')for(const image of block.content.items)checkImage(image.assetId);
         if(['audio','video','attachment'].includes(block.type)){

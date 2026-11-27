@@ -1,0 +1,160 @@
+/**
+ * Checks: what stops a course from publishing, what deserves a fix, and what needs a person's judgment. The same
+ * list drives the studio's Checks panel and the server's publish gate, so they can never disagree. Checks never
+ * stop saving.
+ */
+import { assessmentIssue } from '../shared/assessment.js';
+import { safeLink, type Block, type PortableProject, type Lesson } from '../shared/course.js';
+import { richIsEmpty, richToPlain } from '../shared/rich-text.js';
+
+export type CheckEffect = 'blocks' | 'warning' | 'review';
+export type Output = 'website' | 'scorm' | 'pdf';
+export interface CheckIssue {
+  effect: CheckEffect; code: string; message: string; outputs: Output[];
+  lessonId?: string; blockId?: string;
+  /** For a question inside a course question bank. */
+  bankId?: string;
+  /** A course-page place to open, such as `resources:glossary`. */
+  place?: string;
+  /** The field to focus: a block content path, or `altText`, `cover-alt`, `banner-alt`, `lesson-title`. */
+  field?: string;
+  /** Where the field lives in the inspector. */
+  tab?: 'content' | 'behavior' | 'access';
+}
+const ALL: Output[] = ['website', 'scorm', 'pdf'];
+const LIVE: Output[] = ['website', 'scorm'];
+
+/** Lessons and blocks with the lesson each block belongs to, including blocks inside columns. */
+function* walk(project: PortableProject): Generator<{ lesson: Lesson; block: Block; parent?: Block }> {
+  for (const lesson of project.document.course.sections.flatMap(s => s.lessons)) for (const block of lesson.blocks) {
+    yield { lesson, block };
+    if (block.type === 'columns') for (const column of block.content.columns) for (const child of column.blocks) yield { lesson, block: child, parent: block };
+  }
+}
+const looksLikeFileName = (alt: string) => /\.(png|jpe?g|webp|gif|svg)$/i.test(alt.trim()) || /^(img|image|photo|picture|dsc|screenshot)[\s_-]*\d*$/i.test(alt.trim());
+
+export interface CheckOptions { /** Whether this server allows embedded YouTube and Vimeo video. */ externalVideo?: boolean }
+export function courseChecks(project: PortableProject, options: CheckOptions = {}): CheckIssue[] {
+  const issues: CheckIssue[] = [], course = project.document.course;
+  const add = (issue: CheckIssue) => issues.push(issue);
+  if (!course.title.trim()) add({ effect: 'warning', code: 'course-title', message: 'The course has no title.', outputs: ALL, field: 'course-title' });
+  if (course.cover && !course.cover.decorative && !course.cover.altText.trim()) add({ effect: 'warning', code: 'cover-alt', message: 'The cover image has no alternative text. Describe it or mark it decorative.', outputs: ALL, field: 'cover-alt' });
+  const lessons = course.sections.flatMap(s => s.lessons);
+  if (!lessons.length) add({ effect: 'warning', code: 'no-lessons', message: 'The course has no lessons yet.', outputs: ALL });
+  let written = false;
+  for (const lesson of lessons) {
+    if (!lesson.title.trim()) add({ effect: 'warning', code: 'lesson-title', message: 'This lesson has no title.', outputs: ALL, lessonId: lesson.id, field: 'lesson-title' });
+    if (!lesson.blocks.length) add({ effect: 'warning', code: 'empty-lesson', message: 'This lesson has no blocks.', outputs: ALL, lessonId: lesson.id });
+    const banner = lesson.banner;
+    if (banner && !banner.decorative && !banner.altText.trim() && (banner.source === 'image' || course.cover)) add({ effect: 'warning', code: 'banner-alt', message: 'The lesson banner has no alternative text. Describe it or mark it decorative.', outputs: ALL, lessonId: lesson.id, field: 'banner-alt' });
+    if (banner?.source === 'cover' && !course.cover) add({ effect: 'warning', code: 'banner-cover', message: 'The lesson banner uses the course cover, but the course has no cover image.', outputs: ALL, lessonId: lesson.id });
+  }
+  for (const { lesson, block } of walk(project)) {
+    const at = { lessonId: lesson.id, blockId: block.id };
+    const blocking = (code: string, message: string, field?: string, tab: CheckIssue['tab'] = 'content') => add({ effect: 'blocks', code, message, outputs: ALL, ...at, ...(field ? { field } : {}), tab });
+    const warn = (code: string, message: string, field?: string, tab: CheckIssue['tab'] = 'content', outputs = ALL) => add({ effect: 'warning', code, message, outputs, ...at, ...(field ? { field } : {}), tab });
+    const review = (code: string, message: string, field?: string, tab: CheckIssue['tab'] = 'access') => add({ effect: 'review', code, message, outputs: ALL, ...at, ...(field ? { field } : {}), tab });
+    switch (block.type) {
+      case 'assessment': { const issue = assessmentIssue(block); if (issue) blocking('question', `Assessment is not ready: ${issue}`, richIsEmpty(block.content.prompt) ? 'prompt' : undefined); break; }
+      case 'audio': case 'video':
+        if (block.type === 'video') {
+          const order = lesson.blocks.findIndex(b => b.id === block.id);
+          for (const checkpoint of block.content.checkpoints) {
+            if (checkpoint.kind !== 'question') continue;
+            const at = lesson.blocks.findIndex(b => b.id === checkpoint.questionId);
+            if (at < 0 || lesson.blocks[at]?.type !== 'assessment') warn('checkpoint-missing', 'A video checkpoint points at a question that is no longer in this lesson.');
+            else if (at < order) warn('checkpoint-order', 'A video checkpoint question sits above the video. Move it below the video so learners meet it in order.');
+            else if (lesson.blocks.slice(order + 1, at).some(b => b.type === 'continue')) warn('checkpoint-gated', 'A Continue button sits between this video and its checkpoint question, so learners cannot reach the question when the video pauses.');
+          }
+          if (block.content.describedAssetId && !block.content.assetId) warn('described-only', 'This video has a described version but no main video file.');
+        }
+        if (block.content.assetId && !block.content.transcript.trim()) blocking('transcript', `Add a transcript to the ${block.type} block before publishing.`);
+        if (block.type === 'video' && block.content.assetId && !block.content.captions.length) blocking('captions', 'Add timed captions to the video block before publishing.');
+        if (!block.content.assetId) warn('media-missing', `This ${block.type} block has no file yet. Learners will see the transcript only.`);
+        if (block.type === 'video' && block.content.captions.length) review('captions-accuracy', 'Watch the video with captions on and check they match what is said.', undefined, 'content');
+        break;
+      case 'objectives': if (block.content.items.some(item => !item.text.trim())) blocking('objective-empty', 'Fill in or remove the empty learning objective before publishing.'); break;
+      case 'reflection': if (richIsEmpty(block.content.prompt)) blocking('reflection-prompt', 'Add a prompt to the reflection block before publishing.', 'prompt'); written = true; break;
+      case 'activity': if (block.content.steps.every(step => richIsEmpty(step))) blocking('activity-steps', 'Add at least one step to the activity block before publishing.'); if (block.content.output) written = true; break;
+      case 'checklist': if (block.content.items.some(item => !item.trim())) blocking('checklist-empty', 'Fill in or remove the empty checklist item before publishing.'); break;
+      case 'self-assessment':
+        if (block.content.items.some(item => !item.trim()) || block.content.scale.some(label => !label.trim())) blocking('self-assessment-empty', 'Fill in every statement and rating label in the self-assessment before publishing.');
+        else if (block.content.bands.length) {
+          const low = block.content.items.length, high = low * block.content.scale.length;
+          const gap = Array.from({ length: high - low + 1 }, (_, i) => low + i).find(total => !block.content.bands.some(b => total >= b.min && total <= b.max));
+          if (gap !== undefined) warn('bands-gap', `No score band covers a total of ${gap}. Learners with that total see no message.`);
+        }
+        break;
+      case 'survey':
+        if (block.content.items.some(item => !item.prompt.trim()) || block.content.scale.some(label => !label.trim())) blocking('survey-empty', 'Fill in every survey question and rating label before publishing.');
+        if (block.content.items.some(item => item.kind === 'comment')) written = true;
+        break;
+      case 'table':
+        if (!block.content.head.length && !block.content.headerColumn) warn('table-headers', 'This table has no column or row headings, so screen readers cannot name its cells.', undefined, 'content');
+        break;
+      case 'image': case 'image-text': case 'labeled-graphic': {
+        const c = block.content;
+        if (!c.decorative && !c.altText.trim()) warn('alt-missing', 'This image has no alternative text. Describe it or mark it decorative.', 'altText', 'access');
+        else if (!c.decorative && looksLikeFileName(c.altText)) review('alt-filename', 'The alternative text looks like a file name. Describe what the image shows.', 'altText');
+        break;
+      }
+      case 'gallery': if (block.content.items.some(item => !item.decorative && !item.altText.trim())) warn('gallery-alt', 'A gallery image has no alternative text.'); break;
+      case 'button': if (!safeLink(block.content.url)) warn('link-missing', 'This link button has no web address yet.', undefined, 'content', LIVE); break;
+      case 'attachment': if (!block.content.assetId) warn('attachment-missing', 'This attachment has no file yet.', undefined, 'content', LIVE); break;
+      case 'heading': if (!block.content.text.trim()) warn('heading-empty', 'This heading is empty. Screen reader users navigate by headings.', 'text'); break;
+      case 'embed-video':
+        if (!options.externalVideo) blocking('external-video-off', 'This server does not allow YouTube or Vimeo video. Upload the video instead, or ask the operator to turn on embedded video.');
+        if (!block.content.videoId) blocking('embed-address', 'Paste the YouTube or Vimeo address for this video.');
+        if (!block.content.transcript.trim()) blocking('embed-transcript', 'Add a transcript to the embedded video before publishing.');
+        review('external-content', `This video loads from ${block.content.provider === 'youtube' ? 'YouTube' : 'Vimeo'} when a learner presses play, so the course is not fully self-contained. Check that your learners' networks allow it.`, undefined, 'content');
+        break;
+      case 'scenario': {
+        const c = block.content, steps = c.scenes.flatMap(s => s.nodes), byId = new Map(steps.map(n => [n.id, n])), number = (id: string) => steps.findIndex(n => n.id === id) + 1;
+        if (!byId.has(c.start)) blocking('scenario-start', 'Choose the step this scenario starts with.');
+        for (const node of steps) {
+          if (node.kind === 'choice') {
+            if (!node.choices.length) blocking('scenario-choice', `Step ${number(node.id)} is a choice with no options.`);
+            if (node.choices.some(ch => !ch.next || !byId.has(ch.next))) blocking('scenario-link', `An option in step ${number(node.id)} does not lead to a step.`);
+            if (node.choices.some(ch => !ch.text.trim())) warn('scenario-option-text', `An option in step ${number(node.id)} has no text.`);
+          } else if (node.kind !== 'ending' && (!node.next || !byId.has(node.next))) blocking('scenario-dead-end', `Step ${number(node.id)} leads nowhere. Point it at the next step or make it an ending.`);
+          if (node.kind === 'line' && (!node.characterId || !course.characters.some(ch => ch.id === node.characterId))) warn('scenario-speaker', `Step ${number(node.id)} is a line with no character. Choose who says it, or make it narration.`);
+        }
+        const reached = new Set<string>(), queue = byId.has(c.start) ? [c.start] : [];
+        while (queue.length) { const id = queue.shift()!; if (reached.has(id)) continue; reached.add(id); const node = byId.get(id); if (!node) continue; for (const target of node.kind === 'choice' ? node.choices.map(ch => ch.next) : [node.next]) if (target && byId.has(target) && !reached.has(target)) queue.push(target); }
+        const unreachable = steps.filter(n => !reached.has(n.id)).length;
+        if (byId.has(c.start) && unreachable) warn('scenario-unreachable', `${unreachable} ${unreachable === 1 ? 'step is' : 'steps are'} never reached from the start.`);
+        if (byId.has(c.start) && ![...reached].some(id => byId.get(id)?.kind === 'ending')) blocking('scenario-no-ending', 'No ending can be reached from the start of this scenario.');
+        break;
+      }
+      case 'bank-draw': {
+        const bank = course.banks.find(b => b.id === block.content.bankId);
+        if (!bank) blocking('bank-missing', 'Choose a question bank for this block.');
+        else if (!bank.questions.length) blocking('bank-empty', `The question bank “${bank.name || 'Untitled bank'}” has no questions yet.`);
+        else if (block.content.count > bank.questions.length) warn('bank-small', `This block draws ${block.content.count} questions, but “${bank.name || 'Untitled bank'}” has ${bank.questions.length}. Learners get all ${bank.questions.length}.`);
+        break;
+      }
+      case 'results': if (block.content.showCertificate && !course.certificate) warn('certificate-missing', 'This results block offers a certificate, but the course has no certificate set up. Set one up in Course resources.'); break;
+      case 'glossary': if (!course.glossary.length) warn('glossary-empty', 'The course glossary is empty, so this block has nothing to show.'); break;
+      case 'action-plan': if (block.content.columns.some(c => !c.label.trim())) warn('plan-heading', 'Give every action plan column a heading.'); break;
+      case 'software-practice':
+        if (block.content.steps.some(step => !step.instruction.trim())) blocking('practice-instruction', 'Give every software practice step an instruction before publishing.');
+        if (block.content.steps.some(step => !step.alt.trim())) warn('practice-alt', 'A software practice screenshot has no description. Describe what the screen shows.', undefined, 'content');
+        break;
+    }
+  }
+  for (const character of course.characters) for (const pose of character.poses) if (!pose.alt.trim()) add({ effect: 'warning', code: 'pose-alt', message: `The pose “${pose.name || 'Untitled'}” of ${character.name || 'a character'} has no description.`, outputs: ALL, place: 'resources:characters' });
+  for (const term of course.glossary) if (!term.term.trim() || !term.definition.trim()) add({ effect: 'warning', code: 'glossary-term', message: term.term.trim() ? `The glossary term “${term.term}” has no definition.` : 'A glossary entry has no term.', outputs: ALL, place: 'resources:glossary' });
+  for (const bank of course.banks) for (const question of bank.questions) {
+    const issue = assessmentIssue(question);
+    if (issue) add({ effect: 'blocks', code: 'bank-question', message: `A question in the bank “${bank.name || 'Untitled bank'}” is not ready: ${issue}`, outputs: ALL, bankId: bank.id, blockId: question.id, tab: 'content' });
+  }
+  if (written) add({ effect: 'warning', code: 'scorm-12-responses', message: 'This course has written responses. SCORM 1.2 can keep only about 4,000 characters of progress, so long answers may stay on the learner’s device. Choose SCORM 2004 when your LMS supports it.', outputs: ['scorm'] });
+  return issues;
+}
+export function hasWrittenResponses(project: PortableProject) { return courseChecks(project).some(issue => issue.code === 'scorm-12-responses'); }
+/** A one-line summary of a block for lists of issues. */
+export function blockSummary(block: Block): string {
+  const content = block.content as Record<string, unknown>;
+  const text = String(content.prompt || content.title || content.heading || content.text || content.caption || block.type);
+  return richToPlain(text).replace(/\s+/g, ' ').trim().slice(0, 80);
+}

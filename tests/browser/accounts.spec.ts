@@ -18,10 +18,23 @@ test.afterEach(async () => {
 const password='A browser testing password 42';
 async function signup(page:Page,email:string,name:string) {
   await page.goto('/account/');
-  await page.locator('#register-name').fill(name);await page.locator('#register-email').fill(email);await page.locator('#register-password').fill(password);
+  await page.locator('#register-name').fill(name);await page.locator('#register-email').fill(email);
+  await expect(page.locator('#register-password')).toBeHidden();
   await page.getByRole('button',{name:'Request account',exact:true}).click();
   await expect(page.locator('#account-status')).toContainText(/verification|verify|email/i);
   createdEmails.push(email);
+  let verificationLink='';
+  await expect.poll(async()=>{
+    for(const file of await readdir('.local/test-mail').catch(()=>[])){
+      const message=JSON.parse(await readFile(`.local/test-mail/${file}`,'utf8'));
+      if(message.to===email)verificationLink=message.text.match(/https?:\/\/[^\s]+#verify=[a-f0-9]{64}/)?.[0]??verificationLink;
+    }
+    return !!verificationLink;
+  }).toBe(true);
+  await page.goto(new URL(verificationLink).pathname+new URL(verificationLink).hash);
+  await page.locator('#verify-password').fill(password);
+  await page.getByRole('button',{name:'Verify email',exact:true}).click();
+  await expect(page.locator('#account-status')).toContainText('Email verified');
   const pool=new pg.Pool({connectionString:process.env.ADMIN_DATABASE_URL});try{await approveFixtureAuthor(pool,email);}finally{await pool.end();}
 }
 async function login(page:Page,email:string,pass=password) {

@@ -9,7 +9,11 @@ interface Options {
   send:(payload:SavePayload)=>Promise<SaveAck>;
   persist:(draft:RecoveryDraft|null)=>Promise<void>;
   changed:()=>void;
+  /** Wait before retrying a save the server turned away as busy (429), by attempt number. */
+  busyDelay?:(attempt:number)=>number;
 }
+/** A busy server (one large course at a time) is retried quietly this many times before the author is asked. */
+const BUSY_RETRIES=6;
 /** Serialize writes, retain exact requests on ambiguity, and never force a stale save. */
 export class SaveController {
   project:PortableProject;
@@ -26,6 +30,8 @@ export class SaveController {
   private draftTimer:ReturnType<typeof setTimeout>|undefined;
   private disposed=false;
   private inFlight=false;
+  private busyTries=0;
+  private retryIn:number|undefined;
   constructor(private options:Options) {this.project=structuredClone(options.project);this.revision=options.revision;}
   get dirty(){return this.generation!==this.savedGeneration || this.pending!==undefined;}
   edit(change:(project:PortableProject)=>void,assetsChanged=false) {
@@ -49,9 +55,9 @@ export class SaveController {
     catch {this.recoveryWarning=true;}
     if(!this.disposed)this.options.changed();
   }
-  private schedule() {
+  private schedule(delay=this.options.delay ?? 600) {
     clearTimeout(this.timer);this.state='pending';
-    this.timer=setTimeout(()=>{void this.save();},this.options.delay ?? 600);
+    this.timer=setTimeout(()=>{void this.save();},delay);
   }
   async save() {
     if(this.disposed || this.inFlight || this.state==='conflict' || !this.dirty)return;
@@ -65,17 +71,21 @@ export class SaveController {
       const ack=await this.options.send(flight.payload);
       if(this.disposed)return;
       this.revision=ack.revision;this.project.document.course.updatedAt=ack.updatedAt;
-      this.savedGeneration=flight.generation;this.savedAssetGeneration=flight.assetGeneration;this.pending=undefined;
+      this.savedGeneration=flight.generation;this.savedAssetGeneration=flight.assetGeneration;this.pending=undefined;this.busyTries=0;
       this.state=this.dirty ? 'pending' : 'saved';
       await this.persistNow();
     } catch(error) {
       if(this.disposed)return;
-      this.state=typeof error==='object' && error!==null && 'status' in error && error.status===409 ? 'conflict' : 'error';
+      const status=typeof error==='object' && error!==null && 'status' in error ? error.status : undefined;
+      // Busy with another large course: keep the same request and try again shortly, without stopping the author.
+      if(status===429 && this.busyTries<BUSY_RETRIES){this.retryIn=(this.options.busyDelay ?? (attempt=>Math.min(30_000,3_000*2**attempt)))(this.busyTries++);this.state='pending';this.error='';await this.persistNow();return;}
+      this.busyTries=0;
+      this.state=status===409 ? 'conflict' : 'error';
       this.error=error instanceof Error ? error.message : 'The save could not be confirmed. Your edits remain here.';
       await this.persistNow();
     } finally {
       this.inFlight=false;
-      if(!this.disposed){if(this.state==='pending')this.schedule();this.options.changed();}
+      if(!this.disposed){if(this.state==='pending')this.schedule(this.retryIn);this.retryIn=undefined;this.options.changed();}
     }
   }
   restore(draft:RecoveryDraft,conflict:boolean) {

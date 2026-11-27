@@ -22,7 +22,7 @@ export default defineConfig({
         request.url='/account.html'+query;next();return;
       }
       const name=posix.basename(path).toLowerCase();
-      const page=path.toLowerCase()==='/app'||name==='app.html'?'app.html':name==='player.html'?'player.html':undefined;
+      const page=path.toLowerCase()==='/app'||name==='app.html'?'app.html':path.toLowerCase()==='/studio'||name==='studio.html'?'studio.html':name==='player.html'?'player.html':undefined;
       if(!page){next();return;}
       response.setHeader('Cache-Control','no-store');
       const signIn=()=>{response.statusCode=302;response.setHeader('Location','/account/');response.end();};
@@ -41,7 +41,7 @@ export default defineConfig({
       }
     });
   }}],
-  build: { outDir: 'dist/client', manifest:true, rollupOptions:{input:{index:'index.html',account:'account.html',app:'app.html',player:'player.html'}} },
+  build: { outDir: 'dist/client', manifest:true, rollupOptions:{input:{index:'index.html',account:'account.html',app:'app.html',player:'player.html',studio:'studio.html'}} },
   server: { host: '127.0.0.1', port: 5173, strictPort: true,
     headers: { 'Cache-Control':'no-store' },
     proxy: { '/api': 'http://127.0.0.1:3000' } },

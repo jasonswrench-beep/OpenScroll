@@ -1,5 +1,6 @@
 import type { CourseDocument } from '../shared/course.js';
 import { CourseFlow,type LearnerSnapshot } from './state.js';
+import { interactionsFor,interactionId,signature } from './interactions.js';
 export type Edition='1.2'|'2004';
 type Api=Record<string,unknown>;
 export function discoverAPI(start:Window,edition:Edition):Api{
@@ -8,28 +9,40 @@ export function discoverAPI(start:Window,edition:Edition):Api{
  throw new Error('The LMS API is unavailable. Launch this package through your LMS and retry.');
 }
 export function encodeResume(document:CourseDocument,state:LearnerSnapshot,fingerprint:string,edition:Edition){
- const lessons=document.course.sections.flatMap(s=>s.lessons),blocks=lessons.flatMap(l=>l.blocks),ids=blocks.map(b=>b.id),lessonIds=lessons.map(l=>l.id);
- const compact=[2,lessonIds.indexOf(state.lessonId),state.reviewed.map(id=>ids.indexOf(id)),state.released.map(id=>ids.indexOf(id)),state.completed.map(id=>lessonIds.indexOf(id)),Object.entries(state.assessments).map(([id,r])=>[ids.indexOf(id),r]),Object.entries(state.visits).map(([id,v])=>[ids.indexOf(id),v])];
+ // Bank questions are numbered after every lesson block, so checkpoints from courses without banks keep their numbers.
+ const lessons=document.course.sections.flatMap(s=>s.lessons),blocks=[...lessons.flatMap(l=>l.blocks),...document.course.banks.flatMap(b=>b.questions)],ids=blocks.map(b=>b.id),lessonIds=lessons.map(l=>l.id);
+ const compact=[4,lessonIds.indexOf(state.lessonId),state.reviewed.map(id=>ids.indexOf(id)),state.released.map(id=>ids.indexOf(id)),state.completed.map(id=>lessonIds.indexOf(id)),Object.entries(state.assessments).map(([id,r])=>[ids.indexOf(id),r]),Object.entries(state.visits).map(([id,v])=>[ids.indexOf(id),v]),Object.entries(state.responses).map(([id,r])=>[ids.indexOf(id),r]),Object.entries(state.draws).map(([id,list])=>[ids.indexOf(id),list.map(q=>ids.indexOf(q))])];
  const bytes=new TextEncoder().encode(JSON.stringify(compact));let binary='';for(const byte of bytes)binary+=String.fromCharCode(byte);const result=`OS1:${fingerprint}:${btoa(binary)}`;
  if(result.length>(edition==='1.2'?4096:64000))throw new Error(`Progress exceeds the SCORM ${edition} resume capacity. Keep this page open and download recovery progress. Use SCORM 2004 for larger courses.`);return result;
 }
 export function decodeResume(document:CourseDocument,raw:string,fingerprint:string,edition:Edition):LearnerSnapshot{
  try{
  if(raw.length>(edition==='1.2'?4096:64000) || !raw.startsWith(`OS1:${fingerprint}:`))throw new Error();const encoded=raw.slice(69);if(!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded))throw new Error();const binary=atob(encoded);if(btoa(binary)!==encoded)throw new Error();const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Uint8Array.from(binary,c=>c.charCodeAt(0))));
- const lessons=document.course.sections.flatMap(s=>s.lessons),blocks=lessons.flatMap(l=>l.blocks);
+ const lessons=document.course.sections.flatMap(s=>s.lessons),blocks=[...lessons.flatMap(l=>l.blocks),...document.course.banks.flatMap(b=>b.questions)];
  const index=(n:unknown,list:{id:string}[])=>{if(!Number.isInteger(n) || (n as number)<0 || (n as number)>=list.length)throw new Error();return list[n as number]!.id;};
  const ids=(v:unknown,list:{id:string}[])=>{if(!Array.isArray(v))throw new Error();const result=v.map(n=>index(n,list));if(new Set(result).size!==result.length)throw new Error();return result;};
  const entries=(v:unknown)=>{if(!Array.isArray(v))throw new Error();const pairs=v.map(pair=>{if(!Array.isArray(pair)||pair.length!==2)throw new Error();return [index(pair[0],blocks),pair[1]] as const;});if(new Set(pairs.map(p=>p[0])).size!==pairs.length)throw new Error();return Object.fromEntries(pairs);};
- if(!Array.isArray(value)||value.length!==7||value[0]!==2)throw new Error();const state:LearnerSnapshot={version:2,lessonId:index(value[1],lessons),reviewed:ids(value[2],blocks),released:ids(value[3],blocks),completed:ids(value[4],lessons),assessments:entries(value[5]),visits:entries(value[6])};
- const flow=new CourseFlow(document);flow.restore(state);const canonical=(s:LearnerSnapshot)=>JSON.stringify({...s,reviewed:[...s.reviewed].sort(),released:[...s.released].sort(),completed:[...s.completed].sort(),assessments:Object.fromEntries(Object.entries(s.assessments).sort()),visits:Object.fromEntries(Object.entries(s.visits).sort().map(([id,v])=>[id,[...v].sort((a,b)=>a-b)]))});if(canonical(flow.snapshot())!==canonical(state))throw new Error();return state;
+ // Checkpoint 2 predates learner responses; 3 adds them as an eighth entry; 4 adds bank draws as a ninth.
+ if(!Array.isArray(value)||!((value[0]===2&&value.length===7)||(value[0]===3&&value.length===8)||(value[0]===4&&value.length===9)))throw new Error();
+ const draws=value[0]===4?Object.fromEntries(Object.entries(entries(value[8])).map(([id,list])=>{if(!Array.isArray(list))throw new Error();return [id,ids(list,blocks)];})):{};
+ const state:LearnerSnapshot={version:4,lessonId:index(value[1],lessons),reviewed:ids(value[2],blocks),released:ids(value[3],blocks),completed:ids(value[4],lessons),assessments:entries(value[5]),visits:entries(value[6]),responses:value[0]>=3?entries(value[7]):{},draws};
+ const flow=new CourseFlow(document);flow.restore(state);const canonical=(s:LearnerSnapshot)=>JSON.stringify({...s,reviewed:[...s.reviewed].sort(),released:[...s.released].sort(),completed:[...s.completed].sort(),assessments:Object.fromEntries(Object.entries(s.assessments).sort()),visits:Object.fromEntries(Object.entries(s.visits).sort().map(([id,v])=>[id,[...v].sort((a,b)=>a-b)])),responses:Object.fromEntries(Object.entries(s.responses).sort()),draws:Object.fromEntries(Object.entries(s.draws).sort())});if(canonical(flow.snapshot())!==canonical(state))throw new Error();return state;
  }catch{throw new Error('The LMS checkpoint is invalid or belongs to a different publication. It has not been overwritten. Ask your LMS administrator to start a new attempt.');}
 }
 export function sessionTime(seconds:number,edition:Edition){const centis=Math.min(3599999999,Math.max(0,Math.floor(seconds*100))),hours=Math.floor(centis/360000),minutes=Math.floor(centis/6000)%60,s=(centis%6000)/100;return edition==='1.2'?`${String(hours).padStart(4,'0')}:${String(minutes).padStart(2,'0')}:${s.toFixed(2).padStart(5,'0')}`:`PT${hours}H${minutes}M${s.toFixed(2)}S`;}
+/** Keeps learner responses on this device when they are too large for the LMS checkpoint. */
+export interface ResponseStore {read():Record<string,unknown>|undefined;write(responses:Record<string,unknown>|null):void;}
+export function deviceResponses(fingerprint:string):ResponseStore{
+ const key=`openscroll-responses:v1:${fingerprint}`;
+ return {read(){try{const raw=localStorage.getItem(key);const value=raw && raw.length<=4*1024*1024 ? JSON.parse(raw) as unknown : undefined;return value && typeof value==='object' && !Array.isArray(value) ? value as Record<string,unknown> : undefined;}catch{return undefined;}},
+  write(responses){try{if(responses)localStorage.setItem(key,JSON.stringify(responses));else localStorage.removeItem(key);}catch{/* the player tells the learner when responses cannot be kept */}}};
+}
 export class ScormSession{
- private active=false;private ready=false;private started=0;private latest:LearnerSnapshot;readonly flow:CourseFlow;readonly readOnly:boolean;readonly restored:LearnerSnapshot|undefined;
- constructor(private api:Api,readonly edition:Edition,private document:CourseDocument,readonly fingerprint:string,private now=()=>performance.now()){
+ private active=false;private ready=false;private onDevice=false;
+ private slots=new Map<string,number>();private nextSlot=0;private reported=new Map<string,string>();private interactions=true;private started=0;private latest:LearnerSnapshot;readonly flow:CourseFlow;readonly readOnly:boolean;readonly restored:LearnerSnapshot|undefined;
+ constructor(private api:Api,readonly edition:Edition,private document:CourseDocument,readonly fingerprint:string,private now=()=>performance.now(),private device?:ResponseStore){
   this.flow=new CourseFlow(document);this.latest=this.flow.snapshot();this.call('Initialize','');this.active=true;this.started=this.now();
-  try{const mode=this.get(edition==='1.2'?'core.lesson_mode':'mode');this.readOnly=mode==='review'||mode==='browse';const entry=this.get(edition==='1.2'?'core.entry':'entry');const raw=this.get('suspend_data');if(raw && (this.readOnly || entry!=='ab-initio')){this.restored=decodeResume(document,raw,fingerprint,edition);this.flow.restore(this.restored);}this.latest=this.flow.snapshot();this.ready=true;}catch(error){try{this.terminate();}catch{/* Preserve the original read failure. */}throw error;}
+  try{const mode=this.get(edition==='1.2'?'core.lesson_mode':'mode');this.readOnly=mode==='review'||mode==='browse';const entry=this.get(edition==='1.2'?'core.entry':'entry');const raw=this.get('suspend_data');if(raw && (this.readOnly || entry!=='ab-initio')){this.restored=decodeResume(document,raw,fingerprint,edition);const kept=device?.read();if(kept)this.restored.responses={...kept,...this.restored.responses} as LearnerSnapshot['responses'];this.flow.restore(this.restored);}this.latest=this.flow.snapshot();this.prepareInteractions();this.ready=true;}catch(error){try{this.terminate();}catch{/* Preserve the original read failure. */}throw error;}
  }
  private name(name:string){return this.edition==='1.2'?'LMS'+name:name;}
  private invoke(name:string,...args:string[]){const fn=this.api[this.name(name)];if(typeof fn!=='function')throw new Error('The LMS API is incomplete.');try{return fn.apply(this.api,args);}catch{throw new Error('The LMS connection failed. Keep this page open and retry saving.');}}
@@ -42,17 +55,59 @@ export class ScormSession{
   if(typeof result!=='string'||code!=='0')throw new Error(`The LMS could not read cmi.${name} (error ${/^\d{1,6}$/.test(code)?code:'unknown'}). The checkpoint has not been overwritten.`);return result;
  }
 
+ /** Finds the interaction records already in the LMS. A restored attempt's answers count as already reported. */
+ private prepareInteractions(){
+  const count=this.peek('interactions._count');
+  if(count===undefined || !/^\d{1,6}$/.test(count)){this.interactions=false;return;}
+  this.nextSlot=Number(count);
+  if(this.edition==='2004')for(let n=0;n<this.nextSlot;n++){const id=this.peek(`interactions.${n}.id`);if(id)this.slots.set(id,n);}
+  if(this.restored)for(const record of interactionsFor(this.document,this.flow.snapshot(),this.edition))this.reported.set(record.id,signature(record));
+ }
+ private peek(name:string){try{const value=this.invoke('GetValue','cmi.'+name);return String(this.invoke('GetLastError'))==='0' && typeof value==='string' ? value : undefined;}catch{return undefined;}}
+ private trySet(name:string,value:string){try{const ok=this.invoke('SetValue','cmi.'+name,value);return (ok===true || ok==='true') && String(this.invoke('GetLastError'))==='0';}catch{return false;}}
+ /**
+  * Writes changed interaction records. SCORM 2004 updates a question's record in place; SCORM 1.2 records are
+  * write-only, so a changed answer is added as a new record, as the 1.2 journal model expects. An LMS that refuses
+  * interactions never stops progress from saving.
+  */
+ private report(){
+  if(!this.interactions)return;
+  const modern=this.edition==='2004',now=new Date(),two=(n:number)=>String(n).padStart(2,'0');
+  const stamp=modern ? `${now.getFullYear()}-${two(now.getMonth()+1)}-${two(now.getDate())}T${two(now.getHours())}:${two(now.getMinutes())}:${two(now.getSeconds())}` : `${two(now.getHours())}:${two(now.getMinutes())}:${two(now.getSeconds())}`;
+  for(const record of interactionsFor(this.document,this.latest,this.edition)){
+   const mark=signature(record);if(this.reported.get(record.id)===mark)continue;
+   const id=interactionId(record.id,this.edition),n=modern ? this.slots.get(id) ?? this.nextSlot : this.nextSlot,p=`interactions.${n}.`;
+   if(!this.trySet(p+'id',id)){this.interactions=false;return;}
+   if(n===this.nextSlot)this.nextSlot++;
+   this.slots.set(id,n);
+   this.trySet(p+'type',record.type);
+   if(modern && record.description)this.trySet(p+'description',record.description);
+   if(record.pattern!==undefined)this.trySet(p+'correct_responses.0.pattern',record.pattern);
+   if(record.response)this.trySet(p+(modern ? 'learner_response' : 'student_response'),record.response);
+   this.trySet(p+'result',modern || record.result!=='incorrect' ? record.result : 'wrong');
+   this.trySet(p+'weighting',String(record.weighting));
+   this.trySet(p+(modern ? 'timestamp' : 'time'),stamp);
+   this.reported.set(record.id,mark);
+  }
+ }
+ /** Interaction records written to the LMS in this session, for tests and diagnostics. */
+ get reportedInteractions(){return this.reported.size;}
  update(state:LearnerSnapshot){this.latest=structuredClone(state);}
+ /** True when the learner's written responses did not fit the LMS checkpoint and are kept on this device only. */
+ get responsesOnDevice(){return this.onDevice;}
  recovery(){return JSON.stringify({format:'openscroll-learner-recovery',fingerprint:this.fingerprint,state:this.latest},null,2);}
  save(){
   if(!this.active||!this.ready)throw new Error('The LMS session has ended. Relaunch from your LMS.');if(this.readOnly)return;
-  const checkpoint=encodeResume(this.document,this.latest,this.fingerprint,this.edition);this.flow.restore(this.latest);const score=this.flow.score,progress=this.flow.progress,complete=progress.done===progress.total;
+  let checkpoint:string;
+  try{checkpoint=encodeResume(this.document,this.latest,this.fingerprint,this.edition);this.onDevice=false;}
+  catch(error){if(!Object.keys(this.latest.responses).length)throw error;checkpoint=encodeResume(this.document,{...this.latest,responses:{}},this.fingerprint,this.edition);this.onDevice=true;}
+  this.device?.write(this.onDevice ? this.latest.responses as Record<string,unknown> : null);this.flow.restore(this.latest);const score=this.flow.score,progress=this.flow.progress,complete=progress.done===progress.total;
   const values:Record<string,string>={suspend_data:checkpoint};const modern=this.edition==='2004',prefix=modern?'':'core.';
   values[prefix+(modern?'location':'lesson_location')]=this.flow.lessonId;
   if(score.possible){values[prefix+'score.min']='0';values[prefix+'score.max']='100';values[prefix+'score.raw']=(score.earned/score.possible*100).toFixed(7);if(modern)values['score.scaled']=(score.earned/score.possible).toFixed(7);}
   if(modern){values.completion_status=complete?'completed':'incomplete';values.success_status=score.status==='passed'||score.status==='failed'?score.status:'unknown';values.progress_measure=(progress.total?progress.done/progress.total:0).toFixed(7);}else values['core.lesson_status']=!complete?'incomplete':score.status==='passed'||score.status==='failed'?score.status:'completed';
   values[prefix+'session_time']=sessionTime((this.now()-this.started)/1000,this.edition);values[prefix+'exit']=complete && (score.status==='passed'||score.status==='not-assessed')?(modern?'normal':''):'suspend';
-  for(const [name,value]of Object.entries(values))this.call('SetValue','cmi.'+name,value);this.call('Commit','');
+  for(const [name,value]of Object.entries(values))this.call('SetValue','cmi.'+name,value);this.report();this.call('Commit','');
  }
  terminate(){if(!this.active)return;this.call(this.edition==='1.2'?'Finish':'Terminate','');this.active=false;}
  finish(){if(!this.active)return;this.save();this.terminate();}

@@ -86,3 +86,47 @@ These media block types were introduced in portable schema version 2. Step 9 now
 Recovery drafts migrate local content while retaining exact pending request identity. The server recognizes an unchanged version 1 save acknowledgement created before the upgrade, without an extra revision or force overwrite. Modified/stale requests still conflict. Old OpenScroll builds can reject version 2 safely, so keep an original version 1 file if an older installation must continue editing it.
 
 See [format specification](FORMAT-SPEC.md), [course recovery](COURSE-ORGANIZATION.md), and [Step 8 validation](STEP-8-VALIDATION.md). Manual screen reader review and non-Chromium playback remain pending.
+
+## Wave C: audio description, interactive video, embedded video and software practice
+
+**Timed cues.** Captions, audio descriptions, chapters and checkpoints are edited in the studio's timed cue editor:
+a list of times beside a preview of the video. Type a time (`1:23.5` or `83.5`), or play the preview and take its
+current time with the clock button. "Play" jumps the preview to a cue. Cues stay in time order. Caption files
+(WebVTT) can still be imported and edited as text.
+
+**Audio description.** A video can carry a described version (a second MP4 with the description narrated in) and
+timed description text. Learners switch to the described version with a toggle that keeps their place, or turn on
+"Read descriptions": each description appears under the video and is announced through a polite live region as
+the video reaches it. With "Pause the video while a description is read" on, the video waits for Continue. The PDF
+lists descriptions with their times.
+
+**Interactive video.** The Interactive video template adds chapters, checkpoints and "Learners cannot skip ahead".
+A question checkpoint pauses the video and sends learners to a question placed after the video; the questions are
+ordinary question blocks, so scoring, attempts, feedback, resume and LMS reporting work as for any question. A
+note checkpoint pauses and shows its text with Continue the video. Every chapter and checkpoint is also listed under
+the video as buttons, so learners who do not use the video controls reach the same content. Checks warns when a
+checkpoint's question is missing, above the video, or behind a Continue button.
+
+**Embedded YouTube and Vimeo video.** On unless the server sets `OPENSCROLL_EXTERNAL_VIDEO=off`. The block
+takes a YouTube or Vimeo address and a required transcript. Learners load nothing from the service until they press
+play; YouTube uses its privacy-enhanced player and Vimeo its do-not-track option. Exports that contain such a video
+add only those two hosts to the player's frame policy, and Checks lists each one under "Needs a person's review" so
+the author can confirm learners' networks allow it. The preview never loads outside services; the transcript is
+always on the page. When the setting is off, the block is not offered and publishing a course that has one is
+blocked with an explanation.
+
+**Software practice.** Steps with a screenshot, an instruction, a target area, optional text to type and a hint.
+*Watch* shows each step with its target outlined. *Try* asks the learner to select the target; after the second
+miss the hint appears and the target is outlined. *Test* gives no hints and records whether each step was right the
+first time; the result is kept with the learner's progress and reported to the LMS (`performance` in SCORM 1.2,
+`other` in 2004). Keyboard and screen reader users reach each target as a button named by the step's instruction,
+and Try offers "Show me". Targets are drawn with the region editor or typed as percentages.
+
+**Import from OpenStage Capture.** Choose the take folder of a Capture recording made with interaction recording
+on (see openstage-core `specs/capture`). Each left click becomes a step: a frame grabbed just before the click,
+saved as WebP; a target around the click; the instruction "Select the Save button" from the clicked item's
+accessible name; and the keys typed before the next click as the text to type. Window titles from the log are never
+used, because they can contain private information. Review every instruction and describe every screenshot.
+
+**File sizes.** One file may be up to 64 MiB and a course up to 160 MiB by default; the server's operator can raise
+them (see [Self-hosting](SELF-HOSTING.md)). Long video belongs on YouTube or Vimeo, in an Embedded video block.

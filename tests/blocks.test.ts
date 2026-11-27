@@ -16,7 +16,8 @@ test('compatible template changes preserve hidden fields, settings, narration, a
   const p=sampleProject();
   for(const template of BLOCK_TEMPLATES){
     const block=prepareBlock(template.key,p).block;block.narration={script:'Author-owned narration',language:'en',speed:1.2,voice:'my-voice'};const before=structuredClone(block);
-    for(const sibling of templatesFor(block)){const result=switchVariant(block,sibling.variant);assert.deepEqual({...result,variant:before.variant},before);}
+    // Column count and true-or-false choices change content by design; wave-a.test.ts checks those switches.
+    for(const sibling of templatesFor(block)){if(block.type==='columns' || (block.type==='assessment' && (sibling.variant==='true-false')!==(block.variant==='true-false')))continue;const result=switchVariant(block,sibling.variant);assert.deepEqual({...result,variant:before.variant},before);}
     assert.deepEqual(block,before);
   }
   assert.throws(()=>switchVariant(prepareBlock('paragraph',p).block,'image-left'),/compatible/);

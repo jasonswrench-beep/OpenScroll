@@ -8,7 +8,7 @@ The trusted built player, canonical course/assets, license notices, root `imsman
 
 The adapter discovers the selected edition's API in the launch window, ancestors or opener, with bounded traversal and cross-origin exceptions. Missing API, initialization or resume-read failures show an error; they never launch an untracked course. Preview remains isolated. SCORM learner state never enters author records or browser local storage.
 
-Writes include aggregate percentage score (min 0/max 100, plus scaled score in 2004), completion/success, lesson bookmark, suspend data, elapsed session time, and exit intention. There is no per-question `cmi.interactions` report. No learner identity is needed. Outcomes use the same grading engine as preview and HTML. Score precision is seven decimal places; passing uses the authored threshold and exact earned/possible comparison.
+Writes include aggregate percentage score (min 0/max 100, plus scaled score in 2004), completion/success, lesson bookmark, suspend data, elapsed session time, and exit intention, and one interaction record per answered question or learner response (see Per-question reporting below). No learner identity is needed. Outcomes use the same grading engine as preview and HTML. Score precision is seven decimal places; passing uses the authored threshold and exact earned/possible comparison.
 
 SCORM 2004 reports completion and success separately, and progress as a fraction of lessons completed. Single-SCO delivery controls make completion/objective status content-owned. Success remains unknown until all graded questions have a submitted answer. Ungraded courses do not invent a passing score.
 
@@ -16,11 +16,39 @@ SCORM 1.2 has a single lesson status. It stays incomplete until all lessons are 
 
 Session time is elapsed wall time in this launch, including idle/background time, rather than active learning time. Every save reports the cumulative session duration, never writes total time, and uses the edition's time syntax. Normal exit is used only after completion with a pass or no graded questions; otherwise exit is suspend to allow continuation. LMS attempt/retake policy ultimately controls subsequent launches. Reset progress resets SCO state within the current attempt; it does not create a new LMS attempt or necessarily erase an LMS's retained grade.
 
+## Per-question reporting
+
+Each submitted question and each learner response becomes one `cmi.interactions` record, so the LMS can show how
+learners answered. Questions report their result as correct or incorrect (`wrong` in SCORM 1.2), with the correct
+pattern and a weight equal to their points when they count toward the score (0 for practice). Self-check short
+answers, reflections, activities, checklists, self-assessments and surveys report as `neutral`.
+
+| Content | SCORM 2004 type | SCORM 1.2 type | Learner response |
+| --- | --- | --- | --- |
+| Multiple choice, multiple response, hotspot | `choice` | `choice` | Letters for the chosen options or areas (`a[,]c`, or `a,c` in 1.2) |
+| True or false | `true-false` | `true-false` | `true`/`false` (`t`/`f` in 1.2) |
+| Fill in the blank, short answer (match) | `fill-in` | `fill-in` | The typed text, up to 250 characters |
+| Short answer (self-check), reflection, activity, survey comment | `long-fill-in` | `fill-in` | The text, up to 4,000 characters (255 in 1.2) |
+| Numeric | `numeric` | `numeric` | The number; 2004's pattern is the accepted range, `low[:]high` |
+| Matching, sort into groups | `matching` | `matching` | Pairs such as `1[.]a[,]2[.]b` (`1.a,2.b` in 1.2) |
+| Ordering | `sequencing` | `sequencing` | Item letters in the learner's order |
+| Checklist | `choice` | `choice` | Letters of the ticked items |
+| Self-assessment | `other` | `fill-in` | The total and each rating |
+| Survey rating | `likert` | `likert` | The rating's position on the scale, from 1 |
+
+Questions drawn from a course question bank are reported like lesson questions, once drawn and answered. Record ids are the block (or survey question) id, as `urn:openscroll:<id>` in SCORM 2004. SCORM 2004 updates a
+question's record in place when the answer changes; SCORM 1.2 records are write-only, so a changed answer adds a new
+record, as the 1.2 journal model expects. Answers restored from a saved attempt are not reported again. Free text has
+SCORM 2004 delimiters removed so the LMS reads it as one answer. An LMS that refuses interaction records never stops
+progress, score or completion from saving.
+
 ## Save and resume
 
 Changes save after a short debounce, every 30 seconds, on hidden visibility, and on page exit. Use **Save LMS progress** before **Exit course**. An explicit exit terminates only after a successful save; success disables the player. The LMS controls closing or returning to its course interface. Browser back/forward cache restoration reloads to establish a fresh session.
 
 Checkpoints bind to the full publication fingerprint and retain drafts, attempts, best/last answers, interaction visits, gates, lesson completion and bookmark. They use indexed IDs in an ASCII/base64 envelope, then restore through authored rules. A changed publication, malformed or impossible checkpoint produces an error and preserves the LMS data. Start a new LMS attempt after republishing changed content. Review/browse launches read existing state but make no SetValue/Commit calls.
+
+The LMS status and the **Save LMS progress**, **Download recovery progress** and **Exit course** buttons sit at the foot of the course menu (on phones, behind **Show course menu**, with the status line always shown). A review or browse launch says "LMS review mode: this launch is for viewing, so progress is not saved." Brightspace launches SCORM in browse mode for instructors, so an instructor sees that message while students are tracked normally. Test tracking with a student account.
 
 The adapter enforces **4096 ASCII characters for SCORM 1.2** and **64000 for SCORM 2004 4th Edition** before any save writes. It never truncates answers or drops state to fit. Large courses or long responses can exceed either capacity. Prefer 2004 for larger courses. A capacity/connection/commit error is visible, keeps the latest progress in memory, and can be retried with Save LMS progress. Download recovery progress preserves a JSON copy for support; automatic recovery-file import is not implemented. Keep the page open until the save succeeds. Closing/reloading after an unsaved failure can lose newer work. Browser close warnings and unload saves are best effort, especially on mobile. LMS SetValue operations are not transactional: a failed commit may leave partial LMS values; retry sends the full current checkpoint/report again.
 
@@ -29,6 +57,8 @@ All grading runs client-side and published answer keys are available in course d
 ## Brightspace validation checklist
 
 Brightspace was selected by the user. The user reports SCORM 1.2 working and an initial SCORM 2004 launch-read failure. After the suspend-data fix and interaction improvements, the user confirmed that both labeled Revision 4 packages worked as anticipated in Brightspace. Detailed gradebook/resume/retake results remain unrecorded. The agent has no direct tenant access; release/version and detailed grading/resume results are still needed. Record the Brightspace release, browser/version, legacy/new SCORM engine if selectable, launch frame/window settings, import options and gradebook mapping. Local harness results do not establish Brightspace support or SCORM certification.
+
+Test as a learner: sign in with a separate student test account. An instructor launch, and in some reports "View as student", runs in browse mode and records nothing.
 
 1. Import each edition as a separate test activity. Confirm manifest acceptance, all assets, and title/description. Capture import warnings.
 2. Launch with free and sequential courses, Continue gates, required exploration, media and all five assessment formats. Verify keyboard use and narrow layout.

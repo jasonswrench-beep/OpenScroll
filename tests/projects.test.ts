@@ -46,7 +46,7 @@ test('editable package round trip preserves content, narration, settings, IDs, a
 });
 
 test('versions, unknown fields/types, duplicate IDs, and broken references fail without mutation', () => {
-  const future={...sampleProject().document,schemaVersion:4}; const before=structuredClone(future);
+  const future={...sampleProject().document,schemaVersion:5}; const before=structuredClone(future);
   assert.throws(() => parseCourse(future), /Unsupported project version/); assert.deepEqual(future,before);
   assert.throws(() => parseCourse({...future,schemaVersion:0}), /Unsupported/);
   assert.throws(() => parseCourse({...sampleProject().document,extra:'must not disappear'}), /Invalid/);
@@ -86,7 +86,7 @@ test('unsafe ZIP paths, symlinks, duplicate names, encryption, and unsupported e
 
 test('corrupt ZIP, CRC, JSON, oversized entries, and excessive inventory fail safely', async () => {
   await assert.rejects(importProject(Buffer.from('not a zip')), /ZIP/);
-  await assert.rejects(importProject(Buffer.alloc(LIMITS.archive+1)), /32 MiB/);
+  await assert.rejects(importProject(Buffer.alloc(LIMITS.archive+1)), /no larger than 176 MiB/);
   const corrupt=rawZip(sampleEntries()); corrupt[30+'course.json'.length+1]! ^= 1;
   await assert.rejects(importProject(corrupt), /integrity/);
   await assert.rejects(importProject(rawZip([{name:'course.json',data:Buffer.from('{')} ])), /JSON/);

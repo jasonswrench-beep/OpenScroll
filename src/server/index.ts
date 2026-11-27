@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { fileURLToPath } from 'node:url';
-import { assertRuntimeEnvironment,readConfig } from './config.js';
+import { assertRuntimeEnvironment,readConfig,instanceSizeLimits } from './config.js';
 import { accountConfig } from './accounts/config.js';
 import { createMailer } from './accounts/mail.js';
 import { checkMigrations } from './migrations.js';
@@ -9,7 +9,8 @@ import { assertRuntimeDatabaseRole } from './database-access.js';
 import type { FastifyInstance } from 'fastify';
 assertRuntimeEnvironment();
 const config = readConfig();
-const pool = new pg.Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 3000, max: 10 });
+// Reading or writing a course's files is one query, so larger course limits allow more time: 3 seconds plus one per 32 MiB.
+const pool = new pg.Pool({ connectionString: config.databaseUrl, connectionTimeoutMillis: 3000, query_timeout: 3000 + Math.ceil(instanceSizeLimits().courseBytes / (32 * 1024 * 1024)) * 1000, max: 10 });
 pool.on('error', () => console.error('An idle database connection failed.'));
 const staticRoot = process.env.NODE_ENV === 'development' ? undefined : fileURLToPath(new URL('../../../client/', import.meta.url));
 const accounts = accountConfig();
