@@ -13,12 +13,15 @@ const more=document.querySelector<HTMLButtonElement>('#owner-accounts-more')!;
 const refresh=document.querySelector<HTMLButtonElement>('#owner-accounts-refresh')!;
 const message=(error:unknown)=>error instanceof Error?error.message:'The request failed. Try again.';
 interface ManagedAccount {id:string;email:string;name:string;role:'owner'|'author';approvalStatus:'pending'|'approved'|'revoked';verified:boolean;disabled:boolean;createdAt:string;notificationStatus?:'pending'|'sending'|'sent'|'failed'|null;}
-let nextCursor:string|undefined,ownerGeneration=0,resetToken:string|undefined;
+const verifyForm=document.querySelector<HTMLFormElement>('#verify-form')!;
+let nextCursor:string|undefined,ownerGeneration=0,resetToken:string|undefined,verifyToken:string|undefined;
 function isOwner(){return !!account&&hasAuthoringAccess(account)&&account.role==='owner';}
 async function session(){
   const data=await loadSession();register.hidden=!data.registrationEnabled;
+  document.querySelector<HTMLElement>('#register-password-fields')!.hidden=data.verificationRequired;
+  document.querySelector<HTMLInputElement>('#register-password')!.disabled=data.verificationRequired;
   document.querySelector('#registration-policy')!.textContent=data.registrationEnabled
-    ?`You can request an account on this instance. ${data.verificationRequired?'Verify your email, then wait for its owner to approve authoring access.':'Its owner must approve authoring access.'}`
+    ?`You can request an account on this instance. ${data.verificationRequired?'Verify your email and choose a password, then wait for its owner to approve authoring access.':'Its owner must approve authoring access.'}`
     :'New account requests are closed on this instance. Existing authors can sign in.';
 }
 function renderAccount(){
@@ -107,10 +110,21 @@ async function readAccountLink(){
     resetToken=reset;document.querySelector<HTMLElement>('#reset-form')!.hidden=false;
     document.querySelector<HTMLElement>('#new-password')!.focus();
   }else if(verify){
-    try{const result=await api<{message:string}>('/api/account/verify','POST',{token:verify});status.textContent=result.message;await session();}
-    catch(error){status.textContent=message(error);}
+    verifyToken=verify;verifyForm.reset();verifyForm.hidden=false;
+    document.querySelector<HTMLElement>('#verify-password')!.focus();
   }
 }
+verifyForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const button=verifyForm.querySelector<HTMLButtonElement>('button')!;
+  button.disabled=true;
+  try{
+    const result=await api<{message:string}>('/api/account/verify','POST',{token:verifyToken,password:new FormData(verifyForm).get('password')});
+    verifyToken=undefined;verifyForm.reset();verifyForm.hidden=true;status.textContent=result.message;
+    document.querySelector<HTMLElement>(account?'#logout':'#login-email')!.focus();
+  }catch(error){status.textContent=message(error);}
+  finally{button.disabled=false;}
+});
 document.querySelector<HTMLFormElement>('#reset-form')!.addEventListener('submit',async event=>{
   event.preventDefault();const form=event.currentTarget as HTMLFormElement,button=form.querySelector<HTMLButtonElement>('button')!;button.disabled=true;
   try{

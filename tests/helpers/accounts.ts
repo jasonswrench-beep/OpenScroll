@@ -32,8 +32,11 @@ export async function seedTestAuthor(pool:pg.Pool,options:FixtureOptions={}):Pro
 }
 
 /** Approve an already registered synthetic fixture without exercising the owner UI. */
-export async function approveFixtureAuthor(pool:pg.Pool,email:string):Promise<string> {
-  const result=await pool.query("UPDATE authors SET verified=true,approval_status='approved' WHERE email=$1 RETURNING id",[syntheticEmail(email)]);
+// With email verification on, a request stores no usable password until the applicant verifies; a fixture that signs in passes the password it will use.
+export async function approveFixtureAuthor(pool:pg.Pool,email:string,password?:string):Promise<string> {
+  const result=password===undefined
+    ?await pool.query("UPDATE authors SET verified=true,approval_status='approved' WHERE email=$1 RETURNING id",[syntheticEmail(email)])
+    :await pool.query("UPDATE authors SET verified=true,approval_status='approved',password_hash=$2 WHERE email=$1 RETURNING id",[syntheticEmail(email),await hashPassword(password)]);
   assert.equal(result.rowCount,1,'Expected exactly one synthetic author to approve.');
   return result.rows[0].id as string;
 }

@@ -13,7 +13,7 @@ test.beforeAll(async ({ playwright }) => {
   client = await playwright.request.newContext({ baseURL: 'http://127.0.0.1:3000', extraHTTPHeaders: { 'x-openscroll-request': '1', origin: 'http://127.0.0.1:3000' } });
   const credentials = { email, password: 'A lesson editor password 42' };
   expect((await client.post('/api/account/register', { data: { ...credentials, name: 'Lesson editor author' } })).ok()).toBe(true);
-  const pool = new pg.Pool({ connectionString: process.env.ADMIN_DATABASE_URL }); try { await approveFixtureAuthor(pool, email); } finally { await pool.end(); }
+  const pool = new pg.Pool({ connectionString: process.env.ADMIN_DATABASE_URL }); try { await approveFixtureAuthor(pool, email, credentials.password); } finally { await pool.end(); }
   const login = await client.post('/api/account/login', { data: credentials }); expect(login.ok()).toBe(true); owner = (await login.json()).author.id; storage = await client.storageState();
 });
 test.beforeEach(async ({ context }) => { await context.addCookies(storage.cookies); id = await seedSampleCourse(owner); });

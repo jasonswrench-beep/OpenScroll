@@ -3,7 +3,8 @@
  admin off
 }
 {$OPENSCROLL_HOST} {
- encode zstd gzip
+ @compressible not path /api/account/session
+ encode @compressible zstd gzip
  header Strict-Transport-Security "max-age=31536000"
  request_body {
   # The largest course the size settings allow (320 MiB), sent in base64 with its document. The app enforces this
