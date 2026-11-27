@@ -84,7 +84,8 @@ export async function largeConcurrentSaves(context: LargeSaveContext) {
   const started = Date.now();
   // 1. Both authors save their large course at the same moment.
   const saves = await Promise.all([0, 1].map(index => untilAccepted(save(index), turnedAway, authors[index]!.who)));
-  for (const [index, response] of saves.entries()) assert.equal(response.status, 200, `${authors[index]!.who}'s large save failed: ${response.status} ${(await response.text()).slice(0, 300)}`);
+  // Read a failed reply for the message only; a successful reply's body is read once, below.
+  for (const [index, response] of saves.entries()) if (response.status !== 200) throw new Error(`${authors[index]!.who}'s large save failed: ${response.status} ${(await response.text()).slice(0, 300)}`);
   const firstRound = turnedAway.length;
   assert.ok(firstRound >= 1, 'Two large saves at the same moment must not be read side by side.');
   // 2. The first author exports SCORM while the second saves again.
